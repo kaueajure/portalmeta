@@ -23,6 +23,7 @@ import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import { User } from "../../types";
 import { hasPermission } from "../../lib/permissions";
+import { WhatsappAutoReplyPanel } from "../whatsapp/WhatsappAutoReplyPanel";
 
 interface WhatsappPageProps {
   currentUser: User;
@@ -107,6 +108,8 @@ const META_CREDENTIALS = [
       "URL pública HTTPS do Portal Meta, ex.: https://portalmeta.com.br — usada para montar a callback do webhook.",
   },
 ] as const;
+
+type SetupTab = "messages" | "credentials";
 
 function formatPhoneLabel(phone: string) {
   const digits = phone.replace(/\D/g, "");
@@ -352,12 +355,21 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
           </div>
         )}
 
+        {success && (
+          <div className="mx-4 mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 sm:mx-5">
+            {success}
+          </div>
+        )}
+
         {showSetup && (
           <SetupPanel
             status={status}
+            canManage={canManage}
             copiedField={copiedField}
             onCopy={copyValue}
             onClose={() => setShowSetup(false)}
+            onError={setError}
+            onSuccess={setSuccess}
           />
         )}
 
@@ -659,29 +671,34 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
 
 function SetupPanel({
   status,
+  canManage,
   copiedField,
   onCopy,
   onClose,
+  onError,
+  onSuccess,
 }: {
   status: WhatsAppStatus | null;
+  canManage: boolean;
   copiedField: string | null;
   onCopy: (field: string, value: string) => void;
   onClose: () => void;
+  onError: (message: string | null) => void;
+  onSuccess: (message: string | null) => void;
 }) {
+  const [tab, setTab] = useState<SetupTab>("messages");
+
   return (
     <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-4 py-4 sm:px-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <BookOpen size={16} className="text-blue-600" />
-            <h2 className="text-sm font-semibold text-slate-900">
-              Onde pegar as credenciais na Meta
-            </h2>
+            <Settings2 size={16} className="text-emerald-600" />
+            <h2 className="text-sm font-semibold text-slate-900">Configuração do WhatsApp</h2>
           </div>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-            Cole no arquivo <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>{" "}
-            na raiz do projeto, reinicie o servidor e configure o webhook. Aprovação do app sozinha
-            não mostra mensagens — o Portal Meta precisa receber o webhook.
+            Mensagens automáticas ficam no painel (banco). Credenciais da Meta continuam no{" "}
+            <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={onClose}>
@@ -689,85 +706,130 @@ function SetupPanel({
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <ShieldCheck size={16} className="text-emerald-600" />
-            <h3 className="text-sm font-semibold text-slate-900">Status no Portal Meta</h3>
-          </div>
-          <dl className="space-y-2 text-sm">
-            <StatusRow label="Habilitado" value={status?.enabled ? "Sim" : "Não"} ok={!!status?.enabled} />
-            <StatusRow
-              label="Configurado"
-              value={status?.configured ? "Pronto" : "Incompleto"}
-              ok={!!status?.configured}
-            />
-            <StatusRow label="Phone Number ID" value={status?.phoneNumberId || "—"} />
-            <StatusRow label="WABA ID" value={status?.businessAccountId || "—"} />
-            <StatusRow label="Token" value={status?.accessTokenPreview || "Ausente"} ok={!!status?.hasAccessToken} />
-            <StatusRow
-              label="App Secret"
-              value={status?.hasAppSecret ? "Configurado" : "Não definido"}
-              ok={!!status?.hasAppSecret}
-            />
-          </dl>
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Link2 size={16} className="text-blue-600" />
-            <h3 className="text-sm font-semibold text-slate-900">Webhook (Meta)</h3>
-          </div>
-          <p className="mb-3 text-xs text-slate-500">
-            Meta for Developers → seu app →{" "}
-            <span className="font-medium text-slate-700">WhatsApp → Configuração</span> → Webhooks
-            → depois assine o campo <span className="font-medium">messages</span>.
-          </p>
-          <CopyField
-            label="URL de callback"
-            value={status?.callbackUrl || "https://seu-dominio.com.br/api/whatsapp/webhook"}
-            fieldKey="callback"
-            copiedField={copiedField}
-            onCopy={onCopy}
-          />
-          <CopyField
-            label="Verificar token"
-            value={status?.verifyToken || "—"}
-            fieldKey="verify"
-            copiedField={copiedField}
-            onCopy={onCopy}
-            className="mt-3"
-          />
-          <a
-            href="https://developers.facebook.com/apps/"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
-          >
-            Abrir Meta for Developers
-            <ExternalLink size={12} />
-          </a>
-        </section>
+      <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1">
+        <button
+          type="button"
+          onClick={() => setTab("messages")}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+            tab === "messages" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
+          )}
+        >
+          Mensagens automáticas
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("credentials")}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+            tab === "credentials" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
+          )}
+        >
+          Credenciais Meta
+        </button>
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="border-b border-slate-100 px-4 py-2.5">
-          <h3 className="text-sm font-semibold text-slate-900">Variáveis do .env</h3>
-        </div>
-        <ul className="divide-y divide-slate-100">
-          {META_CREDENTIALS.map((item) => (
-            <li key={item.env} className="grid gap-1 px-4 py-3 sm:grid-cols-[minmax(0,240px)_1fr] sm:gap-4">
-              <div>
-                <code className="text-xs font-semibold text-emerald-800">{item.env}</code>
-                {"value" in item && item.value ? (
-                  <p className="mt-0.5 text-[11px] text-slate-400">ex.: {item.value}</p>
-                ) : null}
+      {tab === "messages" ? (
+        <WhatsappAutoReplyPanel canManage={canManage} onError={onError} onSuccess={onSuccess} />
+      ) : (
+        <>
+          <div className="mb-4 flex items-start gap-2">
+            <BookOpen size={16} className="mt-0.5 shrink-0 text-blue-600" />
+            <p className="max-w-2xl text-xs leading-relaxed text-slate-500">
+              Cole no <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>, reinicie o
+              servidor e configure o webhook. Aprovação do app sozinha não mostra mensagens — o
+              Portal Meta precisa receber o webhook.
+            </p>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <ShieldCheck size={16} className="text-emerald-600" />
+                <h3 className="text-sm font-semibold text-slate-900">Status no Portal Meta</h3>
               </div>
-              <p className="text-xs leading-relaxed text-slate-600">{item.where}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
+              <dl className="space-y-2 text-sm">
+                <StatusRow label="Habilitado" value={status?.enabled ? "Sim" : "Não"} ok={!!status?.enabled} />
+                <StatusRow
+                  label="Configurado"
+                  value={status?.configured ? "Pronto" : "Incompleto"}
+                  ok={!!status?.configured}
+                />
+                <StatusRow label="Phone Number ID" value={status?.phoneNumberId || "—"} />
+                <StatusRow label="WABA ID" value={status?.businessAccountId || "—"} />
+                <StatusRow
+                  label="Token"
+                  value={status?.accessTokenPreview || "Ausente"}
+                  ok={!!status?.hasAccessToken}
+                />
+                <StatusRow
+                  label="App Secret"
+                  value={status?.hasAppSecret ? "Configurado" : "Não definido"}
+                  ok={!!status?.hasAppSecret}
+                />
+              </dl>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Link2 size={16} className="text-blue-600" />
+                <h3 className="text-sm font-semibold text-slate-900">Webhook (Meta)</h3>
+              </div>
+              <p className="mb-3 text-xs text-slate-500">
+                Meta for Developers → seu app →{" "}
+                <span className="font-medium text-slate-700">WhatsApp → Configuração</span> → Webhooks
+                → depois assine o campo <span className="font-medium">messages</span>.
+              </p>
+              <CopyField
+                label="URL de callback"
+                value={status?.callbackUrl || "https://seu-dominio.com.br/api/whatsapp/webhook"}
+                fieldKey="callback"
+                copiedField={copiedField}
+                onCopy={onCopy}
+              />
+              <CopyField
+                label="Verificar token"
+                value={status?.verifyToken || "—"}
+                fieldKey="verify"
+                copiedField={copiedField}
+                onCopy={onCopy}
+                className="mt-3"
+              />
+              <a
+                href="https://developers.facebook.com/apps/"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+              >
+                Abrir Meta for Developers
+                <ExternalLink size={12} />
+              </a>
+            </section>
+          </div>
+
+          <section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 px-4 py-2.5">
+              <h3 className="text-sm font-semibold text-slate-900">Variáveis do .env (só credenciais)</h3>
+            </div>
+            <ul className="divide-y divide-slate-100">
+              {META_CREDENTIALS.map((item) => (
+                <li
+                  key={item.env}
+                  className="grid gap-1 px-4 py-3 sm:grid-cols-[minmax(0,240px)_1fr] sm:gap-4"
+                >
+                  <div>
+                    <code className="text-xs font-semibold text-emerald-800">{item.env}</code>
+                    {"value" in item && item.value ? (
+                      <p className="mt-0.5 text-[11px] text-slate-400">ex.: {item.value}</p>
+                    ) : null}
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-600">{item.where}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </>
+      )}
     </div>
   );
 }

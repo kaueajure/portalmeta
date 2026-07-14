@@ -34,23 +34,76 @@ function contactPhoneExpr(): string {
   return `CASE WHEN direction = 'inbound' THEN from_phone ELSE to_phone END`;
 }
 
-type WelcomeButton = { id: string; title: string };
+export type WelcomeButton = { id: string; title: string };
 
-function parseWelcomeButtons(raw: string): WelcomeButton[] {
-  return String(raw || '')
-    .split('|')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const idx = part.indexOf(':');
-      if (idx <= 0) return null;
-      const id = part.slice(0, idx).trim().slice(0, 256);
-      const title = part.slice(idx + 1).trim().slice(0, 20);
-      if (!id || !title) return null;
-      return { id, title };
-    })
-    .filter((b): b is WelcomeButton => Boolean(b))
+export type WhatsAppBotSettings = {
+  autoReplyEnabled: boolean;
+  autoReplyTrigger: string;
+  welcomeHeader: string;
+  welcomeBody: string;
+  buttons: WelcomeButton[];
+  updatedAt: string | null;
+};
+
+const DEFAULT_BOT_SETTINGS: WhatsAppBotSettings = {
+  autoReplyEnabled: false,
+  autoReplyTrigger: 'teste',
+  welcomeHeader: 'MetaBit - Sistemas para Gestão Pública',
+  welcomeBody:
+    'Seja Bem-Vindo, antes de iniciarmos seu atendimento, sobre qual sistema gostaria de falar?',
+  buttons: [
+    { id: 'pgp', title: 'Gestão Pública' },
+    { id: 'pci', title: 'Controle Interno' },
+    { id: 'pts', title: 'Terceiro Setor' },
+  ],
+  updatedAt: null,
+};
+
+let botSettingsCache: { value: WhatsAppBotSettings; at: number } | null = null;
+const BOT_SETTINGS_CACHE_MS = 2_000;
+
+function normalizeButtons(input: unknown): WelcomeButton[] {
+  let list: unknown[] = [];
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      list = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      list = [];
+    }
+  } else if (Array.isArray(input)) {
+    list = input;
+  }
+
+  return list
+    .map((item: any) => ({
+      id: String(item?.id || '').trim().slice(0, 256),
+      title: String(item?.title || '').trim().slice(0, 20),
+    }))
+    .filter((b) => b.id && b.title)
     .slice(0, 3);
+}
+
+function mapRowToBotSettings(row: any): WhatsAppBotSettings {
+  return {
+    autoReplyEnabled: Boolean(row?.auto_reply_enabled),
+    autoReplyTrigger: String(row?.auto_reply_trigger || DEFAULT_BOT_SETTINGS.autoReplyTrigger)
+      .trim()
+      .toLowerCase()
+      .slice(0, 80),
+    welcomeHeader: String(row?.welcome_header || DEFAULT_BOT_SETTINGS.welcomeHeader)
+      .trim()
+      .slice(0, 60),
+    welcomeBody: String(row?.welcome_body || DEFAULT_BOT_SETTINGS.welcomeBody).trim(),
+    buttons: normalizeButtons(row?.welcome_buttons_json).length
+      ? normalizeButtons(row?.welcome_buttons_json)
+      : DEFAULT_BOT_SETTINGS.buttons.map((b) => ({ ...b })),
+    updatedAt: row?.updated_at ? String(row.updated_at) : null,
+  };
+}
+
+function invalidateBotSettingsCache() {
+  botSettingsCache = null;
 }
 
 function maskToken(token?: string | null): string | null {
@@ -96,6 +149,100 @@ export const whatsappService = {
       callbackUrl,
       displayPhoneNumber: env.WHATSAPP.DISPLAY_PHONE_NUMBER || null,
     };
+  },
+
+  async getBotSettings(): Promise<WhatsAppBotSettings> {
+    const now = Date.now();
+    if (botSettingsCache && now - botSettingsCache.at < BOT_SETTINGS_CACHE_MS) {
+      return botSettingsCache.value;
+    }
+
+    try {
+      const [rows]: any = await pool.query(
+        `
+          SELECT auto_reply_enabled, auto_reply_trigger, welcome_header,
+                 welcome_body, welcome_buttons_json, updated_at
+          FROM whatsapp_settings
+          WHERE id = 1
+          LIMIT 1
+        `,
+      );
+      const settings = rows?.[0] ? mapRowToBotSettings(rows[0]) : { ...DEFAULT_BOT_SETTINGS };
+      botSettingsCache = { value: settings, at: now };
+      return settings;
+    } catch (err: any) {
+      if (err?.code === 'ER_NO_SUCH_TABLE') {
+        return { ...DEFAULT_BOT_SETTINGS, buttons: DEFAULT_BOT_SETTINGS.buttons.map((b) => ({ ...b })) };
+      }
+      throw err;
+    }
+  },
+
+  async updateBotSettings(input: {
+    autoReplyEnabled?: boolean;
+    autoReplyTrigger?: string;
+    welcomeHeader?: string;
+    welcomeBody?: string;
+    buttons?: WelcomeButton[];
+  }): Promise<WhatsAppBotSettings> {
+    const current = await this.getBotSettings();
+
+    const next: WhatsAppBotSettings = {
+      autoReplyEnabled:
+        input.autoReplyEnabled !== undefined ? Boolean(input.autoReplyEnabled) : current.autoReplyEnabled,
+      autoReplyTrigger: String(
+        input.autoReplyTrigger !== undefined ? input.autoReplyTrigger : current.autoReplyTrigger,
+      )
+        .trim()
+        .toLowerCase()
+        .slice(0, 80),
+      welcomeHeader: String(input.welcomeHeader !== undefined ? input.welcomeHeader : current.welcomeHeader)
+        .trim()
+        .slice(0, 60),
+      welcomeBody: String(input.welcomeBody !== undefined ? input.welcomeBody : current.welcomeBody).trim(),
+      buttons:
+        input.buttons !== undefined
+          ? normalizeButtons(input.buttons)
+          : current.buttons.map((b) => ({ ...b })),
+      updatedAt: current.updatedAt,
+    };
+
+    if (!next.autoReplyTrigger) {
+      throw Object.assign(new Error('Informe a palavra-gatilho do auto-reply'), { status: 400 });
+    }
+    if (!next.welcomeBody) {
+      throw Object.assign(new Error('Informe o texto do menu de boas-vindas'), { status: 400 });
+    }
+    if (next.buttons.length === 0) {
+      throw Object.assign(new Error('Configure de 1 a 3 botões (título máx. 20 caracteres)'), {
+        status: 400,
+      });
+    }
+
+    await pool.query(
+      `
+        INSERT INTO whatsapp_settings (
+          id, auto_reply_enabled, auto_reply_trigger,
+          welcome_header, welcome_body, welcome_buttons_json
+        ) VALUES (1, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          auto_reply_enabled = VALUES(auto_reply_enabled),
+          auto_reply_trigger = VALUES(auto_reply_trigger),
+          welcome_header = VALUES(welcome_header),
+          welcome_body = VALUES(welcome_body),
+          welcome_buttons_json = VALUES(welcome_buttons_json)
+      `,
+      [
+        next.autoReplyEnabled ? 1 : 0,
+        next.autoReplyTrigger,
+        next.welcomeHeader,
+        next.welcomeBody,
+        JSON.stringify(next.buttons),
+      ],
+    );
+
+    invalidateBotSettingsCache();
+    return this.getBotSettings();
   },
 
   verifyWebhookChallenge(params: {
@@ -217,11 +364,12 @@ export const whatsappService = {
           });
           processed += 1;
 
-          // Menu com botões: só quando o texto for exatamente a palavra-gatilho (ex.: "teste").
-          const trigger = env.WHATSAPP.AUTO_REPLY_TRIGGER;
+          // Menu com botões: só quando o texto for exatamente a palavra-gatilho.
+          const botSettings = await this.getBotSettings();
+          const trigger = botSettings.autoReplyTrigger;
           const inboundText = String(textBody || '').trim().toLowerCase();
           if (
-            env.WHATSAPP.AUTO_REPLY &&
+            botSettings.autoReplyEnabled &&
             trigger &&
             inboundText === trigger &&
             msg?.from &&
@@ -372,16 +520,16 @@ export const whatsappService = {
       throw Object.assign(new Error('WhatsApp não configurado'), { status: 400 });
     }
 
-    const buttons = parseWelcomeButtons(env.WHATSAPP.WELCOME_BUTTONS);
-    if (buttons.length === 0) {
+    const settings = await this.getBotSettings();
+    if (settings.buttons.length === 0) {
       throw Object.assign(new Error('Nenhum botão de boas-vindas configurado'), { status: 400 });
     }
 
     return this.sendInteractiveButtons({
       to,
-      header: env.WHATSAPP.WELCOME_HEADER,
-      body: env.WHATSAPP.WELCOME_BODY,
-      buttons,
+      header: settings.welcomeHeader,
+      body: settings.welcomeBody,
+      buttons: settings.buttons,
     });
   },
 

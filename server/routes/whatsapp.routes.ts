@@ -66,6 +66,45 @@ router.get(
 );
 
 router.get(
+  '/settings',
+  requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }),
+  async (_req: AuthRequest, res: Response) => {
+    try {
+      const settings = await whatsappService.getBotSettings();
+      return sendSuccess(res, settings);
+    } catch (err) {
+      console.error(err);
+      return sendError(res, 'Erro ao obter configurações do WhatsApp', 500);
+    }
+  },
+);
+
+router.put(
+  '/settings',
+  requirePermission('integracoes.whatsapp.gerenciar', { allowDeveloper: true }),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const body = req.body || {};
+      const settings = await whatsappService.updateBotSettings({
+        autoReplyEnabled: body.autoReplyEnabled,
+        autoReplyTrigger: body.autoReplyTrigger,
+        welcomeHeader: body.welcomeHeader,
+        welcomeBody: body.welcomeBody,
+        buttons: body.buttons,
+      });
+      return sendSuccess(res, settings, 'Configurações do WhatsApp salvas');
+    } catch (err: any) {
+      console.error('[WhatsApp] update settings error:', err);
+      return sendError(
+        res,
+        err?.message || 'Erro ao salvar configurações do WhatsApp',
+        err?.status || 500,
+      );
+    }
+  },
+);
+
+router.get(
   '/conversations',
   requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }),
   async (req: AuthRequest, res: Response) => {
