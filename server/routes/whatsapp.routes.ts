@@ -52,12 +52,36 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
 router.use(authMiddleware as any);
 
+const META_CREDENTIALS_ALLOWED_EMAIL = 'kaueajure@gmail.com';
+
+function canViewMetaCredentials(email?: string | null): boolean {
+  return String(email || '').trim().toLowerCase() === META_CREDENTIALS_ALLOWED_EMAIL;
+}
+
 router.get(
   '/status',
   requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }),
-  async (_req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
-      return sendSuccess(res, whatsappService.getPublicStatus());
+      const status = whatsappService.getPublicStatus();
+      if (canViewMetaCredentials(req.user?.email)) {
+        return sendSuccess(res, status);
+      }
+
+      // Demais usuários veem só o essencial da inbox — sem IDs/token/webhook.
+      return sendSuccess(res, {
+        enabled: status.enabled,
+        configured: status.configured,
+        phoneNumberId: null,
+        businessAccountId: null,
+        apiVersion: status.apiVersion,
+        hasAccessToken: status.hasAccessToken,
+        accessTokenPreview: null,
+        hasAppSecret: status.hasAppSecret,
+        verifyToken: null,
+        callbackUrl: null,
+        displayPhoneNumber: status.displayPhoneNumber,
+      });
     } catch (err) {
       console.error(err);
       return sendError(res, 'Erro ao obter status do WhatsApp', 500);
@@ -87,10 +111,11 @@ router.put(
       const body = req.body || {};
       const settings = await whatsappService.updateBotSettings({
         autoReplyEnabled: body.autoReplyEnabled,
-        autoReplyTrigger: body.autoReplyTrigger,
         welcomeHeader: body.welcomeHeader,
         welcomeBody: body.welcomeBody,
         buttons: body.buttons,
+        inactivityMinutes: body.inactivityMinutes,
+        closingMessage: body.closingMessage,
       });
       return sendSuccess(res, settings, 'Configurações do WhatsApp salvas');
     } catch (err: any) {

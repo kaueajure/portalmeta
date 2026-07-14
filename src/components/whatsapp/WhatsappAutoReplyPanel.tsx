@@ -9,10 +9,11 @@ export type WhatsAppBotButton = { id: string; title: string };
 
 export type WhatsAppBotSettings = {
   autoReplyEnabled: boolean;
-  autoReplyTrigger: string;
   welcomeHeader: string;
   welcomeBody: string;
   buttons: WhatsAppBotButton[];
+  inactivityMinutes: number;
+  closingMessage: string;
   updatedAt: string | null;
 };
 
@@ -23,6 +24,9 @@ type Props = {
 };
 
 const emptyButton = (): WhatsAppBotButton => ({ id: "", title: "" });
+
+const DEFAULT_CLOSING =
+  "Como não recebemos uma resposta nos últimos 60 minutos, este atendimento será encerrado automaticamente. Quando precisar, envie uma nova mensagem para iniciar um novo atendimento.";
 
 function slugFromTitle(title: string) {
   return title
@@ -38,11 +42,12 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<WhatsAppBotSettings>({
-    autoReplyEnabled: false,
-    autoReplyTrigger: "teste",
+    autoReplyEnabled: true,
     welcomeHeader: "",
     welcomeBody: "",
     buttons: [emptyButton()],
+    inactivityMinutes: 60,
+    closingMessage: DEFAULT_CLOSING,
     updatedAt: null,
   });
 
@@ -55,10 +60,12 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
         if (cancelled) return;
         setForm({
           ...data,
+          inactivityMinutes: data.inactivityMinutes || 60,
+          closingMessage: data.closingMessage || DEFAULT_CLOSING,
           buttons: data.buttons?.length ? data.buttons : [emptyButton()],
         });
       } catch (err: any) {
-        if (!cancelled) onError(err?.message || "Não foi possível carregar as mensagens automáticas.");
+        if (!cancelled) onError(err?.message || "Não foi possível carregar o fluxo de atendimento.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -66,7 +73,6 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
     return () => {
       cancelled = true;
     };
-    // Carrega uma vez ao montar o painel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -112,9 +118,10 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
     try {
       const payload = {
         autoReplyEnabled: form.autoReplyEnabled,
-        autoReplyTrigger: form.autoReplyTrigger.trim(),
         welcomeHeader: form.welcomeHeader.trim(),
         welcomeBody: form.welcomeBody.trim(),
+        inactivityMinutes: Number(form.inactivityMinutes) || 60,
+        closingMessage: form.closingMessage.trim(),
         buttons: form.buttons
           .map((b) => ({
             id: (b.id.trim() || slugFromTitle(b.title)).slice(0, 256),
@@ -128,9 +135,9 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
         ...saved,
         buttons: saved.buttons?.length ? saved.buttons : [emptyButton()],
       });
-      onSuccess("Mensagens automáticas salvas.");
+      onSuccess("Fluxo de atendimento salvo.");
     } catch (err: any) {
-      onError(err?.message || "Falha ao salvar mensagens automáticas.");
+      onError(err?.message || "Falha ao salvar o fluxo de atendimento.");
     } finally {
       setSaving(false);
     }
@@ -139,23 +146,24 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
   if (loading) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-        Carregando mensagens automáticas…
+        Carregando fluxo de atendimento…
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSave} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+    <form onSubmit={handleSave} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <MessageSquareText size={16} className="text-emerald-600" />
-              <h3 className="text-sm font-semibold text-slate-900">Menu de boas-vindas</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Fluxo de atendimento</h3>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Quando o cliente enviar exatamente a palavra-gatilho, o Gestifique responde com este menu
-              interativo (até 3 botões — limite da API da Meta).
+              Sem palavra-gatilho. Se não houver atendimento ativo, qualquer mensagem do cliente
+              recebe o menu inicial. Após inatividade, o atendimento é encerrado e o próximo contato
+              reinicia o fluxo.
             </p>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
@@ -166,25 +174,11 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
               disabled={!canManage}
               onChange={(e) => setForm((p) => ({ ...p, autoReplyEnabled: e.target.checked }))}
             />
-            Auto-reply {form.autoReplyEnabled ? "ligado" : "desligado"}
+            Fluxo {form.autoReplyEnabled ? "ligado" : "desligado"}
           </label>
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-700">Palavra-gatilho</label>
-            <Input
-              value={form.autoReplyTrigger}
-              disabled={!canManage}
-              onChange={(e) => setForm((p) => ({ ...p, autoReplyTrigger: e.target.value }))}
-              placeholder="ex.: teste"
-              maxLength={80}
-            />
-            <p className="mt-1 text-[11px] text-slate-400">
-              Comparação sem maiúsculas/minúsculas. Só dispara em mensagem de texto pura.
-            </p>
-          </div>
-
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-700">
               Cabeçalho <span className="font-normal text-slate-400">(máx. 60)</span>
@@ -198,21 +192,23 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-700">Corpo da mensagem</label>
+            <label className="mb-1 block text-xs font-semibold text-slate-700">
+              Mensagem inicial (com botões)
+            </label>
             <textarea
               value={form.welcomeBody}
               disabled={!canManage}
               onChange={(e) => setForm((p) => ({ ...p, welcomeBody: e.target.value }))}
               rows={4}
               className="w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-500/30 focus:ring-2 disabled:bg-slate-50"
-              placeholder="Texto que o cliente vê acima dos botões"
+              placeholder="Texto enviado quando não há atendimento ativo"
             />
           </div>
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <label className="text-xs font-semibold text-slate-700">
-                Botões de resposta <span className="font-normal text-slate-400">(1–3)</span>
+                Botões de atendimento <span className="font-normal text-slate-400">(1–3 · limite Meta)</span>
               </label>
               {canManage && (
                 <Button type="button" variant="outline" size="sm" onClick={addButton} disabled={form.buttons.length >= 3}>
@@ -267,39 +263,76 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
             </div>
           </div>
 
+          <div className="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-[140px_1fr]">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">Inatividade (min)</label>
+              <Input
+                type="number"
+                min={1}
+                max={1440}
+                value={form.inactivityMinutes}
+                disabled={!canManage}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    inactivityMinutes: Math.max(1, Math.min(1440, Number(e.target.value) || 1)),
+                  }))
+                }
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Após a última mensagem da empresa sem resposta do cliente.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">
+                Mensagem de encerramento
+              </label>
+              <textarea
+                value={form.closingMessage}
+                disabled={!canManage}
+                onChange={(e) => setForm((p) => ({ ...p, closingMessage: e.target.value }))}
+                rows={4}
+                className="w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-500/30 focus:ring-2 disabled:bg-slate-50"
+              />
+            </div>
+          </div>
+
           {canManage && (
             <div className="flex justify-end pt-1">
               <Button type="submit" size="sm" disabled={saving}>
                 <Save size={14} />
-                {saving ? "Salvando…" : "Salvar mensagens"}
+                {saving ? "Salvando…" : "Salvar fluxo"}
               </Button>
             </div>
           )}
         </div>
       </section>
 
-      <WhatsAppMessagePreview
-        trigger={form.autoReplyTrigger.trim() || "teste"}
+      <WhatsAppFlowPreview
         header={form.welcomeHeader.trim()}
         body={form.welcomeBody.trim()}
         buttons={previewButtons}
+        closingMessage={form.closingMessage.trim() || DEFAULT_CLOSING}
+        inactivityMinutes={form.inactivityMinutes}
         enabled={form.autoReplyEnabled}
       />
     </form>
   );
 }
 
-function WhatsAppMessagePreview({
-  trigger,
+function WhatsAppFlowPreview({
   header,
   body,
   buttons,
+  closingMessage,
+  inactivityMinutes,
   enabled,
 }: {
-  trigger: string;
   header: string;
   body: string;
   buttons: WhatsAppBotButton[];
+  closingMessage: string;
+  inactivityMinutes: number;
   enabled: boolean;
 }) {
   const now = useMemo(
@@ -316,66 +349,98 @@ function WhatsAppMessagePreview({
       <div className="flex items-center gap-2 border-b border-white/5 bg-[#1f2c34] px-3 py-2.5">
         <Smartphone size={14} className="text-[#25d366]" />
         <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-white">Prévia real · WhatsApp</p>
+          <p className="truncate text-xs font-semibold text-white">Prévia do fluxo · WhatsApp</p>
           <p className="truncate text-[10px] text-slate-400">
-            {enabled ? "Auto-reply ativo" : "Auto-reply desligado (preview ainda atualiza)"}
+            {enabled
+              ? `Inatividade: ${inactivityMinutes} min`
+              : "Fluxo desligado (prévia ainda atualiza)"}
           </p>
         </div>
       </div>
 
       <div
-        className="relative min-h-[420px] space-y-3 px-3 py-4"
+        className="relative max-h-[560px] space-y-3 overflow-y-auto px-3 py-4"
         style={{
           backgroundColor: "#0b141a",
           backgroundImage:
             "radial-gradient(circle at 20% 20%, rgba(37,211,102,0.06) 0, transparent 40%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.03) 0, transparent 35%)",
         }}
       >
-        <div className="flex justify-end">
-          <div className="max-w-[85%] rounded-lg rounded-tr-sm bg-[#005c4b] px-2.5 py-1.5 shadow-sm">
-            <p className="whitespace-pre-wrap text-[13px] leading-snug text-[#e9edef]">{trigger}</p>
-            <p className="mt-0.5 text-right text-[10px] text-[#aebac1]">{now}</p>
-          </div>
-        </div>
+        <PreviewLabel>1. Cliente inicia (sem atendimento ativo)</PreviewLabel>
+        <Bubble mine time={now}>
+          Olá, preciso de ajuda
+        </Bubble>
 
-        <div className="flex justify-start">
-          <div className="w-full max-w-[92%] overflow-hidden rounded-lg rounded-tl-sm bg-[#202c33] shadow-sm">
-            {(header || body) && (
-              <div className="px-3 py-2.5">
-                {header ? (
-                  <p className="mb-1 text-[13px] font-semibold leading-snug text-[#e9edef]">{header}</p>
-                ) : null}
-                {body ? (
-                  <p className="whitespace-pre-wrap text-[13px] leading-snug text-[#e9edef]">{body}</p>
-                ) : (
-                  <p className="text-[12px] italic text-slate-500">Corpo da mensagem…</p>
-                )}
-                <p className="mt-1 text-right text-[10px] text-[#8696a0]">{now}</p>
-              </div>
-            )}
-
-            <div className={cn("border-t border-white/5", buttons.length === 0 && "hidden")}>
+        <PreviewLabel>2. Sistema envia menu automático</PreviewLabel>
+        <Bubble>
+          {header ? <p className="mb-1 font-semibold">{header}</p> : null}
+          {body || <span className="italic text-slate-500">Mensagem inicial…</span>}
+          {buttons.length > 0 && (
+            <div className="-mx-2.5 mt-2 border-t border-white/5">
               {buttons.map((button, i) => (
-                <button
+                <div
                   key={`${button.id}-${i}`}
-                  type="button"
                   className={cn(
-                    "flex w-full items-center justify-center px-3 py-2.5 text-[13px] font-medium text-[#53bdeb]",
+                    "px-3 py-2 text-center text-[13px] font-medium text-[#53bdeb]",
                     i > 0 && "border-t border-white/5",
                   )}
                 >
                   {button.title}
-                </button>
+                </div>
               ))}
             </div>
-            {buttons.length === 0 && (
-              <div className="border-t border-white/5 px-3 py-3 text-center text-[11px] text-slate-500">
-                Adicione botões para ver as respostas rápidas
-              </div>
-            )}
-          </div>
-        </div>
+          )}
+        </Bubble>
+
+        <PreviewLabel>3. Cliente escolhe e o atendimento inicia</PreviewLabel>
+        <Bubble mine time={now}>
+          {buttons[0]?.title || "Opção selecionada"}
+        </Bubble>
+
+        <PreviewLabel>4. Empresa responde normalmente</PreviewLabel>
+        <Bubble time={now}>Certo! Em que posso ajudar no sistema?</Bubble>
+
+        <PreviewLabel>5. Após {inactivityMinutes} min sem resposta do cliente</PreviewLabel>
+        <Bubble time={now}>{closingMessage}</Bubble>
       </div>
     </aside>
+  );
+}
+
+function PreviewLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex justify-center">
+      <span className="rounded-full bg-[#182229] px-2.5 py-1 text-[10px] font-medium text-slate-400">
+        {children}
+      </span>
+    </div>
+  );
+}
+
+function Bubble({
+  children,
+  mine,
+  time,
+}: {
+  children: React.ReactNode;
+  mine?: boolean;
+  time?: string;
+}) {
+  return (
+    <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "max-w-[92%] rounded-lg px-2.5 py-1.5 text-[13px] leading-snug text-[#e9edef] shadow-sm",
+          mine ? "rounded-tr-sm bg-[#005c4b]" : "rounded-tl-sm bg-[#202c33]",
+        )}
+      >
+        <div className="whitespace-pre-wrap">{children}</div>
+        {time ? (
+          <p className={cn("mt-0.5 text-[10px]", mine ? "text-right text-[#aebac1]" : "text-right text-[#8696a0]")}>
+            {time}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }

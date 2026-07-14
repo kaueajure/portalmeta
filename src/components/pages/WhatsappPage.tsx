@@ -39,7 +39,7 @@ interface WhatsAppStatus {
   accessTokenPreview: string | null;
   hasAppSecret: boolean;
   verifyToken: string | null;
-  callbackUrl: string;
+  callbackUrl: string | null;
   displayPhoneNumber: string | null;
 }
 
@@ -159,8 +159,12 @@ function initials(name: string | null, phone: string) {
   return phone.slice(-2) || "?";
 }
 
+const META_CREDENTIALS_ALLOWED_EMAIL = "kaueajure@gmail.com";
+
 export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   const canManage = hasPermission(currentUser, "integracoes.whatsapp.gerenciar");
+  const canViewMetaCredentials =
+    String(currentUser.email || "").trim().toLowerCase() === META_CREDENTIALS_ALLOWED_EMAIL;
   const [status, setStatus] = useState<WhatsAppStatus | null>(null);
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -365,6 +369,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
           <SetupPanel
             status={status}
             canManage={canManage}
+            canViewMetaCredentials={canViewMetaCredentials}
             copiedField={copiedField}
             onCopy={copyValue}
             onClose={() => setShowSetup(false)}
@@ -672,6 +677,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
 function SetupPanel({
   status,
   canManage,
+  canViewMetaCredentials,
   copiedField,
   onCopy,
   onClose,
@@ -680,6 +686,7 @@ function SetupPanel({
 }: {
   status: WhatsAppStatus | null;
   canManage: boolean;
+  canViewMetaCredentials: boolean;
   copiedField: string | null;
   onCopy: (field: string, value: string) => void;
   onClose: () => void;
@@ -687,6 +694,8 @@ function SetupPanel({
   onSuccess: (message: string | null) => void;
 }) {
   const [tab, setTab] = useState<SetupTab>("messages");
+  const activeTab: SetupTab =
+    tab === "credentials" && !canViewMetaCredentials ? "messages" : tab;
 
   return (
     <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-4 py-4 sm:px-5">
@@ -697,8 +706,14 @@ function SetupPanel({
             <h2 className="text-sm font-semibold text-slate-900">Configuração do WhatsApp</h2>
           </div>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-            Mensagens automáticas ficam no painel (banco). Credenciais da Meta continuam no{" "}
-            <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>.
+            {canViewMetaCredentials ? (
+              <>
+                Mensagens automáticas ficam no painel (banco). Credenciais da Meta continuam no{" "}
+                <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>.
+              </>
+            ) : (
+              <>Configure o menu inicial, os botões e o encerramento por inatividade.</>
+            )}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={onClose}>
@@ -706,30 +721,32 @@ function SetupPanel({
         </Button>
       </div>
 
-      <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1">
-        <button
-          type="button"
-          onClick={() => setTab("messages")}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-            tab === "messages" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
-          )}
-        >
-          Mensagens automáticas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("credentials")}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-            tab === "credentials" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
-          )}
-        >
-          Credenciais Meta
-        </button>
-      </div>
+      {canViewMetaCredentials && (
+        <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1">
+          <button
+            type="button"
+            onClick={() => setTab("messages")}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              activeTab === "messages" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
+            )}
+          >
+            Fluxo de atendimento
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("credentials")}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              activeTab === "credentials" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
+            )}
+          >
+            Credenciais Meta
+          </button>
+        </div>
+      )}
 
-      {tab === "messages" ? (
+      {activeTab === "messages" || !canViewMetaCredentials ? (
         <WhatsappAutoReplyPanel canManage={canManage} onError={onError} onSuccess={onSuccess} />
       ) : (
         <>
