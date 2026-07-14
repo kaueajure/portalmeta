@@ -1,17 +1,22 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Save, MessageSquareText, Smartphone } from "lucide-react";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Trash2, Smartphone, List, LayoutGrid } from "lucide-react";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
+import { Select } from "../ui/Select";
+import { useTicketOptions } from "../../hooks/useTicketOptions";
 
-export type WhatsAppBotButton = { id: string; title: string };
+export type WhatsAppMenuType = "buttons" | "list";
+
+export type WhatsAppBotButton = { id: string; title: string; description?: string };
 
 export type WhatsAppBotSettings = {
   autoReplyEnabled: boolean;
+  menuType: WhatsAppMenuType;
   welcomeHeader: string;
   welcomeBody: string;
   buttons: WhatsAppBotButton[];
+  listButtonText: string;
+  listSectionTitle: string;
   inactivityMinutes: number;
   closingMessage: string;
   updatedAt: string | null;
@@ -19,37 +24,69 @@ export type WhatsAppBotSettings = {
 
 type Props = {
   canManage: boolean;
+  companyId?: number | null;
   onError: (message: string | null) => void;
   onSuccess: (message: string | null) => void;
+  onToolbarChange?: (toolbar: WhatsAppFlowToolbar | null) => void;
 };
 
-const emptyButton = (): WhatsAppBotButton => ({ id: "", title: "" });
+export type WhatsAppFlowToolbar = {
+  enabled: boolean;
+  saving: boolean;
+  setEnabled: (enabled: boolean) => void;
+  submit: () => void;
+};
+
+const emptyOption = (): WhatsAppBotButton => ({ id: "", title: "", description: "" });
 
 const DEFAULT_CLOSING =
   "Como não recebemos uma resposta nos últimos 60 minutos, este atendimento será encerrado automaticamente. Quando precisar, envie uma nova mensagem para iniciar um novo atendimento.";
 
-function slugFromTitle(title: string) {
-  return title
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "")
-    .slice(0, 32);
+const fieldClass =
+  "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 disabled:bg-slate-50";
+
+function normalizeSigla(value: string) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 6);
 }
 
-export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props) {
+export function WhatsappAutoReplyPanel({
+  canManage,
+  companyId,
+  onError,
+  onSuccess,
+  onToolbarChange,
+}: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [form, setForm] = useState<WhatsAppBotSettings>({
     autoReplyEnabled: true,
+    menuType: "buttons",
     welcomeHeader: "",
     welcomeBody: "",
-    buttons: [emptyButton()],
+    buttons: [emptyOption()],
+    listButtonText: "Ver opções",
+    listSectionTitle: "Atendimento",
     inactivityMinutes: 60,
     closingMessage: DEFAULT_CLOSING,
     updatedAt: null,
   });
+
+  const { activeCategories, loading: loadingServices } = useTicketOptions(companyId || undefined, {
+    scope: companyId ? "company" : "current-user",
+  });
+
+  const availableServices = useMemo(
+    () =>
+      activeCategories.filter((item) => {
+        const sigla = normalizeSigla(String(item.sigla || ""));
+        return Boolean(sigla);
+      }),
+    [activeCategories],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -60,9 +97,18 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
         if (cancelled) return;
         setForm({
           ...data,
+          menuType: data.menuType === "list" ? "list" : "buttons",
+          listButtonText: data.listButtonText || "Ver opções",
+          listSectionTitle: data.listSectionTitle || "Atendimento",
           inactivityMinutes: data.inactivityMinutes || 60,
           closingMessage: data.closingMessage || DEFAULT_CLOSING,
-          buttons: data.buttons?.length ? data.buttons : [emptyButton()],
+          buttons: data.buttons?.length
+            ? data.buttons.map((b) => ({
+                ...b,
+                id: normalizeSigla(b.id),
+                description: b.description || "",
+              }))
+            : [emptyOption()],
         });
       } catch (err: any) {
         if (!cancelled) onError(err?.message || "Não foi possível carregar o fluxo de atendimento.");
@@ -76,36 +122,69 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const previewButtons = useMemo(
-    () => form.buttons.filter((b) => b.title.trim()).slice(0, 3),
-    [form.buttons],
+  useEffect(() => {
+    if (!onToolbarChange || loading) return;
+    onToolbarChange({
+      enabled: form.autoReplyEnabled,
+      saving,
+      setEnabled: (enabled) => setForm((p) => ({ ...p, autoReplyEnabled: enabled })),
+      submit: () => formRef.current?.requestSubmit(),
+    });
+  }, [form.autoReplyEnabled, saving, loading, onToolbarChange]);
+
+  useEffect(() => {
+    return () => onToolbarChange?.(null);
+  }, [onToolbarChange]);
+
+  const maxOptions = form.menuType === "list" ? 10 : 3;
+  const titleMax = form.menuType === "list" ? 24 : 20;
+
+  const previewOptions = useMemo(
+    () => form.buttons.filter((b) => b.title.trim()).slice(0, maxOptions),
+    [form.buttons, maxOptions],
   );
 
-  const updateButton = (index: number, patch: Partial<WhatsAppBotButton>) => {
+  const setMenuType = (menuType: WhatsAppMenuType) => {
+    setForm((prev) => ({
+      ...prev,
+      menuType,
+      buttons: prev.buttons.slice(0, menuType === "list" ? 10 : 3),
+    }));
+  };
+
+  const updateOption = (index: number, patch: Partial<WhatsAppBotButton>) => {
     setForm((prev) => {
-      const buttons = prev.buttons.map((b, i) => {
-        if (i !== index) return b;
-        const next = { ...b, ...patch };
-        if (patch.title !== undefined && !b.id.trim()) {
-          next.id = slugFromTitle(patch.title) || next.id;
-        }
-        return next;
-      });
+      const buttons = prev.buttons.map((b, i) => (i === index ? { ...b, ...patch } : b));
       return { ...prev, buttons };
     });
   };
 
-  const addButton = () => {
-    setForm((prev) => {
-      if (prev.buttons.length >= 3) return prev;
-      return { ...prev, buttons: [...prev.buttons, emptyButton()] };
+  const selectService = (index: number, sigla: string) => {
+    const normalized = normalizeSigla(sigla);
+    const service = availableServices.find(
+      (item) => normalizeSigla(String(item.sigla || "")) === normalized,
+    );
+    if (!service) {
+      updateOption(index, { id: "", title: "" });
+      return;
+    }
+    updateOption(index, {
+      id: normalized,
+      title: String(service.nome || "").trim().slice(0, titleMax),
     });
   };
 
-  const removeButton = (index: number) => {
+  const addOption = () => {
+    setForm((prev) => {
+      if (prev.buttons.length >= maxOptions) return prev;
+      return { ...prev, buttons: [...prev.buttons, emptyOption()] };
+    });
+  };
+
+  const removeOption = (index: number) => {
     setForm((prev) => {
       const buttons = prev.buttons.filter((_, i) => i !== index);
-      return { ...prev, buttons: buttons.length ? buttons : [emptyButton()] };
+      return { ...prev, buttons: buttons.length ? buttons : [emptyOption()] };
     });
   };
 
@@ -116,24 +195,47 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
     onError(null);
     onSuccess(null);
     try {
+      const selected = form.buttons
+        .map((b) => ({
+          id: normalizeSigla(b.id),
+          title: b.title.trim().slice(0, titleMax),
+          description: (b.description || "").trim().slice(0, 72),
+        }))
+        .filter((b) => b.id && b.title)
+        .slice(0, maxOptions);
+
+      if (selected.length === 0) {
+        throw new Error("Selecione ao menos um serviço com sigla.");
+      }
+
+      const invalid = selected.find(
+        (b) => !availableServices.some((s) => normalizeSigla(String(s.sigla || "")) === b.id),
+      );
+      if (invalid && availableServices.length > 0) {
+        throw new Error(`Serviço inválido ou sem sigla: ${invalid.id}`);
+      }
+
       const payload = {
         autoReplyEnabled: form.autoReplyEnabled,
+        menuType: form.menuType,
         welcomeHeader: form.welcomeHeader.trim(),
         welcomeBody: form.welcomeBody.trim(),
         inactivityMinutes: Number(form.inactivityMinutes) || 60,
         closingMessage: form.closingMessage.trim(),
-        buttons: form.buttons
-          .map((b) => ({
-            id: (b.id.trim() || slugFromTitle(b.title)).slice(0, 256),
-            title: b.title.trim().slice(0, 20),
-          }))
-          .filter((b) => b.id && b.title)
-          .slice(0, 3),
+        listButtonText: form.listButtonText.trim(),
+        listSectionTitle: form.listSectionTitle.trim(),
+        buttons: selected,
       };
       const saved = await api.put<WhatsAppBotSettings>("/whatsapp/settings", payload);
       setForm({
         ...saved,
-        buttons: saved.buttons?.length ? saved.buttons : [emptyButton()],
+        buttons: saved.buttons?.length
+          ? saved.buttons.map((b) => ({
+              ...b,
+              id: normalizeSigla(b.id),
+              description: b.description || "",
+            }))
+          : [emptyOption()],
       });
       onSuccess("Fluxo de atendimento salvo.");
     } catch (err: any) {
@@ -145,173 +247,232 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-        Carregando fluxo de atendimento…
+      <div className="flex h-full items-center justify-center text-sm text-slate-500">
+        Carregando fluxo…
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSave} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <MessageSquareText size={16} className="text-emerald-600" />
-              <h3 className="text-sm font-semibold text-slate-900">Fluxo de atendimento</h3>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">
-              Sem palavra-gatilho. Se não houver atendimento ativo, qualquer mensagem do cliente
-              recebe o menu inicial. Após inatividade, o atendimento é encerrado e o próximo contato
-              reinicia o fluxo.
-            </p>
-          </div>
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
-            <input
-              type="checkbox"
-              className="h-3.5 w-3.5 accent-emerald-600"
-              checked={form.autoReplyEnabled}
+    <form
+      ref={formRef}
+      onSubmit={handleSave}
+      className="grid h-full min-h-0 items-start gap-3 overflow-hidden lg:grid-cols-[minmax(0,1.15fr)_320px]"
+    >
+      <section className="min-h-0 space-y-3 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div>
+          <span className="mb-1.5 block text-[11px] font-semibold text-slate-600">Tipo do menu</span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
               disabled={!canManage}
-              onChange={(e) => setForm((p) => ({ ...p, autoReplyEnabled: e.target.checked }))}
-            />
-            Fluxo {form.autoReplyEnabled ? "ligado" : "desligado"}
-          </label>
+              onClick={() => setMenuType("buttons")}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[12px] transition",
+                form.menuType === "buttons"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+              )}
+            >
+              <LayoutGrid size={15} className="shrink-0" />
+              <span>
+                <span className="block font-semibold">Botões</span>
+                <span className="text-[10px] text-slate-500">Até 3 opções na bolha</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              disabled={!canManage}
+              onClick={() => setMenuType("list")}
+              className={cn(
+                "flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[12px] transition",
+                form.menuType === "list"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+              )}
+            >
+              <List size={15} className="shrink-0" />
+              <span>
+                <span className="block font-semibold">Lista</span>
+                <span className="text-[10px] text-slate-500">Até 10 opções no menu</span>
+              </span>
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-700">
-              Cabeçalho <span className="font-normal text-slate-400">(máx. 60)</span>
-            </label>
-            <Input
+        <div className="grid gap-2 sm:grid-cols-[1fr_100px]">
+          <Labeled label="Cabeçalho">
+            <input
+              className={fieldClass}
               value={form.welcomeHeader}
               disabled={!canManage}
               onChange={(e) => setForm((p) => ({ ...p, welcomeHeader: e.target.value.slice(0, 60) }))}
               maxLength={60}
             />
-          </div>
+          </Labeled>
+          <Labeled label="Inativ. (min)">
+            <input
+              type="number"
+              min={1}
+              max={1440}
+              className={fieldClass}
+              value={form.inactivityMinutes}
+              disabled={!canManage}
+              onChange={(e) =>
+                setForm((p) => ({
+                  ...p,
+                  inactivityMinutes: Math.max(1, Math.min(1440, Number(e.target.value) || 1)),
+                }))
+              }
+            />
+          </Labeled>
+        </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-700">
-              Mensagem inicial (com botões)
-            </label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Labeled label="Mensagem inicial">
             <textarea
+              rows={2}
               value={form.welcomeBody}
               disabled={!canManage}
               onChange={(e) => setForm((p) => ({ ...p, welcomeBody: e.target.value }))}
-              rows={4}
-              className="w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-500/30 focus:ring-2 disabled:bg-slate-50"
-              placeholder="Texto enviado quando não há atendimento ativo"
+              className={cn(fieldClass, "resize-none leading-snug")}
             />
+          </Labeled>
+          <Labeled label="Mensagem de encerramento">
+            <textarea
+              rows={2}
+              value={form.closingMessage}
+              disabled={!canManage}
+              onChange={(e) => setForm((p) => ({ ...p, closingMessage: e.target.value }))}
+              className={cn(fieldClass, "resize-none leading-snug")}
+            />
+          </Labeled>
+        </div>
+
+        {form.menuType === "list" && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Labeled label="Texto do botão da lista (máx. 20)">
+              <input
+                className={fieldClass}
+                value={form.listButtonText}
+                disabled={!canManage}
+                onChange={(e) => setForm((p) => ({ ...p, listButtonText: e.target.value.slice(0, 20) }))}
+                maxLength={20}
+                placeholder="Ver opções"
+              />
+            </Labeled>
+            <Labeled label="Título da seção (máx. 24)">
+              <input
+                className={fieldClass}
+                value={form.listSectionTitle}
+                disabled={!canManage}
+                onChange={(e) => setForm((p) => ({ ...p, listSectionTitle: e.target.value.slice(0, 24) }))}
+                maxLength={24}
+                placeholder="Atendimento"
+              />
+            </Labeled>
+          </div>
+        )}
+
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-600">
+              {form.menuType === "list" ? `Itens da lista (1–${maxOptions})` : `Botões (1–${maxOptions})`}
+            </span>
+            {canManage && (
+              <button
+                type="button"
+                onClick={addOption}
+                disabled={form.buttons.length >= maxOptions || availableServices.length === 0}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 disabled:opacity-40"
+              >
+                <Plus size={13} />
+                Opção
+              </button>
+            )}
           </div>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <label className="text-xs font-semibold text-slate-700">
-                Botões de atendimento <span className="font-normal text-slate-400">(1–3 · limite Meta)</span>
-              </label>
-              {canManage && (
-                <Button type="button" variant="outline" size="sm" onClick={addButton} disabled={form.buttons.length >= 3}>
-                  <Plus size={14} />
-                  Botão
-                </Button>
-              )}
-            </div>
-            <div className="space-y-2">
-              {form.buttons.map((button, index) => (
-                <div
-                  key={index}
-                  className="grid gap-2 rounded-md border border-slate-100 bg-slate-50/70 p-3 sm:grid-cols-[1fr_1.4fr_auto]"
-                >
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-slate-500">ID interno</label>
-                    <Input
-                      value={button.id}
-                      disabled={!canManage}
-                      onChange={(e) => updateButton(index, { id: e.target.value })}
-                      placeholder="ex.: pgp"
+          {!loadingServices && availableServices.length === 0 ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+              Nenhuma categoria com sigla ativa. Cadastre siglas em Configurações → Categorias de chamado.
+            </p>
+          ) : null}
+
+          <div className="space-y-1.5">
+            {form.buttons.map((option, index) => {
+              const selectedSigla = normalizeSigla(option.id);
+              const usedSiglas = new Set(
+                form.buttons
+                  .map((b, i) => (i === index ? "" : normalizeSigla(b.id)))
+                  .filter(Boolean),
+              );
+              const selectOptions = availableServices
+                .map((service) => {
+                  const sigla = normalizeSigla(String(service.sigla || ""));
+                  return {
+                    value: sigla,
+                    label: `${sigla} — ${service.nome}`,
+                    disabled: usedSiglas.has(sigla) && sigla !== selectedSigla,
+                  };
+                })
+                .filter((item) => item.value);
+
+              return (
+                <div key={index} className="space-y-1 rounded-md bg-slate-50 px-1.5 py-1.5">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_32px] items-center gap-1.5">
+                    <Select
+                      size="sm"
+                      value={selectedSigla || ""}
+                      disabled={!canManage || loadingServices}
+                      placeholder="Selecionar serviço"
+                      onChange={(value) => selectService(index, value)}
+                      options={selectOptions}
                     />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-slate-500">
-                      Título no WhatsApp <span className="text-slate-400">({button.title.length}/20)</span>
-                    </label>
-                    <Input
-                      value={button.title}
-                      disabled={!canManage}
-                      onChange={(e) => updateButton(index, { title: e.target.value.slice(0, 20) })}
-                      placeholder="ex.: Gestão Pública"
-                      maxLength={20}
+                    <input
+                      className={fieldClass}
+                      value={option.title}
+                      disabled={!canManage || !selectedSigla}
+                      onChange={(e) => updateOption(index, { title: e.target.value.slice(0, titleMax) })}
+                      placeholder={`Título no WhatsApp (máx. ${titleMax})`}
+                      maxLength={titleMax}
                     />
-                  </div>
-                  {canManage && (
-                    <div className="flex items-end">
-                      <Button
+                    {canManage ? (
+                      <button
                         type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeButton(index)}
+                        onClick={() => removeOption(index)}
                         disabled={form.buttons.length <= 1}
-                        className="text-red-600"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:bg-red-50 disabled:opacity-40"
                       >
                         <Trash2 size={14} />
-                      </Button>
-                    </div>
+                      </button>
+                    ) : (
+                      <span />
+                    )}
+                  </div>
+                  {form.menuType === "list" && (
+                    <input
+                      className={fieldClass}
+                      value={option.description || ""}
+                      disabled={!canManage || !selectedSigla}
+                      onChange={(e) => updateOption(index, { description: e.target.value.slice(0, 72) })}
+                      placeholder="Descrição opcional (máx. 72)"
+                      maxLength={72}
+                    />
                   )}
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-
-          <div className="grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-[140px_1fr]">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700">Inatividade (min)</label>
-              <Input
-                type="number"
-                min={1}
-                max={1440}
-                value={form.inactivityMinutes}
-                disabled={!canManage}
-                onChange={(e) =>
-                  setForm((p) => ({
-                    ...p,
-                    inactivityMinutes: Math.max(1, Math.min(1440, Number(e.target.value) || 1)),
-                  }))
-                }
-              />
-              <p className="mt-1 text-[11px] text-slate-400">
-                Após a última mensagem da empresa sem resposta do cliente.
-              </p>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700">
-                Mensagem de encerramento
-              </label>
-              <textarea
-                value={form.closingMessage}
-                disabled={!canManage}
-                onChange={(e) => setForm((p) => ({ ...p, closingMessage: e.target.value }))}
-                rows={4}
-                className="w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-emerald-500/30 focus:ring-2 disabled:bg-slate-50"
-              />
-            </div>
-          </div>
-
-          {canManage && (
-            <div className="flex justify-end pt-1">
-              <Button type="submit" size="sm" disabled={saving}>
-                <Save size={14} />
-                {saving ? "Salvando…" : "Salvar fluxo"}
-              </Button>
-            </div>
-          )}
         </div>
       </section>
 
       <WhatsAppFlowPreview
+        menuType={form.menuType}
         header={form.welcomeHeader.trim()}
         body={form.welcomeBody.trim()}
-        buttons={previewButtons}
+        options={previewOptions}
+        listButtonText={form.listButtonText.trim() || "Ver opções"}
+        listSectionTitle={form.listSectionTitle.trim() || "Atendimento"}
         closingMessage={form.closingMessage.trim() || DEFAULT_CLOSING}
         inactivityMinutes={form.inactivityMinutes}
         enabled={form.autoReplyEnabled}
@@ -320,99 +481,115 @@ export function WhatsappAutoReplyPanel({ canManage, onError, onSuccess }: Props)
   );
 }
 
+function Labeled({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-semibold text-slate-600">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function WhatsAppFlowPreview({
+  menuType,
   header,
   body,
-  buttons,
+  options,
+  listButtonText,
+  listSectionTitle,
   closingMessage,
   inactivityMinutes,
   enabled,
 }: {
+  menuType: WhatsAppMenuType;
   header: string;
   body: string;
-  buttons: WhatsAppBotButton[];
+  options: WhatsAppBotButton[];
+  listButtonText: string;
+  listSectionTitle: string;
   closingMessage: string;
   inactivityMinutes: number;
   enabled: boolean;
 }) {
-  const now = useMemo(
-    () =>
-      new Date().toLocaleTimeString("pt-BR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    [],
-  );
-
   return (
-    <aside className="overflow-hidden rounded-xl border border-slate-800/20 bg-[#0b141a] shadow-lg shadow-slate-900/10">
-      <div className="flex items-center gap-2 border-b border-white/5 bg-[#1f2c34] px-3 py-2.5">
-        <Smartphone size={14} className="text-[#25d366]" />
+    <aside className="overflow-hidden rounded-xl border border-[#1a2a32] bg-[#0b141a] shadow-sm">
+      <div className="flex items-center gap-2 border-b border-white/5 bg-[#1f2c34] px-3 py-2">
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#25d366]/15">
+          <Smartphone size={12} className="text-[#25d366]" />
+        </div>
         <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-white">Prévia do fluxo · WhatsApp</p>
-          <p className="truncate text-[10px] text-slate-400">
+          <p className="text-xs font-semibold text-white">Prévia do fluxo</p>
+          <p className="text-[10px] text-slate-400">
             {enabled
-              ? `Inatividade: ${inactivityMinutes} min`
-              : "Fluxo desligado (prévia ainda atualiza)"}
+              ? `${menuType === "list" ? "Lista" : "Botões"} · ${inactivityMinutes} min`
+              : "Fluxo desligado"}
           </p>
         </div>
       </div>
 
-      <div
-        className="relative max-h-[560px] space-y-3 overflow-y-auto px-3 py-4"
-        style={{
-          backgroundColor: "#0b141a",
-          backgroundImage:
-            "radial-gradient(circle at 20% 20%, rgba(37,211,102,0.06) 0, transparent 40%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.03) 0, transparent 35%)",
-        }}
-      >
-        <PreviewLabel>1. Cliente inicia (sem atendimento ativo)</PreviewLabel>
-        <Bubble mine time={now}>
-          Olá, preciso de ajuda
-        </Bubble>
+      <div className="space-y-2 px-2.5 py-2.5">
+        <CompactStep label="Cliente inicia">
+          <Bubble mine>Olá, preciso de ajuda</Bubble>
+        </CompactStep>
 
-        <PreviewLabel>2. Sistema envia menu automático</PreviewLabel>
-        <Bubble>
-          {header ? <p className="mb-1 font-semibold">{header}</p> : null}
-          {body || <span className="italic text-slate-500">Mensagem inicial…</span>}
-          {buttons.length > 0 && (
-            <div className="-mx-2.5 mt-2 border-t border-white/5">
-              {buttons.map((button, i) => (
-                <div
-                  key={`${button.id}-${i}`}
-                  className={cn(
-                    "px-3 py-2 text-center text-[13px] font-medium text-[#53bdeb]",
-                    i > 0 && "border-t border-white/5",
-                  )}
-                >
-                  {button.title}
+        <CompactStep label="Menu automático">
+          <Bubble>
+            {header ? <p className="mb-0.5 text-[11px] font-semibold leading-tight">{header}</p> : null}
+            <p className="text-[11px] leading-snug text-[#e9edef]">
+              {body || "Mensagem inicial..."}
+            </p>
+            {menuType === "buttons" ? (
+              options.length > 0 && (
+                <div className="-mx-2 mt-1.5 border-t border-white/10">
+                  {options.map((option, i) => (
+                    <div
+                      key={`${option.id}-${i}`}
+                      className={cn(
+                        "px-2 py-1.5 text-center text-[11px] font-medium text-[#53bdeb]",
+                        i > 0 && "border-t border-white/10",
+                      )}
+                    >
+                      {option.title}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </Bubble>
+              )
+            ) : (
+              <div className="-mx-2 mt-1.5 border-t border-white/10 px-2 py-1.5">
+                <div className="rounded-md border border-[#53bdeb]/40 px-2 py-1.5 text-center text-[11px] font-medium text-[#53bdeb]">
+                  {listButtonText}
+                </div>
+                <p className="mt-1 text-center text-[9px] text-slate-500">
+                  Abre: {listSectionTitle} ({options.length} itens)
+                </p>
+              </div>
+            )}
+          </Bubble>
+        </CompactStep>
 
-        <PreviewLabel>3. Cliente escolhe e o atendimento inicia</PreviewLabel>
-        <Bubble mine time={now}>
-          {buttons[0]?.title || "Opção selecionada"}
-        </Bubble>
+        <CompactStep label="Escolhe opção">
+          <Bubble mine>{options[0]?.title || "Opção"}</Bubble>
+        </CompactStep>
 
-        <PreviewLabel>4. Empresa responde normalmente</PreviewLabel>
-        <Bubble time={now}>Certo! Em que posso ajudar no sistema?</Bubble>
+        <CompactStep label="Empresa responde">
+          <Bubble>Certo! Em que posso ajudar?</Bubble>
+        </CompactStep>
 
-        <PreviewLabel>5. Após {inactivityMinutes} min sem resposta do cliente</PreviewLabel>
-        <Bubble time={now}>{closingMessage}</Bubble>
+        <CompactStep label={`Encerra (${inactivityMinutes} min)`}>
+          <Bubble>
+            <p className="line-clamp-2 text-[11px] leading-snug">{closingMessage}</p>
+          </Bubble>
+        </CompactStep>
       </div>
     </aside>
   );
 }
 
-function PreviewLabel({ children }: { children: React.ReactNode }) {
+function CompactStep({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-center">
-      <span className="rounded-full bg-[#182229] px-2.5 py-1 text-[10px] font-medium text-slate-400">
-        {children}
-      </span>
+    <div className="space-y-1">
+      <p className="text-center text-[9px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+      {children}
     </div>
   );
 }
@@ -420,26 +597,19 @@ function PreviewLabel({ children }: { children: React.ReactNode }) {
 function Bubble({
   children,
   mine,
-  time,
 }: {
   children: React.ReactNode;
   mine?: boolean;
-  time?: string;
 }) {
   return (
     <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[92%] rounded-lg px-2.5 py-1.5 text-[13px] leading-snug text-[#e9edef] shadow-sm",
+          "max-w-[95%] rounded-lg px-2 py-1.5 text-[#e9edef] shadow-sm",
           mine ? "rounded-tr-sm bg-[#005c4b]" : "rounded-tl-sm bg-[#202c33]",
         )}
       >
-        <div className="whitespace-pre-wrap">{children}</div>
-        {time ? (
-          <p className={cn("mt-0.5 text-[10px]", mine ? "text-right text-[#aebac1]" : "text-right text-[#8696a0]")}>
-            {time}
-          </p>
-        ) : null}
+        {children}
       </div>
     </div>
   );

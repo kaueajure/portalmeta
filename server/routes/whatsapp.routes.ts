@@ -111,9 +111,12 @@ router.put(
       const body = req.body || {};
       const settings = await whatsappService.updateBotSettings({
         autoReplyEnabled: body.autoReplyEnabled,
+        menuType: body.menuType,
         welcomeHeader: body.welcomeHeader,
         welcomeBody: body.welcomeBody,
         buttons: body.buttons,
+        listButtonText: body.listButtonText,
+        listSectionTitle: body.listSectionTitle,
         inactivityMinutes: body.inactivityMinutes,
         closingMessage: body.closingMessage,
       });

@@ -24,6 +24,12 @@ export type WhatsAppConversation = {
   last_direction: 'inbound' | 'outbound' | null;
   last_message_at: string;
   message_count: number;
+  /** Sigla/serviço escolhido no menu (ex.: PGP). */
+  service_id: string | null;
+  /** Título do serviço escolhido. */
+  service_title: string | null;
+  /** Status do atendimento na sessão: idle | active */
+  attendance_status: 'idle' | 'active' | null;
 };
 
 function normalizePhone(value?: string | null): string {
@@ -34,14 +40,25 @@ function contactPhoneExpr(): string {
   return `CASE WHEN direction = 'inbound' THEN from_phone ELSE to_phone END`;
 }
 
-export type WelcomeButton = { id: string; title: string };
+export type WelcomeOption = { id: string; title: string; description?: string };
+/** @deprecated use WelcomeOption */
+export type WelcomeButton = WelcomeOption;
+
+export type WhatsAppMenuType = 'buttons' | 'list';
 
 export type WhatsAppBotSettings = {
   /** Liga o fluxo automático (menu inicial + encerramento por inatividade). */
   autoReplyEnabled: boolean;
+  /** buttons = até 3 reply buttons · list = até 10 itens na lista Meta */
+  menuType: WhatsAppMenuType;
   welcomeHeader: string;
   welcomeBody: string;
-  buttons: WelcomeButton[];
+  /** Opções do menu (botões ou linhas da lista). */
+  buttons: WelcomeOption[];
+  /** Texto do botão que abre a lista (só menuType=list, máx. 20). */
+  listButtonText: string;
+  /** Título da seção da lista (só menuType=list, máx. 24). */
+  listSectionTitle: string;
   /** Minutos sem resposta do cliente após a última mensagem da empresa. */
   inactivityMinutes: number;
   closingMessage: string;
@@ -67,14 +84,17 @@ const DEFAULT_CLOSING_MESSAGE =
 
 const DEFAULT_BOT_SETTINGS: WhatsAppBotSettings = {
   autoReplyEnabled: true,
+  menuType: 'buttons',
   welcomeHeader: 'MetaBit - Sistemas para Gestão Pública',
   welcomeBody:
     'Seja Bem-Vindo, antes de iniciarmos seu atendimento, sobre qual sistema gostaria de falar?',
   buttons: [
-    { id: 'pgp', title: 'Gestão Pública' },
-    { id: 'pci', title: 'Controle Interno' },
-    { id: 'pts', title: 'Terceiro Setor' },
+    { id: 'pgp', title: 'Gestão Pública', description: 'Sistemas de gestão pública' },
+    { id: 'pci', title: 'Controle Interno', description: 'Controle e auditoria' },
+    { id: 'pts', title: 'Terceiro Setor', description: 'Entidades do terceiro setor' },
   ],
+  listButtonText: 'Ver opções',
+  listSectionTitle: 'Atendimento',
   inactivityMinutes: 60,
   closingMessage: DEFAULT_CLOSING_MESSAGE,
   updatedAt: null,
@@ -86,39 +106,55 @@ const BOT_SETTINGS_CACHE_MS = 2_000;
 const recentWelcomeSentAt = new Map<string, number>();
 const WELCOME_DEBOUNCE_MS = 8_000;
 
-function normalizeButtons(input: unknown): WelcomeButton[] {
-  let list: unknown[] = [];
+function parseOptionsRaw(input: unknown): any[] {
   if (typeof input === 'string') {
     try {
       const parsed = JSON.parse(input);
-      list = Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
-      list = [];
+      return [];
     }
-  } else if (Array.isArray(input)) {
-    list = input;
   }
+  return Array.isArray(input) ? input : [];
+}
 
-  return list
-    .map((item: any) => ({
-      id: String(item?.id || '').trim().slice(0, 256),
-      title: String(item?.title || '').trim().slice(0, 20),
-    }))
-    .filter((b) => b.id && b.title)
-    .slice(0, 3);
+function normalizeMenuOptions(input: unknown, menuType: WhatsAppMenuType): WelcomeOption[] {
+  const maxItems = menuType === 'list' ? 10 : 3;
+  const titleMax = menuType === 'list' ? 24 : 20;
+
+  const options: WelcomeOption[] = [];
+  for (const item of parseOptionsRaw(input)) {
+    const id = String(item?.id || '').trim().slice(0, 200);
+    const title = String(item?.title || '').trim().slice(0, titleMax);
+    const description = String(item?.description || '')
+      .trim()
+      .slice(0, 72);
+    if (!id || !title) continue;
+    const option: WelcomeOption = description ? { id, title, description } : { id, title };
+    options.push(option);
+    if (options.length >= maxItems) break;
+  }
+  return options;
 }
 
 function mapRowToBotSettings(row: any): WhatsAppBotSettings {
   const inactivity = Number(row?.inactivity_minutes);
+  const menuType: WhatsAppMenuType = row?.menu_type === 'list' ? 'list' : 'buttons';
+  const options = normalizeMenuOptions(row?.welcome_buttons_json, menuType);
   return {
     autoReplyEnabled: Boolean(row?.auto_reply_enabled),
+    menuType,
     welcomeHeader: String(row?.welcome_header || DEFAULT_BOT_SETTINGS.welcomeHeader)
       .trim()
       .slice(0, 60),
     welcomeBody: String(row?.welcome_body || DEFAULT_BOT_SETTINGS.welcomeBody).trim(),
-    buttons: normalizeButtons(row?.welcome_buttons_json).length
-      ? normalizeButtons(row?.welcome_buttons_json)
-      : DEFAULT_BOT_SETTINGS.buttons.map((b) => ({ ...b })),
+    buttons: options.length ? options : DEFAULT_BOT_SETTINGS.buttons.map((b) => ({ ...b })),
+    listButtonText: String(row?.list_button_text || DEFAULT_BOT_SETTINGS.listButtonText)
+      .trim()
+      .slice(0, 20) || DEFAULT_BOT_SETTINGS.listButtonText,
+    listSectionTitle: String(row?.list_section_title || DEFAULT_BOT_SETTINGS.listSectionTitle)
+      .trim()
+      .slice(0, 24) || DEFAULT_BOT_SETTINGS.listSectionTitle,
     inactivityMinutes:
       Number.isInteger(inactivity) && inactivity >= 1 && inactivity <= 24 * 60
         ? inactivity
@@ -193,7 +229,8 @@ export const whatsappService = {
     try {
       const [rows]: any = await pool.query(
         `
-          SELECT auto_reply_enabled, welcome_header, welcome_body, welcome_buttons_json,
+          SELECT auto_reply_enabled, menu_type, welcome_header, welcome_body, welcome_buttons_json,
+                 list_button_text, list_section_title,
                  inactivity_minutes, closing_message, updated_at
           FROM whatsapp_settings
           WHERE id = 1
@@ -213,27 +250,45 @@ export const whatsappService = {
 
   async updateBotSettings(input: {
     autoReplyEnabled?: boolean;
+    menuType?: WhatsAppMenuType;
     welcomeHeader?: string;
     welcomeBody?: string;
-    buttons?: WelcomeButton[];
+    buttons?: WelcomeOption[];
+    listButtonText?: string;
+    listSectionTitle?: string;
     inactivityMinutes?: number;
     closingMessage?: string;
   }): Promise<WhatsAppBotSettings> {
     const current = await this.getBotSettings();
     const inactivityRaw =
       input.inactivityMinutes !== undefined ? Number(input.inactivityMinutes) : current.inactivityMinutes;
+    const menuType: WhatsAppMenuType =
+      input.menuType === 'list' || input.menuType === 'buttons'
+        ? input.menuType
+        : current.menuType;
 
     const next: WhatsAppBotSettings = {
       autoReplyEnabled:
         input.autoReplyEnabled !== undefined ? Boolean(input.autoReplyEnabled) : current.autoReplyEnabled,
+      menuType,
       welcomeHeader: String(input.welcomeHeader !== undefined ? input.welcomeHeader : current.welcomeHeader)
         .trim()
         .slice(0, 60),
       welcomeBody: String(input.welcomeBody !== undefined ? input.welcomeBody : current.welcomeBody).trim(),
       buttons:
         input.buttons !== undefined
-          ? normalizeButtons(input.buttons)
-          : current.buttons.map((b) => ({ ...b })),
+          ? normalizeMenuOptions(input.buttons, menuType)
+          : normalizeMenuOptions(current.buttons, menuType),
+      listButtonText: String(
+        input.listButtonText !== undefined ? input.listButtonText : current.listButtonText,
+      )
+        .trim()
+        .slice(0, 20),
+      listSectionTitle: String(
+        input.listSectionTitle !== undefined ? input.listSectionTitle : current.listSectionTitle,
+      )
+        .trim()
+        .slice(0, 24),
       inactivityMinutes:
         Number.isInteger(inactivityRaw) && inactivityRaw >= 1 && inactivityRaw <= 24 * 60
           ? inactivityRaw
@@ -248,9 +303,22 @@ export const whatsappService = {
       throw Object.assign(new Error('Informe o texto do menu de boas-vindas'), { status: 400 });
     }
     if (next.buttons.length === 0) {
-      throw Object.assign(new Error('Configure de 1 a 3 botões (título máx. 20 caracteres)'), {
-        status: 400,
-      });
+      throw Object.assign(
+        new Error(
+          next.menuType === 'list'
+            ? 'Configure de 1 a 10 itens na lista (título máx. 24 caracteres)'
+            : 'Configure de 1 a 3 botões (título máx. 20 caracteres)',
+        ),
+        { status: 400 },
+      );
+    }
+    if (next.menuType === 'list') {
+      if (!next.listButtonText) {
+        throw Object.assign(new Error('Informe o texto do botão que abre a lista'), { status: 400 });
+      }
+      if (!next.listSectionTitle) {
+        throw Object.assign(new Error('Informe o título da seção da lista'), { status: 400 });
+      }
     }
     if (!next.closingMessage) {
       throw Object.assign(new Error('Informe a mensagem de encerramento por inatividade'), {
@@ -262,22 +330,29 @@ export const whatsappService = {
       `
         INSERT INTO whatsapp_settings (
           id, auto_reply_enabled, auto_reply_trigger,
-          welcome_header, welcome_body, welcome_buttons_json,
+          menu_type, welcome_header, welcome_body, welcome_buttons_json,
+          list_button_text, list_section_title,
           inactivity_minutes, closing_message
-        ) VALUES (1, ?, '', ?, ?, ?, ?, ?)
+        ) VALUES (1, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           auto_reply_enabled = VALUES(auto_reply_enabled),
+          menu_type = VALUES(menu_type),
           welcome_header = VALUES(welcome_header),
           welcome_body = VALUES(welcome_body),
           welcome_buttons_json = VALUES(welcome_buttons_json),
+          list_button_text = VALUES(list_button_text),
+          list_section_title = VALUES(list_section_title),
           inactivity_minutes = VALUES(inactivity_minutes),
           closing_message = VALUES(closing_message)
       `,
       [
         next.autoReplyEnabled ? 1 : 0,
+        next.menuType,
         next.welcomeHeader,
         next.welcomeBody,
         JSON.stringify(next.buttons),
+        next.listButtonText,
+        next.listSectionTitle,
         next.inactivityMinutes,
         next.closingMessage,
       ],
@@ -330,21 +405,26 @@ export const whatsappService = {
     if (!normalized) return;
     try {
       await this.ensureSessionRow(normalized, contactName);
-      await pool.query(
-        `
-          UPDATE whatsapp_sessions
-          SET status = 'active',
-              selected_option_id = ?,
-              selected_option_title = ?,
-              attendance_started_at = NOW(),
-              last_client_message_at = NOW(),
-              last_company_message_at = NULL,
-              closed_at = NULL,
-              contact_name = COALESCE(?, contact_name)
-          WHERE contact_phone = ?
-        `,
-        [optionId, optionTitle, contactName || null, normalized],
-      );
+    await pool.query(
+          `
+            UPDATE whatsapp_sessions
+            SET status = 'active',
+                selected_option_id = ?,
+                selected_option_title = ?,
+                attendance_started_at = NOW(),
+                last_client_message_at = NOW(),
+                last_company_message_at = NULL,
+                closed_at = NULL,
+                contact_name = COALESCE(?, contact_name)
+            WHERE contact_phone = ?
+          `,
+          [
+            String(optionId || '').trim().toUpperCase().slice(0, 256),
+            optionTitle,
+            contactName || null,
+            normalized,
+          ],
+        );
     } catch (err: any) {
       if (err?.code === 'ER_NO_SUCH_TABLE') {
         console.warn('[WhatsApp] Tabela whatsapp_sessions ausente. Rode as migrations.');
@@ -358,12 +438,11 @@ export const whatsappService = {
     const normalized = normalizePhone(phone);
     if (!normalized) return;
     try {
+      // Mantém selected_option_* para pasta/marca d'água do serviço até nova escolha.
       await pool.query(
         `
           UPDATE whatsapp_sessions
           SET status = 'idle',
-              selected_option_id = NULL,
-              selected_option_title = NULL,
               attendance_started_at = NULL,
               last_company_message_at = NULL,
               closed_at = NOW()
@@ -437,17 +516,19 @@ export const whatsappService = {
     const session = await this.getSession(phone);
     const isActive = session?.status === 'active';
 
-    const buttonReply =
+    const optionReply =
       input.rawMessage?.interactive?.button_reply ||
+      input.rawMessage?.interactive?.list_reply ||
       (input.rawMessage?.button
         ? { id: input.rawMessage.button.payload, title: input.rawMessage.button.text }
         : null);
 
-    if (!isActive && buttonReply?.id) {
+    // Clique no menu (ou troca de serviço): grava escolha e abre/renova atendimento.
+    if (optionReply?.id) {
       await this.startAttendance(
         phone,
-        String(buttonReply.id).slice(0, 256),
-        String(buttonReply.title || '').slice(0, 40),
+        String(optionReply.id).slice(0, 256),
+        String(optionReply.title || '').slice(0, 40),
         input.contactName,
       );
       return;
@@ -692,51 +773,73 @@ export const whatsappService = {
       const [rows]: any = await pool.query(
         `
           SELECT
-            contact_phone,
-            MAX(NULLIF(contact_name, '')) AS contact_name,
-            SUBSTRING_INDEX(
-              GROUP_CONCAT(
-                IFNULL(body, '')
-                ORDER BY created_at DESC, id DESC
-                SEPARATOR '|||'
-              ),
-              '|||',
-              1
-            ) AS last_body,
-            SUBSTRING_INDEX(
-              GROUP_CONCAT(
-                direction
-                ORDER BY created_at DESC, id DESC
-                SEPARATOR '|||'
-              ),
-              '|||',
-              1
-            ) AS last_direction,
-            MAX(created_at) AS last_message_at,
-            COUNT(*) AS message_count
+            t.contact_phone,
+            COALESCE(NULLIF(s.contact_name, ''), t.contact_name) AS contact_name,
+            t.last_body,
+            t.last_direction,
+            t.last_message_at,
+            t.message_count,
+            NULLIF(s.selected_option_id, '') AS service_id,
+            NULLIF(s.selected_option_title, '') AS service_title,
+            s.status AS attendance_status
           FROM (
             SELECT
-              id,
-              direction,
-              ${contactPhone} AS contact_phone,
-              contact_name,
-              body,
-              created_at
-            FROM whatsapp_messages
-            WHERE message_type <> 'status'
-              AND ${contactPhone} IS NOT NULL
-              AND ${contactPhone} <> ''
-          ) AS threads
-          GROUP BY contact_phone
-          ORDER BY last_message_at DESC
-          LIMIT ?
+              contact_phone,
+              MAX(NULLIF(contact_name, '')) AS contact_name,
+              SUBSTRING_INDEX(
+                GROUP_CONCAT(
+                  IFNULL(body, '')
+                  ORDER BY created_at DESC, id DESC
+                  SEPARATOR '|||'
+                ),
+                '|||',
+                1
+              ) AS last_body,
+              SUBSTRING_INDEX(
+                GROUP_CONCAT(
+                  direction
+                  ORDER BY created_at DESC, id DESC
+                  SEPARATOR '|||'
+                ),
+                '|||',
+                1
+              ) AS last_direction,
+              MAX(created_at) AS last_message_at,
+              COUNT(*) AS message_count
+            FROM (
+              SELECT
+                id,
+                direction,
+                REPLACE(REPLACE(REPLACE(IFNULL(${contactPhone}, ''), '+', ''), '-', ''), ' ', '') AS contact_phone,
+                contact_name,
+                body,
+                created_at
+              FROM whatsapp_messages
+              WHERE message_type <> 'status'
+                AND ${contactPhone} IS NOT NULL
+                AND ${contactPhone} <> ''
+            ) AS threads
+            WHERE contact_phone <> ''
+            GROUP BY contact_phone
+            ORDER BY last_message_at DESC
+            LIMIT ?
+          ) AS t
+          LEFT JOIN whatsapp_sessions s
+            ON s.contact_phone = t.contact_phone
+          ORDER BY t.last_message_at DESC
         `,
         [safeLimit],
       );
       return rows.map((row: any) => ({
-        ...row,
+        contact_phone: String(row.contact_phone || ''),
+        contact_name: row.contact_name || null,
         last_body: row.last_body || null,
         last_direction: row.last_direction || null,
+        last_message_at: row.last_message_at,
+        message_count: Number(row.message_count) || 0,
+        service_id: row.service_id ? String(row.service_id).trim().toUpperCase() : null,
+        service_title: row.service_title || null,
+        attendance_status: row.attendance_status === 'active' ? 'active' : row.attendance_status === 'idle' ? 'idle' : null,
       }));
     } catch (err: any) {
       if (err?.code === 'ER_NO_SUCH_TABLE') return [];
@@ -785,7 +888,18 @@ export const whatsappService = {
 
     const settings = await this.getBotSettings();
     if (settings.buttons.length === 0) {
-      throw Object.assign(new Error('Nenhum botão de boas-vindas configurado'), { status: 400 });
+      throw Object.assign(new Error('Nenhuma opção de menu configurada'), { status: 400 });
+    }
+
+    if (settings.menuType === 'list') {
+      return this.sendInteractiveList({
+        to,
+        header: settings.welcomeHeader,
+        body: settings.welcomeBody,
+        buttonText: settings.listButtonText,
+        sectionTitle: settings.listSectionTitle,
+        rows: settings.buttons,
+      });
     }
 
     return this.sendInteractiveButtons({
@@ -796,11 +910,101 @@ export const whatsappService = {
     });
   },
 
+  async sendInteractiveList(input: {
+    to: string;
+    header?: string;
+    body: string;
+    buttonText: string;
+    sectionTitle: string;
+    rows: WelcomeOption[];
+  }) {
+    if (!this.isConfigured()) {
+      throw Object.assign(new Error('WhatsApp não configurado'), { status: 400 });
+    }
+
+    const phone = normalizePhone(input.to);
+    const body = String(input.body || '').trim();
+    const header = String(input.header || '').trim().slice(0, 60);
+    const buttonText = String(input.buttonText || '').trim().slice(0, 20);
+    const sectionTitle = String(input.sectionTitle || '').trim().slice(0, 24);
+    const rows = normalizeMenuOptions(input.rows, 'list');
+
+    if (!phone || phone.length < 10) {
+      throw Object.assign(new Error('Número de destino inválido'), { status: 400 });
+    }
+    if (!body) {
+      throw Object.assign(new Error('Mensagem vazia'), { status: 400 });
+    }
+    if (!buttonText || !sectionTitle || rows.length === 0) {
+      throw Object.assign(new Error('Lista incompleta: botão, seção e itens são obrigatórios'), {
+        status: 400,
+      });
+    }
+
+    const url = `${GRAPH_API_BASE}/${env.WHATSAPP.API_VERSION}/${env.WHATSAPP.PHONE_NUMBER_ID}/messages`;
+    const payload: Record<string, unknown> = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: body.slice(0, 1024) },
+        action: {
+          button: buttonText,
+          sections: [
+            {
+              title: sectionTitle,
+              rows: rows.map((row) => ({
+                id: row.id,
+                title: row.title,
+                ...(row.description ? { description: row.description } : {}),
+              })),
+            },
+          ],
+        },
+        ...(header ? { header: { type: 'text', text: header } } : {}),
+      },
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.WHATSAPP.ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        data?.error?.message ||
+        data?.message ||
+        `Falha ao enviar lista interativa (${response.status})`;
+      throw Object.assign(new Error(msg), { status: 502, details: data });
+    }
+
+    const waMessageId = data?.messages?.[0]?.id || null;
+    const preview = `${header ? `${header}\n` : ''}${body}\n[Lista: ${rows.map((r) => r.title).join(' | ')}]`;
+    await this.persistMessage({
+      waMessageId,
+      direction: 'outbound',
+      fromPhone: env.WHATSAPP.DISPLAY_PHONE_NUMBER || null,
+      toPhone: phone,
+      messageType: 'interactive',
+      body: preview,
+      status: 'sent',
+      rawPayload: data,
+    });
+
+    return data;
+  },
+
   async sendInteractiveButtons(input: {
     to: string;
     header?: string;
     body: string;
-    buttons: WelcomeButton[];
+    buttons: WelcomeOption[];
   }) {
     if (!this.isConfigured()) {
       throw Object.assign(new Error('WhatsApp não configurado'), { status: 400 });

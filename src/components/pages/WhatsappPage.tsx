@@ -13,8 +13,10 @@ import {
   Search,
   Plus,
   ArrowLeft,
-  BookOpen,
   ExternalLink,
+  Save,
+  Folder,
+  FolderOpen,
 } from "lucide-react";
 import { PageShell } from "../layout/PageShell";
 import { Button } from "../ui/Button";
@@ -23,7 +25,7 @@ import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import { User } from "../../types";
 import { hasPermission } from "../../lib/permissions";
-import { WhatsappAutoReplyPanel } from "../whatsapp/WhatsappAutoReplyPanel";
+import { WhatsappAutoReplyPanel, type WhatsAppFlowToolbar } from "../whatsapp/WhatsappAutoReplyPanel";
 
 interface WhatsappPageProps {
   currentUser: User;
@@ -50,6 +52,9 @@ interface WhatsAppConversation {
   last_direction: "inbound" | "outbound" | null;
   last_message_at: string;
   message_count: number;
+  service_id: string | null;
+  service_title: string | null;
+  attendance_status: "idle" | "active" | null;
 }
 
 interface WhatsAppMessage {
@@ -176,10 +181,12 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   const [success, setSuccess] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showSetup, setShowSetup] = useState(false);
+  const [flowToolbar, setFlowToolbar] = useState<WhatsAppFlowToolbar | null>(null);
   const [search, setSearch] = useState("");
   const [composer, setComposer] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newPhone, setNewPhone] = useState("");
+  const [activeFolder, setActiveFolder] = useState<string>("all");
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<number | null>(null);
 
@@ -188,14 +195,43 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
     [conversations, selectedPhone],
   );
 
+  const serviceFolders = useMemo(() => {
+    const map = new Map<string, { id: string; title: string; count: number }>();
+    for (const conv of conversations) {
+      const id = String(conv.service_id || "").trim().toUpperCase();
+      if (!id) continue;
+      const current = map.get(id);
+      if (current) {
+        current.count += 1;
+      } else {
+        map.set(id, {
+          id,
+          title: conv.service_title || id,
+          count: 1,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+  }, [conversations]);
+
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return conversations;
     return conversations.filter((c) => {
-      const hay = `${c.contact_name || ""} ${c.contact_phone} ${c.last_body || ""}`.toLowerCase();
+      if (activeFolder === "none") {
+        if (c.service_id) return false;
+      } else if (activeFolder !== "all") {
+        if (String(c.service_id || "").toUpperCase() !== activeFolder) return false;
+      }
+      if (!q) return true;
+      const hay = `${c.contact_name || ""} ${c.contact_phone} ${c.last_body || ""} ${c.service_id || ""} ${c.service_title || ""}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [conversations, search]);
+  }, [conversations, search, activeFolder]);
+
+  const withoutServiceCount = useMemo(
+    () => conversations.filter((c) => !c.service_id).length,
+    [conversations],
+  );
 
   const loadStatusAndConversations = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true);
@@ -292,6 +328,9 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
           last_direction: null,
           last_message_at: new Date().toISOString(),
           message_count: 0,
+          service_id: null,
+          service_title: null,
+          attendance_status: null,
         },
         ...prev,
       ];
@@ -333,9 +372,39 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
         subtitle="Inbox de conversas — receba pelo webhook e responda pelo Portal Meta."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowSetup((v) => !v)}>
+            {showSetup && flowToolbar && canManage ? (
+              <>
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-emerald-600"
+                    checked={flowToolbar.enabled}
+                    onChange={(e) => flowToolbar.setEnabled(e.target.checked)}
+                  />
+                  {flowToolbar.enabled ? "Ligado" : "Desligado"}
+                </label>
+                <Button
+                  size="sm"
+                  disabled={flowToolbar.saving}
+                  onClick={() => flowToolbar.submit()}
+                >
+                  <Save size={14} />
+                  {flowToolbar.saving ? "Salvando…" : "Salvar"}
+                </Button>
+              </>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowSetup((v) => {
+                  if (v) setFlowToolbar(null);
+                  return !v;
+                });
+              }}
+            >
               <Settings2 size={14} />
-              {showSetup ? "Fechar setup" : "Configuração"}
+              {showSetup ? "Fechar" : "Configuração"}
             </Button>
             <Button
               variant="outline"
@@ -353,32 +422,33 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
         contentClassName="flex h-full min-h-0 flex-col overflow-hidden p-0"
       >
         {error && (
-          <div className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 sm:mx-5">
-            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <div className="mx-3 mt-2 flex shrink-0 items-start gap-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-700 sm:mx-4">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {success && (
-          <div className="mx-4 mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 sm:mx-5">
+          <div className="mx-3 mt-2 shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs text-emerald-800 sm:mx-4">
             {success}
           </div>
         )}
 
-        {showSetup && (
+        {showSetup ? (
           <SetupPanel
             status={status}
             canManage={canManage}
             canViewMetaCredentials={canViewMetaCredentials}
+            companyId={currentUser.empresa_id}
             copiedField={copiedField}
             onCopy={copyValue}
-            onClose={() => setShowSetup(false)}
             onError={setError}
             onSuccess={setSuccess}
+            onFlowToolbarChange={setFlowToolbar}
           />
-        )}
+        ) : null}
 
-        <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className={cn("flex min-h-0 flex-1 overflow-hidden", showSetup && "hidden")}>
           {/* Conversation list */}
           <aside
             className={cn(
@@ -406,6 +476,39 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                     Nova
                   </Button>
                 )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Pastas
+                </p>
+                <div className="flex flex-col gap-0.5">
+                  <FolderChip
+                    active={activeFolder === "all"}
+                    icon={<FolderOpen size={13} />}
+                    label="Todas"
+                    count={conversations.length}
+                    onClick={() => setActiveFolder("all")}
+                  />
+                  {serviceFolders.map((folder) => (
+                    <FolderChip
+                      key={folder.id}
+                      active={activeFolder === folder.id}
+                      icon={<Folder size={13} />}
+                      label={folder.title}
+                      badge={folder.id}
+                      count={folder.count}
+                      onClick={() => setActiveFolder(folder.id)}
+                    />
+                  ))}
+                  <FolderChip
+                    active={activeFolder === "none"}
+                    icon={<Folder size={13} />}
+                    label="Sem serviço"
+                    count={withoutServiceCount}
+                    onClick={() => setActiveFolder("none")}
+                  />
+                </div>
               </div>
 
               <div className="relative">
@@ -464,12 +567,15 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
               ) : filteredConversations.length === 0 ? (
                 <div className="px-6 py-12 text-center">
                   <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                    <Phone size={20} />
+                    <Folder size={20} />
                   </div>
-                  <p className="text-sm font-medium text-slate-800">Nenhuma conversa ainda</p>
+                  <p className="text-sm font-medium text-slate-800">
+                    {activeFolder === "all" ? "Nenhuma conversa ainda" : "Pasta vazia"}
+                  </p>
                   <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                    Configure o webhook e peça para alguém enviar uma mensagem ao número
-                    registrado — ou inicie um chat novo.
+                    {activeFolder === "all"
+                      ? "Configure o webhook e peça para alguém enviar uma mensagem ao número registrado — ou inicie um chat novo."
+                      : "Nenhum cliente nesta pasta no momento."}
                   </p>
                 </div>
               ) : (
@@ -498,9 +604,24 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
-                              <span className="truncate text-sm font-semibold text-slate-900">
-                                {conv.contact_name || formatPhoneLabel(conv.contact_phone)}
-                              </span>
+                              <div className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate text-sm font-semibold text-slate-900">
+                                  {conv.contact_name || formatPhoneLabel(conv.contact_phone)}
+                                </span>
+                                {conv.service_id ? (
+                                  <span
+                                    title={conv.service_title || conv.service_id}
+                                    className={cn(
+                                      "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
+                                      conv.attendance_status === "active"
+                                        ? "bg-emerald-600 text-white"
+                                        : "bg-slate-200/90 text-slate-600",
+                                    )}
+                                  >
+                                    {conv.service_id}
+                                  </span>
+                                ) : null}
+                              </div>
                               <span className="shrink-0 text-[11px] text-slate-400">
                                 {formatTime(conv.last_message_at)}
                               </span>
@@ -510,6 +631,11 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                                 {formatPhoneLabel(conv.contact_phone)}
                               </p>
                             )}
+                            {conv.service_title ? (
+                              <p className="mt-0.5 truncate text-[11px] font-medium text-emerald-700/80">
+                                {conv.service_title}
+                              </p>
+                            ) : null}
                             <p className="mt-0.5 truncate text-xs text-slate-500">
                               {conv.last_direction === "outbound" ? "Você: " : ""}
                               {conv.last_body || "Sem mensagens"}
@@ -557,8 +683,26 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                     {initials(selectedConversation?.contact_name || null, selectedPhone)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900">{headerTitle}</p>
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="truncate text-sm font-semibold text-slate-900">{headerTitle}</p>
+                      {selectedConversation?.service_id ? (
+                        <span
+                          title={selectedConversation.service_title || selectedConversation.service_id}
+                          className={cn(
+                            "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
+                            selectedConversation.attendance_status === "active"
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-200 text-slate-600",
+                          )}
+                        >
+                          {selectedConversation.service_id}
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="truncate text-xs text-slate-500">
+                      {selectedConversation?.service_title
+                        ? `${selectedConversation.service_title} · `
+                        : ""}
                       {formatPhoneLabel(selectedPhone)}
                       {selectedConversation?.message_count
                         ? ` · ${selectedConversation.message_count} msgs`
@@ -678,125 +822,108 @@ function SetupPanel({
   status,
   canManage,
   canViewMetaCredentials,
+  companyId,
   copiedField,
   onCopy,
-  onClose,
   onError,
   onSuccess,
+  onFlowToolbarChange,
 }: {
   status: WhatsAppStatus | null;
   canManage: boolean;
   canViewMetaCredentials: boolean;
+  companyId?: number | null;
   copiedField: string | null;
   onCopy: (field: string, value: string) => void;
-  onClose: () => void;
   onError: (message: string | null) => void;
   onSuccess: (message: string | null) => void;
+  onFlowToolbarChange: (toolbar: WhatsAppFlowToolbar | null) => void;
 }) {
   const [tab, setTab] = useState<SetupTab>("messages");
   const activeTab: SetupTab =
     tab === "credentials" && !canViewMetaCredentials ? "messages" : tab;
 
+  useEffect(() => {
+    if (activeTab !== "messages") onFlowToolbarChange(null);
+  }, [activeTab, onFlowToolbarChange]);
+
   return (
-    <div className="shrink-0 border-b border-slate-200 bg-slate-50/80 px-4 py-4 sm:px-5">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Settings2 size={16} className="text-emerald-600" />
-            <h2 className="text-sm font-semibold text-slate-900">Configuração do WhatsApp</h2>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/80 px-3 py-2 sm:px-4">
+      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <Settings2 size={14} className="text-emerald-600" />
+            <h2 className="text-xs font-semibold text-slate-900">Configuração</h2>
           </div>
-          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-            {canViewMetaCredentials ? (
-              <>
-                Mensagens automáticas ficam no painel (banco). Credenciais da Meta continuam no{" "}
-                <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>.
-              </>
-            ) : (
-              <>Configure o menu inicial, os botões e o encerramento por inatividade.</>
-            )}
-          </p>
+          {canViewMetaCredentials && (
+            <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
+              <button
+                type="button"
+                onClick={() => setTab("messages")}
+                className={cn(
+                  "rounded px-2 py-1 text-[11px] font-semibold transition-colors",
+                  activeTab === "messages" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                Fluxo
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("credentials")}
+                className={cn(
+                  "rounded px-2 py-1 text-[11px] font-semibold transition-colors",
+                  activeTab === "credentials" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                Credenciais Meta
+              </button>
+            </div>
+          )}
         </div>
-        <Button variant="outline" size="sm" onClick={onClose}>
-          Fechar
-        </Button>
       </div>
 
-      {canViewMetaCredentials && (
-        <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-white p-1">
-          <button
-            type="button"
-            onClick={() => setTab("messages")}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-              activeTab === "messages" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
-            )}
-          >
-            Fluxo de atendimento
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("credentials")}
-            className={cn(
-              "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-              activeTab === "credentials" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
-            )}
-          >
-            Credenciais Meta
-          </button>
-        </div>
-      )}
-
       {activeTab === "messages" || !canViewMetaCredentials ? (
-        <WhatsappAutoReplyPanel canManage={canManage} onError={onError} onSuccess={onSuccess} />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <WhatsappAutoReplyPanel
+            canManage={canManage}
+            companyId={companyId}
+            onError={onError}
+            onSuccess={onSuccess}
+            onToolbarChange={onFlowToolbarChange}
+          />
+        </div>
       ) : (
-        <>
-          <div className="mb-4 flex items-start gap-2">
-            <BookOpen size={16} className="mt-0.5 shrink-0 text-blue-600" />
-            <p className="max-w-2xl text-xs leading-relaxed text-slate-500">
-              Cole no <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>, reinicie o
-              servidor e configure o webhook. Aprovação do app sozinha não mostra mensagens — o
-              Portal Meta precisa receber o webhook.
-            </p>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <section className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <ShieldCheck size={16} className="text-emerald-600" />
-                <h3 className="text-sm font-semibold text-slate-900">Status no Portal Meta</h3>
+        <div className="grid min-h-0 flex-1 gap-2 overflow-hidden lg:grid-cols-2">
+          <section className="min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-3">
+            <div className="mb-2 flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-emerald-600" />
+              <h3 className="text-xs font-semibold text-slate-900">Status</h3>
+            </div>
+            <dl className="space-y-1 text-xs">
+              <StatusRow label="Habilitado" value={status?.enabled ? "Sim" : "Não"} ok={!!status?.enabled} />
+              <StatusRow
+                label="Configurado"
+                value={status?.configured ? "Pronto" : "Incompleto"}
+                ok={!!status?.configured}
+              />
+              <StatusRow label="Phone Number ID" value={status?.phoneNumberId || "—"} />
+              <StatusRow label="WABA ID" value={status?.businessAccountId || "—"} />
+              <StatusRow
+                label="Token"
+                value={status?.accessTokenPreview || "Ausente"}
+                ok={!!status?.hasAccessToken}
+              />
+              <StatusRow
+                label="App Secret"
+                value={status?.hasAppSecret ? "Configurado" : "Não definido"}
+                ok={!!status?.hasAppSecret}
+              />
+            </dl>
+            <div className="mt-3 space-y-2 border-t border-slate-100 pt-2">
+              <div className="flex items-center gap-1.5">
+                <Link2 size={14} className="text-blue-600" />
+                <h3 className="text-xs font-semibold text-slate-900">Webhook</h3>
               </div>
-              <dl className="space-y-2 text-sm">
-                <StatusRow label="Habilitado" value={status?.enabled ? "Sim" : "Não"} ok={!!status?.enabled} />
-                <StatusRow
-                  label="Configurado"
-                  value={status?.configured ? "Pronto" : "Incompleto"}
-                  ok={!!status?.configured}
-                />
-                <StatusRow label="Phone Number ID" value={status?.phoneNumberId || "—"} />
-                <StatusRow label="WABA ID" value={status?.businessAccountId || "—"} />
-                <StatusRow
-                  label="Token"
-                  value={status?.accessTokenPreview || "Ausente"}
-                  ok={!!status?.hasAccessToken}
-                />
-                <StatusRow
-                  label="App Secret"
-                  value={status?.hasAppSecret ? "Configurado" : "Não definido"}
-                  ok={!!status?.hasAppSecret}
-                />
-              </dl>
-            </section>
-
-            <section className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Link2 size={16} className="text-blue-600" />
-                <h3 className="text-sm font-semibold text-slate-900">Webhook (Meta)</h3>
-              </div>
-              <p className="mb-3 text-xs text-slate-500">
-                Meta for Developers → seu app →{" "}
-                <span className="font-medium text-slate-700">WhatsApp → Configuração</span> → Webhooks
-                → depois assine o campo <span className="font-medium">messages</span>.
-              </p>
               <CopyField
                 label="URL de callback"
                 value={status?.callbackUrl || "https://seu-dominio.com.br/api/whatsapp/webhook"}
@@ -810,44 +937,82 @@ function SetupPanel({
                 fieldKey="verify"
                 copiedField={copiedField}
                 onCopy={onCopy}
-                className="mt-3"
               />
               <a
                 href="https://developers.facebook.com/apps/"
                 target="_blank"
                 rel="noreferrer"
-                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline"
               >
-                Abrir Meta for Developers
-                <ExternalLink size={12} />
+                Meta for Developers
+                <ExternalLink size={11} />
               </a>
-            </section>
-          </div>
-
-          <section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <div className="border-b border-slate-100 px-4 py-2.5">
-              <h3 className="text-sm font-semibold text-slate-900">Variáveis do .env (só credenciais)</h3>
             </div>
-            <ul className="divide-y divide-slate-100">
+          </section>
+
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="shrink-0 border-b border-slate-100 px-3 py-2">
+              <h3 className="text-xs font-semibold text-slate-900">.env (credenciais)</h3>
+              <p className="mt-0.5 text-[10px] text-slate-500">
+                Cole no <code className="rounded bg-slate-50 px-1">.env</code> e reinicie o servidor.
+              </p>
+            </div>
+            <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-hidden">
               {META_CREDENTIALS.map((item) => (
                 <li
                   key={item.env}
-                  className="grid gap-1 px-4 py-3 sm:grid-cols-[minmax(0,240px)_1fr] sm:gap-4"
+                  className="grid gap-0.5 px-3 py-1.5 sm:grid-cols-[minmax(0,200px)_1fr] sm:gap-3"
                 >
-                  <div>
-                    <code className="text-xs font-semibold text-emerald-800">{item.env}</code>
-                    {"value" in item && item.value ? (
-                      <p className="mt-0.5 text-[11px] text-slate-400">ex.: {item.value}</p>
-                    ) : null}
-                  </div>
-                  <p className="text-xs leading-relaxed text-slate-600">{item.where}</p>
+                  <code className="text-[10px] font-semibold text-emerald-800">{item.env}</code>
+                  <p className="line-clamp-2 text-[10px] leading-snug text-slate-600">{item.where}</p>
                 </li>
               ))}
             </ul>
           </section>
-        </>
+        </div>
       )}
     </div>
+  );
+}
+
+function FolderChip({
+  active,
+  icon,
+  label,
+  badge,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  badge?: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+        active ? "bg-emerald-50 text-emerald-900" : "text-slate-600 hover:bg-slate-50",
+      )}
+    >
+      <span className={cn("shrink-0", active ? "text-emerald-600" : "text-slate-400")}>{icon}</span>
+      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+      {badge ? (
+        <span
+          className={cn(
+            "shrink-0 rounded px-1 py-0.5 text-[9px] font-bold tracking-wide",
+            active ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600",
+          )}
+        >
+          {badge}
+        </span>
+      ) : null}
+      <span className="shrink-0 text-[10px] tabular-nums text-slate-400">{count}</span>
+    </button>
   );
 }
 
@@ -861,11 +1026,11 @@ function StatusRow({
   ok?: boolean;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex items-center justify-between gap-2">
       <dt className="text-slate-500">{label}</dt>
       <dd
         className={cn(
-          "text-right font-medium",
+          "truncate text-right font-medium",
           ok === true && "text-emerald-700",
           ok === false && "text-amber-700",
           ok === undefined && "text-slate-900",
@@ -895,20 +1060,20 @@ function CopyField({
   const copied = copiedField === fieldKey;
   return (
     <div className={className}>
-      <label className="mb-1 block text-xs font-semibold text-slate-700">{label}</label>
-      <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-800">
+      <label className="mb-0.5 block text-[10px] font-semibold text-slate-700">{label}</label>
+      <div className="flex items-center gap-1.5">
+        <code className="min-w-0 flex-1 truncate rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-800">
           {value}
         </code>
         <Button
           type="button"
           variant="outline"
           size="sm"
+          className="h-7 px-2 text-[10px]"
           onClick={() => onCopy(fieldKey, value)}
           disabled={!value || value === "—"}
         >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? "Copiado" : "Copiar"}
+          {copied ? <Check size={12} /> : <Copy size={12} />}
         </Button>
       </div>
     </div>
