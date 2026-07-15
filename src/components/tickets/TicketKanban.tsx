@@ -24,7 +24,6 @@ interface TicketKanbanProps {
   onSelectTicket: (id: number) => void;
   currentUser: User;
   onStatusChange: () => void;
-  devCompanyId?: string;
   statusOptions?: { value: TicketStatus; label: string; special?: TicketStatusSpecial | string | null }[];
   onTicketContextMenu?: (event: React.MouseEvent, ticket: Ticket) => void;
 }
@@ -90,7 +89,6 @@ export const TicketKanban = ({
   onSelectTicket,
   currentUser,
   onStatusChange,
-  devCompanyId,
   statusOptions = [],
   onTicketContextMenu
 }: TicketKanbanProps) => {
@@ -134,18 +132,9 @@ export const TicketKanban = ({
 
   useEffect(() => {
     const fetchTeam = async () => {
-      if (currentUser.desenvolvedor && !devCompanyId) {
-        setTeam([]);
-        setLoadingTeam(false);
-        return;
-      }
-
       try {
         setLoadingTeam(true);
-        const endpoint = currentUser.desenvolvedor && devCompanyId
-          ? `/users/team?empresa_id=${devCompanyId}`
-          : '/users/team';
-        const data = await api.get<TeamMember[]>(endpoint);
+        const data = await api.get<TeamMember[]>('/users/team');
         setTeam(data);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro ao carregar atendentes.';
@@ -156,16 +145,10 @@ export const TicketKanban = ({
     };
 
     fetchTeam();
-  }, [currentUser.desenvolvedor, devCompanyId]);
+  }, []);
 
   useEffect(() => {
-    const socketEmpresaId = currentUser.desenvolvedor
-      ? Number(devCompanyId)
-      : Number(currentUser.empresa_id);
-
-    if (!Number.isInteger(socketEmpresaId) || socketEmpresaId <= 0) return;
-
-    const socket = getSocket(socketEmpresaId);
+    const socket = getSocket();
 
     const handleTicketUpdated = (updatedTicket: Ticket) => {
       setLocalData(currentData => {
@@ -226,7 +209,7 @@ export const TicketKanban = ({
       socket.off('ticketUpdated', handleTicketUpdated);
       socket.off('ticketCreated', handleTicketCreated);
     };
-  }, [currentUser.desenvolvedor, currentUser.empresa_id, devCompanyId]);
+  }, []);
 
   const rows: RowUser[] = useMemo(() => {
     const allTickets = getAllTickets(localData.columns);

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building, Loader2 } from 'lucide-react';
-import { User, Empresa as Company } from '../../types';
+import { User } from '../../types';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -20,12 +19,7 @@ export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: C
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loadingCompanies, setLoadingCompanies] = useState(false);
-  const [empresaId, setEmpresaId] = useState<string>('');
-  const targetCompanyId = currentUser.desenvolvedor ? empresaId : String(currentUser.empresa_id);
-  
-  const { activeCategories, activeServices, loading: optionsLoading } = useTicketOptions(targetCompanyId || undefined);
+  const { activeCategories, activeServices, loading: optionsLoading } = useTicketOptions();
 
   // Fallbacks
   const defaultCategories = [
@@ -60,36 +54,12 @@ export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: C
     if (serviceOptions.length > 0 && !servico) setServico(serviceOptions[0].value);
   }, [categoryOptions, serviceOptions, categoria, servico]);
 
-  useEffect(() => {
-    if (isOpen && !!currentUser.desenvolvedor && !currentUser.empresa_id) {
-      fetchCompanies();
-    }
-  }, [isOpen, currentUser]);
-
-  const fetchCompanies = async () => {
-    setLoadingCompanies(true);
-    try {
-      const data = await api.get<Company[]>('/companies');
-      setCompanies(data);
-    } catch (err) {
-      console.error('Erro ao buscar empresas:', err);
-    } finally {
-      setLoadingCompanies(false);
-    }
-  };
-
   const handleCreateTicket = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoadingCreate(true);
     setCreateError(null);
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
-
-    if (!!currentUser.desenvolvedor && !currentUser.empresa_id && !data.empresa_id) {
-       setCreateError('Selecione uma empresa para abrir o chamado.');
-       setLoadingCreate(false);
-       return;
-    }
 
     try {
       if (data.titulo && String(data.titulo).length < 3) throw new Error("O título precisa ter no mínimo 3 caracteres");
@@ -129,31 +99,6 @@ export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: C
             className="h-9 text-sm"
           />
         </div>
-
-         {!!currentUser.desenvolvedor && !currentUser.empresa_id && (
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-700">Empresa Solicitante</label>
-            <div className="relative">
-              <Building className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 z-10" size={14} />
-              <Select 
-                name="empresa_id"
-                value={empresaId}
-                onChange={setEmpresaId}
-                placeholder="Selecione uma empresa..."
-                buttonClassName="pl-8 h-9 text-sm"
-                options={companies.map(emp => ({
-                  value: String(emp.id),
-                  label: emp.nome
-                }))}
-              />
-              {loadingCompanies && (
-                <div className="absolute right-8 top-1/2 -translate-y-1/2 z-10">
-                  <Loader2 size={14} className="animate-spin text-blue-600" />
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         <div className="grid md:grid-cols-2 gap-3">
           <div className="space-y-1">

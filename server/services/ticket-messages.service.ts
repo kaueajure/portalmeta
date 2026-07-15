@@ -386,8 +386,8 @@ class TicketMessagesService {
         );
         
         if (updatedRows[0]) {
-          io.to(`empresa_${ticket.empresa_id}`).emit('ticketUpdated', updatedRows[0]);
-          io.to(`empresa_${ticket.empresa_id}`).emit('ticketMessagesChanged', { 
+          io.to('instance').emit('ticketUpdated', updatedRows[0]);
+          io.to('instance').emit('ticketMessagesChanged', { 
             ticketId: ticket_id, 
             empresaId: ticket.empresa_id, 
             messageId 

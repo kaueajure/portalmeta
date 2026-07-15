@@ -680,7 +680,7 @@ router.post('/', requirePermission('tickets.criar'), async (req: AuthRequest, re
       const fullTicket = await ticketsService.getByIdForUser(ticketId, currentUser);
       const io = req.app.get('io');
       if (io && fullTicket) {
-        io.to(`empresa_${targetEmpresaId}`).emit('ticketCreated', fullTicket);
+        io.to('instance').emit('ticketCreated', fullTicket);
       }
     } catch(e) {}
 
@@ -724,7 +724,7 @@ router.patch('/:id/status', async (req: AuthRequest, res) => {
          const fullTicket = await ticketsService.getByIdForUser(id, currentUser);
          const io = req.app.get('io');
          if (io && fullTicket) {
-           io.to(`empresa_${updateResult.empresa_id}`).emit('ticketUpdated', fullTicket);
+           io.to('instance').emit('ticketUpdated', fullTicket);
          }
        } catch(e) {}
     }
@@ -922,7 +922,7 @@ router.patch('/:id', async (req: AuthRequest, res) => {
       const fullTicket = await ticketsService.getByIdForUser(id, currentUser);
       const io = req.app.get('io');
       if (io && fullTicket) {
-        io.to(`empresa_${ticket.empresa_id}`).emit('ticketUpdated', fullTicket);
+        io.to('instance').emit('ticketUpdated', fullTicket);
       }
     } catch(e) {}
     
@@ -1216,7 +1216,7 @@ router.post('/:id/attachments', ticketUpload.array('files', 5), async (req: Auth
     // Real-time update via WebSocket
     const io = req.app.get('io');
     if (io) {
-      io.to(`empresa_${ticket.empresa_id}`).emit('ticketMessagesChanged', {
+      io.to('instance').emit('ticketMessagesChanged', {
         ticketId: id,
         empresaId: ticket.empresa_id
       });
@@ -1258,7 +1258,7 @@ router.delete('/:id', requirePermission('tickets.excluir'), async (req: AuthRequ
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`empresa_${ticketResult.empresa_id}`).emit('ticketDeleted', {
+      io.to('instance').emit('ticketDeleted', {
         ticketId: id,
         empresaId: ticketResult.empresa_id
       });

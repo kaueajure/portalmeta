@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../../lib/api";
-import { User, Empresa } from "../../types";
+import { User } from "../../types";
 import {
   Users as UsersIcon,
   Plus,
   Search,
   Shield,
-  Building2,
   CheckCircle2,
   XCircle,
   Edit2,
@@ -31,7 +30,6 @@ type UserPayload = {
   password?: string;
   cargo: string;
   telefone: string;
-  empresa_id: number | null;
   administrador: boolean;
   desenvolvedor: boolean;
   perfil?: string;
@@ -46,14 +44,12 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
   const [activeTab, setActiveTab] = useState<"users" | "profiles">("users");
   const [users, setUsers] = useState<User[]>([]);
   const [accessProfiles, setAccessProfiles] = useState<AccessProfile[]>([]);
-  const [companies, setCompanies] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isStatusConfirmOpen, setIsStatusConfirmOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [empresaId, setEmpresaId] = useState<string>("");
   const [roleSelection, setRoleSelection] = useState<string>("profile:default");
   const [loadingSave, setLoadingSave] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -89,14 +85,8 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
       if (searchTerm) query.append("search", searchTerm);
       if (statusFilter !== "todos") query.append("status", statusFilter);
 
-      const [usersData, companiesData] = await Promise.all([
-        api.get<User[]>(`/users?${query.toString()}`),
-        currentUser.desenvolvedor
-          ? api.get<Empresa[]>("/companies?status=ativo")
-          : Promise.resolve([]),
-      ]);
+      const usersData = await api.get<User[]>(`/users?${query.toString()}`);
       setUsers(usersData);
-      setCompanies(companiesData);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Erro ao carregar usuários.";
@@ -164,9 +154,6 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
         email: String(formData.get("email") || ""),
         cargo: String(formData.get("cargo") || ""),
         telefone: String(formData.get("telefone") || ""),
-        empresa_id: formData.get("empresa_id")
-          ? Number(formData.get("empresa_id"))
-          : null,
         ...rolePayload,
       };
 
@@ -392,9 +379,6 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
                     Usuário
                   </th>
                   <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-left">
-                    Empresa
-                  </th>
-                  <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-left">
                     Status / Cargo
                   </th>
                   <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-right">
@@ -407,10 +391,7 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
                   const isDev = !!user.desenvolvedor;
                   const canManage =
                     !!currentUser.desenvolvedor ||
-                    (!!currentUser.administrador &&
-                      !isDev &&
-                      !!currentUser.empresa_id &&
-                      user.empresa_id === currentUser.empresa_id);
+                    (!!currentUser.administrador && !isDev);
 
                   return (
                     <tr
@@ -437,14 +418,6 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
                               {user.email || "Email não informado"}
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 size={12} className="text-slate-400" />
-                          <span className="text-xs font-medium text-slate-600 truncate max-w-[180px]">
-                            {user.empresa_nome || "MetaBit"}
-                          </span>
                         </div>
                       </td>
                       <td className="px-3 py-2.5">
@@ -652,10 +625,10 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
               buttonClassName="h-8 text-xs font-medium"
               options={[
                 ...(currentUser.desenvolvedor
-                  ? [{ value: "desenvolvedor", label: "Desenvolvedor (SaaS)" }]
+                  ? [{ value: "desenvolvedor", label: "Desenvolvedor master" }]
                   : []),
                 ...(currentUser.administrador || currentUser.desenvolvedor
-                  ? [{ value: "administrador", label: "Administrador da Empresa" }]
+                  ? [{ value: "administrador", label: "Administrador" }]
                   : []),
                 ...accessProfiles.map((profile) => ({
                   value: `profile:${profile.id}`,
@@ -668,44 +641,6 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
               selecionado.
             </p>
           </div>
-
-          {!!currentUser.desenvolvedor ? (
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-700">
-                Empresa
-              </label>
-              <Select
-                name="empresa_id"
-                value={
-                  selectedUser?.empresa_id
-                    ? String(selectedUser.empresa_id)
-                    : empresaId
-                }
-                onChange={setEmpresaId}
-                disabled={!!selectedUser}
-                placeholder="MetaBit"
-                buttonClassName="h-8 text-xs font-medium"
-                options={[
-                  { value: "", label: "MetaBit" },
-                  ...companies.map((c) => ({
-                    value: String(c.id),
-                    label: c.nome,
-                  })),
-                ]}
-              />
-            </div>
-          ) : (
-            !!currentUser.empresa_id && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-700">
-                  Empresa
-                </label>
-                <div className="h-8 bg-slate-50 border border-slate-200 rounded-md px-3 flex items-center text-xs font-medium text-slate-500 select-none">
-                  {currentUser.empresa_nome || "Sua Empresa"}
-                </div>
-              </div>
-            )
-          )}
 
           {!selectedUser && (
             <div className="space-y-1">

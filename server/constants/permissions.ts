@@ -125,26 +125,14 @@ export const PERMISSIONS_CATALOG: PermissionCatalogItem[] = [
   { key: 'usuarios.excluir', modulo: 'Usuários', grupo: 'Perigosos', nome: 'Excluir usuário', descricao: 'Apagar o perfil e credenciais administrativas.', nivel_risk: 'critico', order: 1260 },
   { key: 'usuarios.resetar_senha', modulo: 'Usuários', grupo: 'Correção', nome: 'Resetar senha de usuário', descricao: 'Gerar link ou substituir credenciais básicas em caso de esquecimento.', nivel_risk: 'alto', order: 1270 },
   { key: 'usuarios.alterar_perfil', modulo: 'Usuários', grupo: 'Sensíveis', nome: 'Alterar perfil (Role)', descricao: 'Atribuir nova função (Ex: Atendente para Gestor).', nivel_risk: 'critico', order: 1280 },
-  { key: 'usuarios.alterar_empresa', modulo: 'Usuários', grupo: 'Sensíveis', nome: 'Alterar empresa vinculada', descricao: 'Trocar o escopo multitenant de um atendente ou cliente.', nivel_risk: 'alto', order: 1290 },
   { key: 'usuarios.gerenciar_permissoes', modulo: 'Usuários', grupo: 'Supervisores', nome: 'Gerenciar permissões de usuários', descricao: 'Atribuir privilégios manuais, allowance e denial de privilégios aos membros da empresa.', nivel_risk: 'critico', order: 1300 },
   { key: 'usuarios.ver_permissoes', modulo: 'Usuários', grupo: 'Visualização', nome: 'Ver permissões efetivas de usuários', descricao: 'Investigar matriz resolvida de acessos por colaborador.', nivel_risk: 'medio', order: 1310 },
   { key: 'usuarios.gerenciar', modulo: 'Usuários', grupo: 'Geral', nome: 'Gestão completa de usuários', descricao: 'Poder administrativo absoluto sobre todos operadores.', nivel_risk: 'critico', order: 1320 },
 
-  // EMPRESAS
-  { key: 'empresas.visualizar', modulo: 'Empresas', grupo: 'Acesso', nome: 'Ver empresas', descricao: 'Listar empresas clientes cadastradas.', nivel_risk: 'baixo', order: 1400 },
-  { key: 'empresas.ver_detalhes', modulo: 'Empresas', grupo: 'Visualização', nome: 'Ver detalhes da empresa', descricao: 'Ficha técnica com CNPJ, contatos corporativos e notas.', nivel_risk: 'baixo', order: 1410 },
-  { key: 'empresas.criar', modulo: 'Empresas', grupo: 'Modificações', nome: 'Criar empresa', descricao: 'Cadastrar nova corporação no banco para vincular clientes.', nivel_risk: 'medio', order: 1420 },
-  { key: 'empresas.editar', modulo: 'Empresas', grupo: 'Modificações', nome: 'Editar empresa', descricao: 'Editar dados corporativos e contratos.', nivel_risk: 'baixo', order: 1430 },
-  { key: 'empresas.desativar', modulo: 'Empresas', grupo: 'Ações', nome: 'Desativar empresa', descricao: 'Bloquear login de todos os clientes pertencentes a esta empresa cliente.', nivel_risk: 'medio', order: 1440 },
-  { key: 'empresas.excluir', modulo: 'Empresas', grupo: 'Perigosos', nome: 'Excluir empresa', descricao: 'Apagar corporações inteiras de forma irreversível.', nivel_risk: 'critico', order: 1450 },
-  { key: 'empresas.gerenciar_email_canais', modulo: 'Empresas', grupo: 'Operação', nome: 'Gerenciar canais de e-mail da empresa', descricao: 'Configurar alias de e-mails para entrada de chamados.', nivel_risk: 'alto', order: 1460 },
-  { key: 'empresas.gerenciar_configuracoes', modulo: 'Empresas', grupo: 'Operação', nome: 'Gerenciar configurações de empresa', descricao: 'Habilitar canais, customizações de logo próprias para B2B.', nivel_risk: 'medio', order: 1470 },
-  { key: 'empresas.gerenciar', modulo: 'Empresas', grupo: 'Geral', nome: 'Gestão completa das empresas', descricao: 'Supervisão administrativa integral sobre os clientes jurídicos.', nivel_risk: 'alto', order: 1480 },
-
   // CONFIGURAÇÕES
   { key: 'configuracoes.visualizar', modulo: 'Configurações', grupo: 'Acesso', nome: 'Acessar configurações', descricao: 'Ver painéis básicos parametrizáveis.', nivel_risk: 'baixo', order: 1500 },
   { key: 'configuracoes.preferencias', modulo: 'Configurações', grupo: 'Preferências', nome: 'Ver e editar preferências gerais', descricao: 'Parametrizar configurações menores.', nivel_risk: 'baixo', order: 1515 },
-  { key: 'configuracoes.empresa', modulo: 'Configurações', grupo: 'Preferências', nome: 'Configurar dados da empresa sede', descricao: 'Atualizar contatos padrões e políticas globais.', nivel_risk: 'medio', order: 1520 },
+  { key: 'configuracoes.identidade', modulo: 'Configurações', grupo: 'Preferências', nome: 'Configurar identidade institucional', descricao: 'Atualizar contatos, identidade visual e assinatura institucional.', nivel_risk: 'medio', order: 1520 },
   { key: 'configuracoes.atendimento', modulo: 'Configurações', grupo: 'Preferências', nome: 'Configurar central de chamados', descricao: 'Mudar status válidos, tipos de chamado padrão e campos obrigatórios.', nivel_risk: 'alto', order: 1530 },
   { key: 'configuracoes.sistema', modulo: 'Configurações', grupo: 'Segurança', nome: 'Ver configurações de sistema', descricao: 'Sincronizações críticas do Portal Meta.', nivel_risk: 'alto', order: 1540 },
   { key: 'configuracoes.gerenciar', modulo: 'Configurações', grupo: 'Geral', nome: 'Gestão completa de configurações', descricao: 'Controle mestre de todas as telas administrativas.', nivel_risk: 'critico', order: 1550 },

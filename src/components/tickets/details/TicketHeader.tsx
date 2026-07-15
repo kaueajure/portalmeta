@@ -9,7 +9,6 @@ import {
   Mail,
   UserRound,
   CalendarDays,
-  Building2
 } from 'lucide-react';
 import { Ticket, TicketOption, TicketStatus, User } from '../../../types';
 import { cn, getSlaInfo } from '../../../lib/utils';
@@ -52,7 +51,6 @@ export const TicketHeader = ({
     prioridade, 
     origem, 
     cliente_nome,
-    empresa_nome,
     responsavel_nome,
     prazo_sla,
     sla_status_operacional,
@@ -233,11 +231,6 @@ export const TicketHeader = ({
             label="Abertura"
             value={openedAt}
             icon={<CalendarDays size={14} />}
-          />
-          <HeaderMeta
-            label="Empresa"
-            value={empresa_nome || 'Não informada'}
-            icon={<Building2 size={14} />}
           />
         </div>
       </div>

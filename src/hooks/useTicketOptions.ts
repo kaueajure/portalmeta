@@ -19,29 +19,17 @@ const normalizeTicketOptions = (items: TicketOption[]) =>
   }));
 
 interface TicketOptionsResponse {
-  empresa_id: number | null;
   categories: TicketOption[];
   services: TicketOption[];
 }
 
-interface UseTicketOptionsConfig {
-  scope?: 'company' | 'current-user';
-}
-
-export function useTicketOptions(companyId?: string | number, config: UseTicketOptionsConfig = {}) {
+export function useTicketOptions() {
   const [categories, setCategories] = useState<TicketOption[]>([]);
   const [services, setServices] = useState<TicketOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!companyId && config.scope !== 'current-user') {
-      setLoading(false);
-      setCategories([]);
-      setServices([]);
-      return;
-    }
-
     let isMounted = true;
 
     async function fetchOptions() {
@@ -49,21 +37,10 @@ export function useTicketOptions(companyId?: string | number, config: UseTicketO
         setLoading(true);
         setError(null);
 
-        if (config.scope === 'current-user') {
-          const params = companyId ? `?empresa_id=${encodeURIComponent(String(companyId))}` : '';
-          const response = await api.get<TicketOptionsResponse>(`/tickets/options${params}`);
-          if (!isMounted) return;
-          setCategories(normalizeTicketOptions(response.categories));
-          setServices(normalizeTicketOptions(response.services));
-        } else {
-          const [catRes, servRes] = await Promise.all([
-            api.get(`/companies/${companyId}/ticket-categories`),
-            api.get(`/companies/${companyId}/ticket-services`)
-          ]);
-          if (!isMounted) return;
-          setCategories(normalizeTicketOptions(catRes as unknown as TicketOption[]));
-          setServices(normalizeTicketOptions(servRes as unknown as TicketOption[]));
-        }
+        const response = await api.get<TicketOptionsResponse>('/tickets/options');
+        if (!isMounted) return;
+        setCategories(normalizeTicketOptions(response.categories));
+        setServices(normalizeTicketOptions(response.services));
       } catch (err: any) {
         if (isMounted) {
           setError(err.message || 'Erro ao carregar opcoes do ticket');
@@ -78,7 +55,7 @@ export function useTicketOptions(companyId?: string | number, config: UseTicketO
     fetchOptions();
 
     return () => { isMounted = false; };
-  }, [companyId, config.scope]);
+  }, []);
 
   const activeCategories = categories.filter(isActiveOption);
   const activeServices = services.filter(isActiveOption);

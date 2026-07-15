@@ -209,16 +209,13 @@ export default function App() {
     try {
       const profile = await api.get<{
         email: string;
-        empresa_id: number;
         nome?: string;
-        empresa_nome?: string;
       }>("/portal/me");
 
       const portalUser: User = {
         id: 0,
         nome: profile.nome || profile.email,
         email: profile.email,
-        empresa_id: profile.empresa_id,
         perfil: "cliente",
         administrador: false,
         desenvolvedor: false,
@@ -493,9 +490,7 @@ export default function App() {
     token?: string;
     customer: {
       email: string;
-      empresa_id: number;
       nome?: string;
-      empresa_nome?: string;
     };
   }) => {
     localStorage.removeItem("portal_token");
@@ -504,7 +499,6 @@ export default function App() {
       id: 0,
       nome: data.customer.nome || data.customer.email,
       email: data.customer.email,
-      empresa_id: data.customer.empresa_id,
       perfil: "cliente",
       administrador: false,
       desenvolvedor: false,

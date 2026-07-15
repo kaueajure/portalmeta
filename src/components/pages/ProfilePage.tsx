@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   AlertCircle,
-  Building2,
   CheckCircle2,
   ChevronRight,
   Eye,
@@ -280,35 +279,6 @@ export const ProfilePage = ({
             </div>
           </Card>
 
-          <Card className="border-slate-200 bg-white p-4 text-slate-800 shadow-sm">
-            <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold text-slate-700">
-              <Building2 size={14} className="text-blue-500" /> Empresa
-            </h4>
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-blue-600">
-                <Building2 size={16} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold leading-tight">
-                  {currentUser.empresa_nome || "MetaBit"}
-                </div>
-                <div className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                  <span className="block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  Conectado
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-medium uppercase text-slate-500">
-                  ID membro
-                </span>
-                <div className="font-mono text-xs font-medium text-slate-700">
-                  #{currentUser.id?.toString().padStart(4, "0")}
-                </div>
-              </div>
-            </div>
-          </Card>
         </div>
 
         <div className="space-y-4 lg:col-span-9">

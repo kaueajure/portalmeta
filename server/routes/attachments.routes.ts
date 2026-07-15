@@ -107,7 +107,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`empresa_${attachment.empresa_id}`).emit('ticketMessagesChanged', {
+      io.to('instance').emit('ticketMessagesChanged', {
         ticketId: attachment.ticket_id,
         empresaId: attachment.empresa_id
       });

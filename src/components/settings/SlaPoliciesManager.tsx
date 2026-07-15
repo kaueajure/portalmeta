@@ -6,7 +6,7 @@ import { Plus, Trash2, Edit2, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useTicketOptions } from '../../hooks/useTicketOptions';
 
-export const SlaPoliciesManager = ({ currentCompanyId }: { currentCompanyId: number }) => {
+export const SlaPoliciesManager = () => {
   const [policies, setPolicies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -18,22 +18,20 @@ export const SlaPoliciesManager = ({ currentCompanyId }: { currentCompanyId: num
   const [servico, setServico] = useState('');
   const [tempoResolucao, setTempoResolucao] = useState('');
 
-  const { categories, services } = useTicketOptions(currentCompanyId);
+  const { categories, services } = useTicketOptions();
 
   const loadData = () => {
-    if (currentCompanyId) {
       setLoading(true);
-      api.get(`/companies/${currentCompanyId}/sla-policies`).then(res => {
+      api.get('/ticket-settings/sla-policies').then(res => {
          setPolicies((res as any).data || res);
       }).catch(err => {
          console.error('Error loading SLAs', err);
       }).finally(() => setLoading(false));
-    }
   };
 
   useEffect(() => {
     loadData();
-  }, [currentCompanyId]);
+  }, []);
 
   const handleOpenModal = (policy?: any) => {
     if (policy) {
@@ -66,9 +64,9 @@ export const SlaPoliciesManager = ({ currentCompanyId }: { currentCompanyId: num
       };
 
       if (editingPolicy) {
-        await api.patch(`/companies/${currentCompanyId}/sla-policies/${editingPolicy.id}`, payload);
+        await api.patch(`/ticket-settings/sla-policies/${editingPolicy.id}`, payload);
       } else {
-        await api.post(`/companies/${currentCompanyId}/sla-policies`, payload);
+        await api.post('/ticket-settings/sla-policies', payload);
       }
       setIsModalOpen(false);
       loadData();
@@ -80,7 +78,7 @@ export const SlaPoliciesManager = ({ currentCompanyId }: { currentCompanyId: num
   const handleDelete = async (id: number) => {
     if (!window.confirm('Excluir esta política?')) return;
     try {
-      await api.delete(`/companies/${currentCompanyId}/sla-policies/${id}`);
+      await api.delete(`/ticket-settings/sla-policies/${id}`);
       loadData();
     } catch (err) {
       console.error(err);
@@ -190,4 +188,3 @@ export const SlaPoliciesManager = ({ currentCompanyId }: { currentCompanyId: num
     </Card>
   );
 };
-

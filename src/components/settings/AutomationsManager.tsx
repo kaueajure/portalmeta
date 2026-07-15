@@ -69,7 +69,7 @@ const ACAO_TIPOS = [
   { value: 'fechar_com_motivo', label: 'Fechar Chamado com Motivo' },
 ];
 
-export const AutomationsManager = ({ currentCompanyId }: { currentCompanyId: number }) => {
+export const AutomationsManager = () => {
   const [automations, setAutomations] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
   const [statusOptions, setStatusOptions] = useState<{ value: string; label: string }[]>(DEFAULT_STATUS_OPTIONS);
@@ -88,12 +88,11 @@ export const AutomationsManager = ({ currentCompanyId }: { currentCompanyId: num
   const [error, setError] = useState<string | null>(null);
 
   const loadData = () => {
-    if (currentCompanyId) {
       setLoading(true);
       Promise.all([
-        api.get(`/automations/company/${currentCompanyId}`),
-        api.get(`/usuarios/empresa/${currentCompanyId}`),
-        api.get<any[]>(`/companies/${currentCompanyId}/ticket-statuses`).catch(() => [])
+        api.get('/automations'),
+        api.get('/users?status=ativo'),
+        api.get<any[]>('/ticket-settings/statuses').catch(() => [])
       ]).then(([autoRes, userRes, statusRows]) => {
          setAutomations((autoRes as any).data || autoRes);
          const allUsers = (userRes as any).data || userRes;
@@ -105,12 +104,11 @@ export const AutomationsManager = ({ currentCompanyId }: { currentCompanyId: num
       }).catch(err => {
          console.error('Error fetching data', err);
       }).finally(() => setLoading(false));
-    }
   };
 
   useEffect(() => {
     loadData();
-  }, [currentCompanyId]);
+  }, []);
 
   const handleOpenModal = (item?: any) => {
     setError(null);
@@ -160,7 +158,7 @@ export const AutomationsManager = ({ currentCompanyId }: { currentCompanyId: num
       if (editingItem) {
         await api.patch(`/automations/${editingItem.id}`, payload);
       } else {
-        await api.post(`/automations/company/${currentCompanyId}`, payload);
+        await api.post('/automations', payload);
       }
       setIsModalOpen(false);
       loadData();
@@ -545,4 +543,3 @@ export const AutomationsManager = ({ currentCompanyId }: { currentCompanyId: num
     </Card>
   );
 };
-

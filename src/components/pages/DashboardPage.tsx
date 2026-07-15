@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   BarChart3,
-  Building,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
@@ -13,7 +12,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { api } from "../../lib/api";
-import { DashboardData, Empresa, Ticket, User } from "../../types";
+import { DashboardData, Ticket, User } from "../../types";
 import { PageShell } from "../layout/PageShell";
 import { MetricCard } from "../ui/MetricCard";
 import { Card, CardHeader } from "../ui/Card";
@@ -38,7 +37,6 @@ interface DashboardPageProps {
       | "dashboard"
       | "tickets"
       | "users"
-      | "companies"
       | "logs"
       | "profile"
       | "settings",
@@ -191,12 +189,9 @@ export const DashboardPage = ({ currentUser, onNavigate }: DashboardPageProps) =
   const [period, setPeriod] = useState("month");
   const [dateFrom, setDateFrom] = useState(daysAgoInputValue(29));
   const [dateTo, setDateTo] = useState(todayInputValue());
-  const [companyId, setCompanyId] = useState("");
   const [responsavelId, setResponsavelId] = useState("");
-  const [companies, setCompanies] = useState<Empresa[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
 
-  const canFilterCompanies = currentUser.desenvolvedor;
   const canFilterResponsavel =
     currentUser.desenvolvedor ||
     currentUser.administrador ||
@@ -212,7 +207,6 @@ export const DashboardPage = ({ currentUser, onNavigate }: DashboardPageProps) =
           if (dateFrom) params.set("from", dateFrom);
           if (dateTo) params.set("to", dateTo);
         }
-        if (canFilterCompanies && companyId) params.set("empresa_id", companyId);
         if (canFilterResponsavel && responsavelId) params.set("responsavel_id", responsavelId);
 
         const data = await api.get<DashboardData>(`/dashboard/summary?${params.toString()}`);
@@ -228,25 +222,17 @@ export const DashboardPage = ({ currentUser, onNavigate }: DashboardPageProps) =
       }
     };
     fetchData();
-  }, [period, dateFrom, dateTo, companyId, responsavelId, canFilterCompanies, canFilterResponsavel]);
-
-  useEffect(() => {
-    if (!canFilterCompanies) return;
-    api.get<Empresa[]>("/companies").then(setCompanies).catch(() => setCompanies([]));
-  }, [canFilterCompanies]);
+  }, [period, dateFrom, dateTo, responsavelId, canFilterResponsavel]);
 
   useEffect(() => {
     if (!canFilterResponsavel) return;
     api
       .get<User[]>("/users?status=ativo")
       .then((users) => {
-        const filtered = companyId
-          ? users.filter((user) => Number(user.empresa_id) === Number(companyId))
-          : users;
-        setAgents(filtered.filter((user) => user.ativo));
+        setAgents(users.filter((user) => user.ativo));
       })
       .catch(() => setAgents([]));
-  }, [canFilterResponsavel, companyId]);
+  }, [canFilterResponsavel]);
 
   const recentTickets = stats?.recentTickets || [];
   const chamadosAtivos = stats?.chamadosAtivos || 0;
@@ -339,26 +325,6 @@ export const DashboardPage = ({ currentUser, onNavigate }: DashboardPageProps) =
                     aria-label="Data final do dashboard"
                   />
                 </>
-              )}
-
-              {canFilterCompanies && (
-                <Select
-                  size="sm"
-                  value={companyId}
-                  onChange={(value) => {
-                    setCompanyId(value);
-                    setResponsavelId("");
-                  }}
-                  placeholder="Todas empresas"
-                  options={[
-                    { value: "", label: "Todas empresas" },
-                    ...companies.map((company) => ({
-                      value: String(company.id),
-                      label: company.nome,
-                    })),
-                  ]}
-                  buttonClassName="h-9 bg-slate-50 border-slate-200"
-                />
               )}
 
               {canFilterResponsavel && (
@@ -493,7 +459,7 @@ export const DashboardPage = ({ currentUser, onNavigate }: DashboardPageProps) =
                   <h3 className="text-sm font-semibold text-slate-950">Escopo monitorado</h3>
                   <p className="text-xs font-medium text-slate-500">Escopo atual da conta.</p>
                 </div>
-                <Building size={18} className="text-slate-400" />
+                <UserIcon size={18} className="text-slate-400" />
               </div>
             </CardHeader>
             <div className="grid grid-cols-2 gap-3 p-4">
@@ -502,10 +468,8 @@ export const DashboardPage = ({ currentUser, onNavigate }: DashboardPageProps) =
                 <div className="mt-1 text-xl font-bold text-slate-950">{formatCount(stats?.totalUsuarios)}</div>
               </div>
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="text-xs font-semibold text-slate-500">Empresas</div>
-                <div className="mt-1 text-xl font-bold text-slate-950">
-                  {stats?.totalEmpresas !== undefined ? formatCount(stats.totalEmpresas) : "-"}
-                </div>
+                <div className="text-xs font-semibold text-slate-500">Chamados ativos</div>
+                <div className="mt-1 text-xl font-bold text-slate-950">{formatCount(chamadosAtivos)}</div>
               </div>
             </div>
           </Card>

@@ -302,8 +302,8 @@ class TicketMessagesService {
            LEFT JOIN usuarios r ON t.responsavel_id = r.id
            WHERE t.id = ? AND t.deleted_at IS NULL`, [ticket_id]);
                 if (updatedRows[0]) {
-                    io.to(`empresa_${ticket.empresa_id}`).emit('ticketUpdated', updatedRows[0]);
-                    io.to(`empresa_${ticket.empresa_id}`).emit('ticketMessagesChanged', {
+                    io.to('instance').emit('ticketUpdated', updatedRows[0]);
+                    io.to('instance').emit('ticketMessagesChanged', {
                         ticketId: ticket_id,
                         empresaId: ticket.empresa_id,
                         messageId

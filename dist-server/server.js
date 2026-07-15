@@ -41,11 +41,6 @@ function getSocketToken(socket) {
     }
     return getCookieValue(socket.handshake.headers?.cookie, 'token');
 }
-function getRequestedSocketCompanyId(socket) {
-    const rawEmpresaId = socket.handshake.auth?.empresa_id || socket.handshake.query?.empresa_id;
-    const empresaId = Number(Array.isArray(rawEmpresaId) ? rawEmpresaId[0] : rawEmpresaId);
-    return Number.isInteger(empresaId) && empresaId > 0 ? empresaId : null;
-}
 async function startServer() {
     const allowedOrigins = [
         'http://localhost:5173',
@@ -132,31 +127,25 @@ async function startServer() {
         io.use(async (socket, next) => {
             try {
                 const token = getSocketToken(socket);
-                const empresaId = getRequestedSocketCompanyId(socket);
-                if (!token || !empresaId) {
+                if (!token) {
                     return next(new Error('Unauthorized socket connection'));
                 }
                 const decoded = jwt.verify(token, env.JWT_SECRET);
                 if (!decoded?.id) {
                     return next(new Error('Unauthorized socket connection'));
                 }
-                const [rows] = await pool.query('SELECT id, empresa_id, administrador, desenvolvedor, ativo, perfil FROM usuarios WHERE id = ?', [decoded.id]);
+                const [rows] = await pool.query('SELECT id, administrador, desenvolvedor, ativo, perfil FROM usuarios WHERE id = ?', [decoded.id]);
                 const user = rows[0];
                 if (!user || Number(user.ativo) !== 1) {
                     return next(new Error('Unauthorized socket connection'));
                 }
                 const isDeveloper = Boolean(user.desenvolvedor) || user.perfil === 'desenvolvedor';
-                if (!isDeveloper && Number(user.empresa_id) !== empresaId) {
-                    return next(new Error('Forbidden socket room'));
-                }
                 socket.data.user = {
                     id: user.id,
-                    empresa_id: user.empresa_id,
                     administrador: Boolean(user.administrador),
                     desenvolvedor: isDeveloper,
                     perfil: user.perfil
                 };
-                socket.data.empresaId = empresaId;
                 next();
             }
             catch {
@@ -164,8 +153,7 @@ async function startServer() {
             }
         });
         io.on('connection', (socket) => {
-            const empresaId = socket.data.empresaId;
-            const room = `empresa_${empresaId}`;
+            const room = 'instance';
             socket.join(room);
             console.log(`[Socket] User ${socket.data.user?.id} connected to room: ${room}`);
             socket.on('disconnect', () => {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatDateTimeForMySQL, addMinutesForMySQL } from '../server/utils/date-time.ts';
-import { buildEmailOutboxScopeCondition, normalizeOutboxProcessLimit, validateTicketEmailOutboxParams } from '../server/services/email-outbox.service.ts';
+import { normalizeOutboxProcessLimit, validateTicketEmailOutboxParams } from '../server/services/email-outbox.service.ts';
 import { normalizeMessagePagination } from '../server/utils/pagination.ts';
 
 test('formatDateTimeForMySQL formats local time without UTC ISO conversion', () => {
@@ -65,18 +65,6 @@ test('normalizeOutboxProcessLimit clamps unsafe limits', () => {
   assert.equal(normalizeOutboxProcessLimit(-1), 20);
   assert.equal(normalizeOutboxProcessLimit(500), 50);
   assert.equal(normalizeOutboxProcessLimit(7), 7);
-});
-
-test('email outbox scope condition isolates tenant admins', () => {
-  assert.deepEqual(buildEmailOutboxScopeCondition({ isDev: true }), { sql: '', params: [] });
-  assert.deepEqual(buildEmailOutboxScopeCondition({ isDev: false, empresaId: 7 }), {
-    sql: ' AND email_outbox.empresa_id = ?',
-    params: [7],
-  });
-  assert.deepEqual(buildEmailOutboxScopeCondition({ isDev: false, empresaId: null }), {
-    sql: ' AND 1 = 0',
-    params: [],
-  });
 });
 
 test('normalizeMessagePagination defaults and clamps safely', () => {

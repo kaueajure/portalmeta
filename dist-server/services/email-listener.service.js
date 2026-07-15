@@ -767,7 +767,7 @@ export class EmailListenerService {
                         await this.logSystem(targetEmpresaId, 'EMAIL_TICKET_CREATED', `Ticket #${newTicketId} criado via e-mail de ${maskEmail(senderEmail)}.`);
                         const newTicket = await ticketsService.getById(newTicketId);
                         if (newTicket && io) {
-                            io.to(`empresa_${targetEmpresaId}`).emit('ticketCreated', newTicket);
+                            io.to('instance').emit('ticketCreated', newTicket);
                         }
                         await this.processAttachments(parsed, newTicketId, null, userId, targetEmpresaId);
                         // MARK AS SEEN ONLY ON SUCCESS

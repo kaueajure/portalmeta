@@ -10,7 +10,6 @@ import { Modal } from '../ui/Modal';
 
 interface EmailChannel {
   id: number;
-  empresa_id: number;
   nome?: string;
   email_publico: string;
   inbound_address: string;
@@ -18,7 +17,7 @@ interface EmailChannel {
   ultimo_erro?: string;
   last_received_at?: string;
   verified_at?: string;
-  // Envio por canal (SMTP da empresa). Senha NUNCA é exposta.
+  // Envio por canal institucional. A senha nunca é exposta.
   smtp_enabled?: boolean | number;
   smtp_host?: string | null;
   smtp_port?: number | null;
@@ -133,7 +132,6 @@ const SMTP_PROVIDERS: SmtpProvider[] = [
 ];
 
 interface EmailChannelsManagerProps {
-  empresaId: number;
   canCreate?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
@@ -145,7 +143,6 @@ interface CreateEmailChannelResponse {
 }
 
 export const EmailChannelsManager = ({
-  empresaId,
   canCreate = true,
   canEdit = true,
   canDelete = true,
@@ -247,7 +244,7 @@ export const EmailChannelsManager = ({
       // Só envia a senha se uma NOVA foi digitada (não sobrescreve a existente com vazio).
       if (smtpPassword) payload.password = smtpPassword;
 
-      await api.put(`/companies/${empresaId}/email-channels/${smtpModalChannel.id}/smtp`, payload);
+      await api.put(`/email-channels/${smtpModalChannel.id}/smtp`, payload);
       setSmtpPassword('');
       setFeedback({ type: 'success', message: 'Configuração de envio salva.' });
       await fetchChannels();
@@ -269,7 +266,7 @@ export const EmailChannelsManager = ({
       setSmtpTesting(true);
       setSmtpError(null);
       const res = await api.post<{ sentTo?: string }>(
-        `/companies/${empresaId}/email-channels/${smtpModalChannel.id}/smtp/test`,
+        `/email-channels/${smtpModalChannel.id}/smtp/test`,
         {}
       );
       setFeedback({ type: 'success', message: `E-mail de teste enviado para ${res?.sentTo || smtpModalChannel.email_publico}.` });
@@ -285,14 +282,14 @@ export const EmailChannelsManager = ({
     try {
       setLoading(true);
       setError(null);
-      const data = await api.get<EmailChannel[]>(`/companies/${empresaId}/email-channels`);
+      const data = await api.get<EmailChannel[]>('/email-channels');
       setChannels(data);
     } catch (err: any) {
       setError(err.message || 'Erro ao carregar canais');
     } finally {
       setLoading(false);
     }
-  }, [empresaId]);
+  }, []);
 
   useEffect(() => {
     fetchChannels();
@@ -333,7 +330,7 @@ export const EmailChannelsManager = ({
       setSubmitting(true);
       setCreateError(null);
 
-      await api.post<CreateEmailChannelResponse>(`/companies/${empresaId}/email-channels`, {
+      await api.post<CreateEmailChannelResponse>('/email-channels', {
         email_publico: newEmail.trim(),
         nome: newNome.trim(),
       });
@@ -358,7 +355,7 @@ export const EmailChannelsManager = ({
     if (!confirm('Remover este canal de e-mail? Nenhum novo chamado será recebido por este endereço técnico.')) return;
 
     try {
-      await api.delete(`/companies/${empresaId}/email-channels/${id}`);
+      await api.delete(`/email-channels/${id}`);
       setFeedback({ type: 'success', message: 'Canal removido com sucesso.' });
       fetchChannels();
     } catch (err: any) {
@@ -374,7 +371,7 @@ export const EmailChannelsManager = ({
     if (!confirm('Regerar o endereço de encaminhamento? O endereço antigo para de funcionar imediatamente.')) return;
 
     try {
-      await api.post(`/companies/${empresaId}/email-channels/${id}/regenerate`, {});
+      await api.post(`/email-channels/${id}/regenerate`, {});
       setFeedback({ type: 'success', message: 'Endereço de encaminhamento regenerado.' });
       fetchChannels();
     } catch (err: any) {
@@ -631,7 +628,7 @@ export const EmailChannelsManager = ({
             <div className="space-y-1">
               <p className="text-xs font-semibold text-blue-700">Como funciona?</p>
               <p className="text-[11px] text-blue-600 leading-relaxed">
-                Cadastre o e-mail de suporte da empresa e configure uma regra de encaminhamento para o endereco tecnico gerado.
+                Cadastre o e-mail de suporte institucional e configure uma regra de encaminhamento para o endereço técnico gerado.
               </p>
             </div>
           </div>
@@ -640,7 +637,7 @@ export const EmailChannelsManager = ({
             <label className="text-xs font-medium text-slate-700">E-mail de Suporte *</label>
             <Input
               type="email"
-              placeholder="suporte@sua-empresa.com"
+              placeholder="suporte@portalmeta.com.br"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
               className="h-8 text-sm"
@@ -760,7 +757,7 @@ export const EmailChannelsManager = ({
                 <div className="space-y-1 sm:col-span-2">
                   <label className="text-xs font-medium text-slate-700">Host SMTP</label>
                   <Input
-                    placeholder="smtp.empresa.com"
+                  placeholder="smtp.exemplo.com"
                     value={smtpForm.smtp_host}
                     onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_host: e.target.value }))}
                     className="h-8 text-sm"
@@ -798,7 +795,7 @@ export const EmailChannelsManager = ({
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">Usuário SMTP</label>
                 <Input
-                  placeholder="suporte@empresa.com"
+                  placeholder="suporte@portalmeta.com.br"
                   value={smtpForm.smtp_user}
                   onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_user: e.target.value }))}
                   className="h-8 text-sm"
@@ -824,7 +821,7 @@ export const EmailChannelsManager = ({
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">Nome do remetente (opcional)</label>
                 <Input
-                  placeholder="Ex: Suporte Empresa"
+                  placeholder="Ex: Suporte Portal Meta"
                   value={smtpForm.smtp_from_name}
                   onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_from_name: e.target.value }))}
                   className="h-8 text-sm"

@@ -7,27 +7,23 @@ import { isEncryptionConfigured, decryptSecret } from '../utils/crypto.js';
 import { verifyChannelSmtp, sendTicketEmail } from '../utils/mailer.js';
 const router = Router();
 router.use(authMiddleware);
-// Dev can manage any company; admins can manage only their own company.
-const canManage = (req, targetEmpresaId) => {
-    return req.user.desenvolvedor || (req.user.administrador && req.user.empresa_id === targetEmpresaId);
-};
-router.get('/companies/:companyId/email-channels', async (req, res) => {
+const INSTANCE_ID = 1;
+const canManage = (req) => req.user.desenvolvedor || req.user.administrador;
+router.get('/email-channels', async (req, res) => {
     try {
-        const companyId = parseInt(req.params.companyId, 10);
-        if (!canManage(req, companyId)) {
+        if (!canManage(req)) {
             return sendError(res, 'Permissao negada', 403);
         }
-        const canais = await emailChannelsService.listByCompany(companyId);
+        const canais = await emailChannelsService.listByCompany(INSTANCE_ID);
         return sendSuccess(res, canais);
     }
     catch (err) {
         return sendError(res, err.message, 500);
     }
 });
-router.post('/companies/:companyId/email-channels', async (req, res) => {
+router.post('/email-channels', async (req, res) => {
     try {
-        const companyId = parseInt(req.params.companyId, 10);
-        if (!canManage(req, companyId)) {
+        if (!canManage(req)) {
             return sendError(res, 'Permissao negada', 403);
         }
         const { email_publico, nome } = req.body;
@@ -35,7 +31,7 @@ router.post('/companies/:companyId/email-channels', async (req, res) => {
             return sendError(res, 'E-mail publico invalido', 400);
         }
         const id = await emailChannelsService.createChannel({
-            empresa_id: companyId,
+            empresa_id: INSTANCE_ID,
             email_publico,
             nome,
         });
@@ -45,40 +41,37 @@ router.post('/companies/:companyId/email-channels', async (req, res) => {
         return sendError(res, err.message, 500);
     }
 });
-router.delete('/companies/:companyId/email-channels/:id', async (req, res) => {
+router.delete('/email-channels/:id', async (req, res) => {
     try {
-        const companyId = parseInt(req.params.companyId, 10);
-        if (!canManage(req, companyId)) {
+        if (!canManage(req)) {
             return sendError(res, 'Permissao negada', 403);
         }
         const id = parseInt(req.params.id, 10);
-        await emailChannelsService.deleteChannel(id, companyId);
+        await emailChannelsService.deleteChannel(id, INSTANCE_ID);
         return sendSuccess(res, null, 'Canal deletado com sucesso');
     }
     catch (err) {
         return sendError(res, err.message, 500);
     }
 });
-router.post('/companies/:companyId/email-channels/:id/regenerate', async (req, res) => {
+router.post('/email-channels/:id/regenerate', async (req, res) => {
     try {
-        const companyId = parseInt(req.params.companyId, 10);
-        if (!canManage(req, companyId)) {
+        if (!canManage(req)) {
             return sendError(res, 'Permissao negada', 403);
         }
         const id = parseInt(req.params.id, 10);
-        await emailChannelsService.regenerate(id, companyId);
+        await emailChannelsService.regenerate(id, INSTANCE_ID);
         return sendSuccess(res, null, 'Canal regenerado com sucesso');
     }
     catch (err) {
         return sendError(res, err.message, 500);
     }
 });
-// Fase 1: configurar SMTP do canal (envio com a identidade da empresa).
+// Configura o SMTP do canal institucional.
 // A senha nunca é retornada; é cifrada no serviço.
-router.put('/companies/:companyId/email-channels/:id/smtp', async (req, res) => {
+router.put('/email-channels/:id/smtp', async (req, res) => {
     try {
-        const companyId = parseInt(req.params.companyId, 10);
-        if (!canManage(req, companyId)) {
+        if (!canManage(req)) {
             return sendError(res, 'Permissao negada', 403);
         }
         const id = parseInt(req.params.id, 10);
@@ -90,7 +83,7 @@ router.put('/companies/:companyId/email-channels/:id/smtp', async (req, res) => 
         if (smtp_enabled && (!portNum || portNum <= 0 || portNum > 65535)) {
             return sendError(res, 'Porta SMTP inválida.', 400);
         }
-        const updated = await emailChannelsService.updateSmtpConfig(id, companyId, {
+        const updated = await emailChannelsService.updateSmtpConfig(id, INSTANCE_ID, {
             smtp_enabled: !!smtp_enabled,
             smtp_host: smtp_host ? String(smtp_host).trim() : null,
             smtp_port: portNum,
@@ -110,14 +103,13 @@ router.put('/companies/:companyId/email-channels/:id/smtp', async (req, res) => 
     }
 });
 // Fase 1: testar o SMTP do canal (verifica conexão e, opcionalmente, envia teste).
-router.post('/companies/:companyId/email-channels/:id/smtp/test', async (req, res) => {
+router.post('/email-channels/:id/smtp/test', async (req, res) => {
     try {
-        const companyId = parseInt(req.params.companyId, 10);
-        if (!canManage(req, companyId)) {
+        if (!canManage(req)) {
             return sendError(res, 'Permissao negada', 403);
         }
         const id = parseInt(req.params.id, 10);
-        const channel = await emailChannelsService.getByIdAndCompany(id, companyId);
+        const channel = await emailChannelsService.getByIdAndCompany(id, INSTANCE_ID);
         if (!channel)
             return sendError(res, 'Canal não encontrado', 404);
         if (!emailChannelsService.isChannelSmtpReady(channel)) {
@@ -150,7 +142,7 @@ router.post('/companies/:companyId/email-channels/:id/smtp/test', async (req, re
             title: 'Teste de envio do canal',
             customerName: channel.nome || 'Equipe',
             agentName: 'Portal Meta',
-            message: 'Este é um e-mail de teste do canal. Se você recebeu, o envio pela identidade da empresa está funcionando.',
+            message: 'Este é um e-mail de teste do canal. Se você recebeu, o envio pela identidade institucional está funcionando.',
             status: 'Teste'
         }, {
             transportConfig: config,

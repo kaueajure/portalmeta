@@ -358,10 +358,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   }, [loadStatusAndConversations, loadThread, loadAssignment, selectedPhone]);
 
   useEffect(() => {
-    const empresaId = Number(currentUser.empresa_id);
-    if (!Number.isInteger(empresaId) || empresaId <= 0) return;
-
-    const socket = getSocket(empresaId);
+    const socket = getSocket();
     let refreshTimer: number | null = null;
 
     const handleWhatsAppChanged = () => {
@@ -381,7 +378,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
       socket.off("whatsappChanged", handleWhatsAppChanged);
       if (refreshTimer) window.clearTimeout(refreshTimer);
     };
-  }, [currentUser.empresa_id, loadStatusAndConversations, loadThread, loadAssignment, selectedPhone]);
+  }, [loadStatusAndConversations, loadThread, loadAssignment, selectedPhone]);
 
   const copyValue = async (field: string, value: string) => {
     try {
@@ -578,7 +575,6 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
             status={status}
             canManage={canManage}
             canViewMetaCredentials={canViewMetaCredentials}
-            companyId={currentUser.empresa_id}
             copiedField={copiedField}
             onCopy={copyValue}
             onError={setError}
@@ -1061,7 +1057,6 @@ function SetupPanel({
   status,
   canManage,
   canViewMetaCredentials,
-  companyId,
   copiedField,
   onCopy,
   onError,
@@ -1071,7 +1066,6 @@ function SetupPanel({
   status: WhatsAppStatus | null;
   canManage: boolean;
   canViewMetaCredentials: boolean;
-  companyId?: number | null;
   copiedField: string | null;
   onCopy: (field: string, value: string) => void;
   onError: (message: string | null) => void;
@@ -1125,7 +1119,6 @@ function SetupPanel({
         <div className="min-h-0 flex-1 overflow-hidden">
           <WhatsappAutoReplyPanel
             canManage={canManage}
-            companyId={companyId}
             onError={onError}
             onSuccess={onSuccess}
             onToolbarChange={onFlowToolbarChange}

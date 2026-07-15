@@ -25,9 +25,7 @@ export const PortalNewTicketPage = ({ onNavigate, currentUser }: PortalNewTicket
   const [suggestions, setSuggestions] = useState<any[]>([]);
   
   const shouldLoadInternalOptions = currentUser.perfil !== 'cliente';
-  const { activeCategories, activeServices } = useTicketOptions(
-    shouldLoadInternalOptions ? currentUser.empresa_id || undefined : undefined
-  );
+  const { activeCategories, activeServices } = useTicketOptions();
 
   useEffect(() => {
     const fetchSuggestions = async () => {

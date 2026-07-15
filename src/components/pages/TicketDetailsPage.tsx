@@ -66,14 +66,12 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
       setTicketAttachments(attachmentsData);
       setTimeline(timelineData);
 
-      if (ticketData.empresa_id) {
-        try {
-          const statusRows = await api.get<TicketOption[]>(`/companies/${ticketData.empresa_id}/ticket-statuses`);
-          setTicketStatusOptions(statusRows);
-        } catch (statusErr) {
-          console.error('Erro ao carregar status do atendimento:', statusErr);
-          setTicketStatusOptions([]);
-        }
+      try {
+        const statusRows = await api.get<TicketOption[]>('/ticket-settings/statuses');
+        setTicketStatusOptions(statusRows);
+      } catch (statusErr) {
+        console.error('Erro ao carregar status do atendimento:', statusErr);
+        setTicketStatusOptions([]);
       }
 
       // Marcar como lido
@@ -82,10 +80,7 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
       });
 
       if (hasAnyPermission(currentUser, ['tickets.assumir', 'tickets.atribuir', 'tickets.transferir', 'tickets.remover_responsavel'])) {
-        const teamEndpoint = currentUser.desenvolvedor && ticketData.empresa_id
-          ? `/users/team?empresa_id=${ticketData.empresa_id}`
-          : '/users/team';
-        const usersData = await api.get<User[]>(teamEndpoint);
+        const usersData = await api.get<User[]>('/users/team');
         setAgents(usersData);
       }
     } catch (err) {
@@ -117,11 +112,9 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
   }, [ticketId]);
 
   useEffect(() => {
-    if (!ticket?.empresa_id) return;
+    const socket = getSocket();
 
-    const socket = getSocket(ticket.empresa_id);
-
-    const handleMessagesChanged = (payload: { ticketId: number, empresaId: number }) => {
+    const handleMessagesChanged = (payload: { ticketId: number }) => {
       if (Number(payload.ticketId) !== Number(ticketId)) return;
       refreshConversation();
     };
@@ -131,7 +124,7 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
     return () => {
       socket.off('ticketMessagesChanged', handleMessagesChanged);
     };
-  }, [ticket?.empresa_id, ticketId]);
+  }, [ticketId]);
 
   const handleSendMessage = async (mensagem: string, isInternal: boolean, files: File[]): Promise<boolean> => {
     setLoadingSend(true);

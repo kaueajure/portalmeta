@@ -41,16 +41,14 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
   const [editName, setEditName] = useState('');
   const [editSigla, setEditSigla] = useState('');
 
-  const canManageOptions = hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
-  const companyId = currentUser.empresa_id;
+  const canManageOptions = hasPermission(currentUser, 'configuracoes.atendimento');
 
   const loadOptions = async () => {
-    if (!companyId) return;
     try {
       setLoading(true);
       const [catRes, servRes] = await Promise.all([
-        api.get<TicketOption[]>(`/companies/${companyId}/ticket-categories`),
-        api.get<TicketOption[]>(`/companies/${companyId}/ticket-services`)
+        api.get<TicketOption[]>('/ticket-settings/categories'),
+        api.get<TicketOption[]>('/ticket-settings/services')
       ]);
       setCategories(catRes);
       setServices(servRes);
@@ -63,7 +61,7 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
 
   useEffect(() => {
     loadOptions();
-  }, [companyId]);
+  }, []);
 
   const handleAdd = async (type: 'category' | 'service') => {
     setError(null);
@@ -78,7 +76,7 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
       }
 
       try {
-        await api.post(`/companies/${companyId}/ticket-categories`, {
+        await api.post('/ticket-settings/categories', {
           sigla,
           nome,
           valor: slugifyOptionValue(sigla) || slugifyOptionValue(nome),
@@ -98,7 +96,7 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
     if (!value) return;
 
     try {
-      await api.post(`/companies/${companyId}/ticket-services`, {
+      await api.post('/ticket-settings/services', {
         nome: value,
         valor: slugifyOptionValue(value),
         ativo: 1,
@@ -114,8 +112,8 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
   const handleDelete = async (type: 'category' | 'service', id: number) => {
     if (!confirm('Deseja realmente excluir esta opcao?')) return;
     try {
-      const endpoint = type === 'category' ? 'ticket-categories' : 'ticket-services';
-      await api.delete(`/companies/${companyId}/${endpoint}/${id}`);
+      const path = type === 'category' ? 'categories' : 'services';
+      await api.delete(`/ticket-settings/${path}/${id}`);
       loadOptions();
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao excluir item'));
@@ -127,8 +125,6 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
     if (!nome) return;
 
     try {
-      const endpoint = type === 'category' ? 'ticket-categories' : 'ticket-services';
-
       if (type === 'category') {
         const sigla = normalizeSigla(editSigla).trim();
         if (!sigla) {
@@ -136,9 +132,9 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
           return;
         }
 
-        await api.patch(`/companies/${companyId}/${endpoint}/${id}`, { nome, sigla });
+        await api.patch(`/ticket-settings/${type === 'category' ? 'categories' : 'services'}/${id}`, { nome, sigla });
       } else {
-        await api.patch(`/companies/${companyId}/${endpoint}/${id}`, { nome });
+        await api.patch(`/ticket-settings/services/${id}`, { nome });
       }
 
       setEditingId(null);

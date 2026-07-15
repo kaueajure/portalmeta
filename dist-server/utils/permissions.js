@@ -1,10 +1,5 @@
 import { PERMISSIONS_CATALOG } from '../constants/permissions.js';
-const ADMIN_GLOBAL_DENYLIST = new Set([
-    'empresas.criar',
-    'empresas.excluir',
-    'empresas.desativar',
-    'configuracoes.sistema',
-]);
+const ADMIN_GLOBAL_DENYLIST = new Set(['configuracoes.sistema']);
 export const RolePermissions = {
     desenvolvedor: ['*'],
     administrador: PERMISSIONS_CATALOG

@@ -14,7 +14,6 @@ export function isGlobalOnlyPermission(permissionKey: string): boolean {
   return (
     permissionKey === '*' ||
     permissionKey === 'sistema.developer' ||
-    permissionKey.startsWith('empresas.') ||
     permissionKey.startsWith('telas.')
   );
 }

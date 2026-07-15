@@ -6,10 +6,9 @@ import { Card } from '../ui/Card';
 
 interface TeamSidebarProps {
   currentUser: User;
-  devCompanyId?: string;
 }
 
-export const TeamSidebar = ({ currentUser, devCompanyId }: TeamSidebarProps) => {
+export const TeamSidebar = ({ currentUser }: TeamSidebarProps) => {
   const [team, setTeam] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,10 +17,7 @@ export const TeamSidebar = ({ currentUser, devCompanyId }: TeamSidebarProps) => 
     const fetchTeam = async () => {
       try {
         setLoading(true);
-        // Passar um parâmetro para trazer as contagens de tickets?
-        // Vamos criar um endpoint ou usar o /users com uma query
-        const endpoint = devCompanyId ? `/users/team?empresa_id=${devCompanyId}` : `/users/team`;
-        const data = await api.get<any[]>(endpoint);
+        const data = await api.get<any[]>('/users/team');
         setTeam(data);
       } catch (err: any) {
         setError(err.message || 'Erro ao carregar equipe');
@@ -29,15 +25,8 @@ export const TeamSidebar = ({ currentUser, devCompanyId }: TeamSidebarProps) => 
         setLoading(false);
       }
     };
-    if (!!currentUser.desenvolvedor && !devCompanyId) {
-       setTeam([]);
-       setLoading(false);
-       return;
-    }
     fetchTeam();
-  }, [devCompanyId, !!currentUser.desenvolvedor]);
-
-  if (!currentUser.empresa_id && !currentUser.desenvolvedor) return null;
+  }, []);
 
   return (
     <Card className="w-full shrink-0 p-3 bg-white border border-slate-200 shadow-sm overflow-hidden rounded-lg">

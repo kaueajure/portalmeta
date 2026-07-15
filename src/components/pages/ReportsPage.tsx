@@ -79,7 +79,6 @@ interface DetailedTicket {
   prioridade: string;
   categoria: string;
   created_at: string;
-  empresa_nome: string;
   cliente_nome: string;
   responsavel_nome: string;
 }
@@ -96,8 +95,6 @@ interface DetailedReportData {
 type ReportsApiResponse =
   | SummaryData
   | { success?: boolean; data?: SummaryData; message?: string };
-
-type CompanyOption = { id: number; nome: string };
 
 interface ReportsPageProps {
   currentUser: User;
@@ -119,7 +116,7 @@ const SCORE_COLORS = [
   "#ef4444",
 ].reverse();
 
-export function ReportsPage({ currentUser }: ReportsPageProps) {
+export function ReportsPage({ currentUser: _currentUser }: ReportsPageProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -130,7 +127,6 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
   const [filters, setFilters] = useState<{
     start_date: string;
     end_date: string;
-    empresa_id: string;
     status: string;
     prioridade: string;
     responsavel_id: string;
@@ -142,7 +138,6 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
       .toISOString()
       .split("T")[0],
     end_date: new Date().toISOString().split("T")[0],
-    empresa_id: "",
     status: "",
     prioridade: "",
     responsavel_id: "",
@@ -150,23 +145,11 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
     servico: "",
     origem: "",
   });
-  const [companies, setCompanies] = useState<CompanyOption[]>([]);
-
-  const { categories, services } = useTicketOptions(
-    Number(filters.empresa_id) || currentUser.empresa_id || 0,
-  );
+  const { categories, services } = useTicketOptions();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    if (currentUser.desenvolvedor && !filters.empresa_id) {
-      setData(null);
-      setDetailedReport(null);
-      setError("Selecione uma empresa para carregar relatórios.");
-      setLoading(false);
-      return;
-    }
-
     try {
       const queryParams = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
@@ -200,14 +183,9 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [filters, currentUser.desenvolvedor]);
+  }, [filters]);
 
   const handleGenerateReport = async () => {
-    if (currentUser.desenvolvedor && !filters.empresa_id) {
-      setError("Selecione uma empresa para gerar o relatório.");
-      return;
-    }
-
     setGenerating(true);
     setError(null);
     try {
@@ -229,34 +207,10 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
 
   useEffect(() => {
     fetchData();
-
-    if (!!currentUser.desenvolvedor) {
-      api
-        .get<CompanyOption[] | { data: CompanyOption[] }>("/companies")
-        .then((res) => {
-          const list = Array.isArray(res)
-            ? res
-            : Array.isArray(res?.data)
-              ? res.data
-              : [];
-          setCompanies(list);
-          if (list.length > 0) {
-            setFilters((current) =>
-              current.empresa_id ? current : { ...current, empresa_id: String(list[0].id) },
-            );
-          }
-        })
-        .catch(() => {});
-    }
-  }, [fetchData, !!currentUser.desenvolvedor]);
+  }, [fetchData]);
 
   const handleExportCSV = async (type: string) => {
     try {
-      if (currentUser.desenvolvedor && !filters.empresa_id) {
-        setError("Selecione uma empresa para exportar relatórios.");
-        return;
-      }
-
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
         if (value) params.append(key, String(value));
@@ -427,27 +381,6 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
                 ]}
               />
             </div>
-            {!!currentUser.desenvolvedor && (
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-slate-500 uppercase ml-0.5">
-                  Empresa
-                </label>
-                <Select
-                  buttonClassName="w-full h-8 text-xs font-medium bg-white border-slate-300 rounded-md text-left truncate"
-                  value={filters.empresa_id}
-                  onChange={(value) =>
-                    setFilters((f) => ({ ...f, empresa_id: value }))
-                  }
-                  options={[
-                    { value: "", label: "Selecione" },
-                    ...companies.map((c) => ({
-                      value: String(c.id),
-                      label: c.nome,
-                    })),
-                  ]}
-                />
-              </div>
-            )}
           </div>
         </Card>
 
@@ -962,11 +895,6 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
                             <th className="px-4 py-2.5 text-[10px] uppercase font-semibold text-slate-500">
                               Título / Categoria
                             </th>
-                            {!!currentUser.desenvolvedor && (
-                              <th className="px-4 py-2.5 text-[10px] uppercase font-semibold text-slate-500">
-                                Empresa
-                              </th>
-                            )}
                             <th className="px-4 py-2.5 text-[10px] uppercase font-semibold text-slate-500">
                               Status
                             </th>
@@ -996,11 +924,6 @@ export function ReportsPage({ currentUser }: ReportsPageProps) {
                                     {t.categoria}
                                   </div>
                                 </td>
-                                {!!currentUser.desenvolvedor && (
-                                  <td className="px-4 py-2.5 text-[11px] text-slate-600">
-                                    {t.empresa_nome}
-                                  </td>
-                                )}
                                 <td className="px-4 py-2.5">
                                   <Badge
                                     variant={

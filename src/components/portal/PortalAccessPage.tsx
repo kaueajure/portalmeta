@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, ShieldCheck, ArrowLeft, Loader2, Building2, KeyRound } from 'lucide-react';
+import { Mail, ShieldCheck, ArrowLeft, Loader2, KeyRound } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../../lib/api';
 import { isValidEmail } from '../../lib/utils';
@@ -12,9 +12,7 @@ interface PortalAccessPageProps {
     token?: string;
     customer: {
       email: string;
-      empresa_id: number;
       nome?: string;
-      empresa_nome?: string;
     };
   }) => void;
   onBackToLogin?: () => void;
@@ -22,7 +20,6 @@ interface PortalAccessPageProps {
 
 export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthenticated, onBackToLogin }) => {
   const [step, setStep] = useState<'request' | 'verify'>('request');
-  const [organizationEmail, setOrganizationEmail] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,10 +29,6 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
 
   const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidEmail(organizationEmail)) {
-      setError('E-mail da organização inválido.');
-      return;
-    }
     if (!isValidEmail(customerEmail)) {
       setError('Seu e-mail é inválido.');
       return;
@@ -46,7 +39,6 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
 
     try {
       await api.post('/portal-auth/request-code', {
-        organization_email: organizationEmail.trim(),
         customer_email: customerEmail.trim()
       });
       setStep('verify');
@@ -74,12 +66,9 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
         token?: string;
         customer: {
           email: string;
-          empresa_id: number;
           nome?: string;
-          empresa_nome?: string;
         }
       }>('/portal-auth/verify-code', {
-        organization_email: organizationEmail.trim(),
         customer_email: customerEmail.trim(),
         code: code.trim()
       });
@@ -97,7 +86,6 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
     setError(null);
     try {
       await api.post('/portal-auth/request-code', {
-        organization_email: organizationEmail.trim(),
         customer_email: customerEmail.trim()
       });
       setSuccessMessage('Um novo código foi enviado.');
@@ -121,7 +109,7 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
             </div>
             <h1 className="mb-4 text-3xl font-bold tracking-tight text-white">Portal do Cliente</h1>
             <p className="mb-8 leading-relaxed text-slate-300">
-              Acompanhe seus chamados, envie respostas, anexe arquivos e consulte a base de conhecimento da organização.
+              Acompanhe seus chamados, envie respostas, anexe arquivos e consulte a base de conhecimento.
             </p>
             <ul className="space-y-4">
               <li className="flex items-start gap-3">
@@ -164,21 +152,10 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
                 >
                   <h2 className="text-2xl font-bold text-slate-900 mb-2">Acesse seus chamados</h2>
                   <p className="text-sm text-slate-500 mb-8">
-                    Informe o e-mail da organização e o seu e-mail para receber um código de acesso seguro.
+                    Informe o seu e-mail para receber um código de acesso seguro.
                   </p>
 
                   <form onSubmit={handleRequestCode} className="space-y-5">
-                    <Input
-                      label="E-mail da organização"
-                      type="email"
-                      value={organizationEmail}
-                      onChange={(e) => setOrganizationEmail(e.target.value)}
-                      placeholder="suporte@empresa.com"
-                      autoComplete="email"
-                      inputSize="lg"
-                      required
-                    />
-
                     <Input
                       label="Seu e-mail"
                       type="email"

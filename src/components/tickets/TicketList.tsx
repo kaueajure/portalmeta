@@ -277,9 +277,6 @@ export const TicketList = ({
                 <div className="flex items-center gap-1.5 min-w-0">
                   <UserIcon size={13} className="shrink-0 text-slate-400" />
                   <span className="truncate">{ticket.cliente_nome || 'Cliente não informado'}</span>
-                  {ticket.empresa_nome && (
-                    <span className="truncate text-slate-400">/ {ticket.empresa_nome}</span>
-                  )}
                 </div>
                 <div className="flex items-center gap-1.5 min-w-0">
                   <ShieldAlert size={13} className="shrink-0 text-slate-400" />
@@ -437,7 +434,6 @@ export const TicketList = ({
                 <td className="hidden px-3 py-2.5 md:table-cell">
                   <div className="flex flex-col min-w-0 leading-tight">
                     <span className="text-xs font-medium text-slate-700 truncate">{ticket.cliente_nome || 'N/A'}</span>
-                    <span className="text-[10px] text-slate-500 truncate">{ticket.empresa_nome}</span>
                   </div>
                 </td>
                 <td className="px-3 py-2.5">

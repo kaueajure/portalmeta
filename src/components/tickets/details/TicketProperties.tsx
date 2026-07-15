@@ -6,7 +6,6 @@ import { Select } from '../../ui/Select';
 import { api } from '../../../lib/api';
 import { cn, getSlaInfo, getFirstResponseSlaInfo } from '../../../lib/utils';
 import { 
-  Building2, 
   Trash2, 
   Clock, 
   Globe,
@@ -122,8 +121,7 @@ export const TicketProperties = ({
   const sentimento = aiSentimentoTag ? aiSentimentoTag.split(':')[1] : null;
   const categoriaSugerida = aiCategoriaTag ? aiCategoriaTag.split(':')[1] : null;
 
-  const companyId = ticket.empresa_id ? String(ticket.empresa_id) : undefined;
-  const { activeCategories, activeServices } = useTicketOptions(companyId);
+  const { activeCategories, activeServices } = useTicketOptions();
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString('pt-BR', {
@@ -333,11 +331,6 @@ export const TicketProperties = ({
            <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
               <div className="text-sm font-semibold text-slate-900 mb-0.5">{ticket.cliente_nome || 'Desconhecido'}</div>
               <div className="text-[11px] text-slate-500 truncate">{ticket.cliente_email || 'n/a'}</div>
-              {ticket.empresa_nome && (
-                <div className="mt-2 flex w-fit items-center gap-1 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-700">
-                  <Building2 size={10} /> {ticket.empresa_nome}
-                </div>
-              )}
            </div>
         </PropertyRow>
         

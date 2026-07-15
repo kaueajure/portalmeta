@@ -24,7 +24,6 @@ export type WhatsAppBotSettings = {
 
 type Props = {
   canManage: boolean;
-  companyId?: number | null;
   onError: (message: string | null) => void;
   onSuccess: (message: string | null) => void;
   onToolbarChange?: (toolbar: WhatsAppFlowToolbar | null) => void;
@@ -54,7 +53,6 @@ function normalizeSigla(value: string) {
 
 export function WhatsappAutoReplyPanel({
   canManage,
-  companyId,
   onError,
   onSuccess,
   onToolbarChange,
@@ -75,9 +73,7 @@ export function WhatsappAutoReplyPanel({
     updatedAt: null,
   });
 
-  const { activeCategories, loading: loadingServices } = useTicketOptions(companyId || undefined, {
-    scope: companyId ? "company" : "current-user",
-  });
+  const { activeCategories, loading: loadingServices } = useTicketOptions();
 
   const availableServices = useMemo(
     () =>
@@ -571,7 +567,7 @@ function WhatsAppFlowPreview({
           <Bubble mine>{options[0]?.title || "Opção"}</Bubble>
         </CompactStep>
 
-        <CompactStep label="Empresa responde">
+        <CompactStep label="Equipe responde">
           <Bubble>Certo! Em que posso ajudar?</Bubble>
         </CompactStep>
 

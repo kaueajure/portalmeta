@@ -44,7 +44,7 @@ export const LoginPage = ({ onSubmit, authError, onForgotPassword, loading }: Lo
             required
             autoComplete="email"
             className="h-10 text-[14px] bg-slate-50 border-slate-200 focus:bg-white focus:ring-blue-500"
-            placeholder="exemplo@empresa.com"
+            placeholder="usuario@portalmeta.com.br"
             disabled={loading}
           />
 

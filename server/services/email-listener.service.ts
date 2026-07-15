@@ -954,7 +954,7 @@ export class EmailListenerService {
             
             const newTicket = await ticketsService.getById(newTicketId);
             if (newTicket && io) {
-               io.to(`empresa_${targetEmpresaId}`).emit('ticketCreated', newTicket);
+               io.to('instance').emit('ticketCreated', newTicket);
             }
             
             await this.processAttachments(parsed, newTicketId, null, userId, targetEmpresaId);

@@ -1,6 +1,5 @@
 export interface AccessProfile {
   id: number;
-  empresa_id: number | null;
   nome: string;
   descricao?: string | null;
   base_perfil?: string | null;
@@ -14,7 +13,6 @@ export interface AccessProfile {
 
 export interface User {
   id: number;
-  empresa_id: number | null;
   nome: string;
   email: string;
   cargo: string | null;
@@ -27,33 +25,9 @@ export interface User {
   telefone: string | null;
   foto: string | null;
   ultimo_login: string | null;
-  empresa_nome?: string;
-  empresa_telefone?: string;
-  empresa_email?: string;
-  empresa_cnpj?: string;
-  empresa_logo?: string | null;
-  empresa_cor_principal?: string;
-  empresa_endereco?: string;
-  empresa_email_assinatura?: string | null;
   created_at: string;
   permissions?: string[];
   isSuperUser?: boolean;
-}
-
-export interface Empresa {
-  id: number;
-  nome: string;
-  cnpj: string;
-  email: string;
-  email_suporte: string;
-  telefone: string;
-  logo: string | null;
-  email_assinatura?: string | null;
-  cor_principal: string;
-  ativo: boolean;
-  created_at: string;
-  total_usuarios?: number;
-  total_tickets?: number;
 }
 
 export interface UserFormData {
@@ -62,22 +36,10 @@ export interface UserFormData {
   password?: string;
   cargo: string;
   telefone: string;
-  empresa_id: number | null;
   administrador: boolean;
   desenvolvedor: boolean;
   perfil?: 'desenvolvedor' | 'administrador' | 'gestor' | 'atendente' | 'cliente' | string | null;
   access_profile_id?: number | null;
-}
-
-export interface CompanyFormData {
-  nome: string;
-  cnpj: string;
-  email: string;
-  email_suporte: string;
-  telefone: string;
-  cor_principal: string;
-  logo?: string | null;
-  email_assinatura?: string | null;
 }
 
 export type TicketStatus = string;
@@ -132,7 +94,6 @@ export interface TicketOption {
 
 export interface Ticket {
   id: number;
-  empresa_id: number;
   usuario_id: number | null;
   solicitante_nome?: string | null;
   solicitante_email?: string | null;
@@ -161,7 +122,6 @@ export interface Ticket {
   cliente_nome?: string;
   cliente_email?: string;
   responsavel_nome?: string;
-  empresa_nome?: string;
   finalizado_em: string | null;
   sla_pausado_em?: string | null;
   sla_pausado_total_minutos?: number;
@@ -199,7 +159,6 @@ export interface TicketAdvancedFilters {
 
 export interface TicketView {
   id: number;
-  empresa_id: number;
   usuario_id: number;
   nome: string;
   filtros_json: {
@@ -228,7 +187,6 @@ export interface TicketCustomField {
 
 export interface TicketMacro {
   id: number;
-  empresa_id: number;
   titulo: string;
   conteudo: string;
   categoria?: string;
@@ -254,7 +212,6 @@ export interface TicketAttachment {
   ticket_id: number;
   mensagem_id?: number | null;
   usuario_id: number;
-  empresa_id?: number | null;
   nome_original: string;
   nome_arquivo?: string;
   mime_type: string;
@@ -288,20 +245,17 @@ export interface Log {
 export interface SystemLog {
   id: number;
   usuario_id?: number | null;
-  empresa_id?: number | null;
   acao: string;
   descricao?: string | null;
   ip?: string | null;
   user_agent?: string | null;
   created_at: string;
   usuario_nome?: string | null;
-  empresa_nome?: string | null;
 }
 
 export interface DashboardData {
   chamadosAtivos: number;
   resolvidosMes: number;
-  totalEmpresas?: number;
   totalUsuarios: number;
   slaAtrasados?: number;
   vencendoHoje?: number;
@@ -330,7 +284,6 @@ export interface DashboardData {
     period: string;
     from: string;
     to: string;
-    empresa_id?: number | null;
     responsavel_id?: number | null;
   };
 }
@@ -338,7 +291,6 @@ export interface DashboardData {
 export interface Notification {
   id: number;
   usuario_id: number;
-  empresa_id?: number | null;
   tipo: string;
   titulo: string;
   mensagem?: string | null;

@@ -23,11 +23,9 @@ interface Article {
   created_at: string;
 }
 
-export const KnowledgePage = ({ currentUser }: KnowledgeManagerProps) => {
+export const KnowledgePage = ({ currentUser: _currentUser }: KnowledgeManagerProps) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
-  const [companies, setCompanies] = useState<{id: number, nome: string}[]>([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -45,19 +43,10 @@ export const KnowledgePage = ({ currentUser }: KnowledgeManagerProps) => {
     ativo: true,
   });
 
-  const loadCompanies = async () => {
-    if (!currentUser.desenvolvedor) return;
-    try {
-      const data = await api.get<any[]>('/companies?status=ativo');
-      setCompanies(data);
-    } catch {}
-  };
-
   const fetchArticles = async () => {
     setLoading(true);
     try {
-      const qs = currentUser.desenvolvedor && selectedCompanyId ? `?empresa_id=${selectedCompanyId}` : '';
-      const data = await api.get<any[]>(`/knowledge${qs}`);
+      const data = await api.get<any[]>('/knowledge');
       setArticles(data.map(d => ({
         ...d,
         publico: Boolean(Number(d.publico)),
@@ -72,8 +61,7 @@ export const KnowledgePage = ({ currentUser }: KnowledgeManagerProps) => {
 
   const fetchCategories = async () => {
     try {
-      const qs = currentUser.desenvolvedor && selectedCompanyId ? `?empresa_id=${selectedCompanyId}` : '';
-      const data = await api.get<string[]>(`/knowledge/categories${qs}`);
+      const data = await api.get<string[]>('/knowledge/categories');
       setCategories(data);
     } catch (err) {
       console.error(err);
@@ -81,13 +69,9 @@ export const KnowledgePage = ({ currentUser }: KnowledgeManagerProps) => {
   };
 
   useEffect(() => {
-    loadCompanies();
-  }, [currentUser.desenvolvedor]);
-
-  useEffect(() => {
     fetchArticles();
     fetchCategories();
-  }, [selectedCompanyId, currentUser.desenvolvedor]);
+  }, []);
 
   const openNew = () => {
     setEditingArticle(null);
@@ -126,17 +110,12 @@ export const KnowledgePage = ({ currentUser }: KnowledgeManagerProps) => {
       setError('Título e conteúdo são obrigatórios.');
       return;
     }
-    if (!editingArticle && currentUser.desenvolvedor && !selectedCompanyId) {
-       setError('Selecione uma empresa antes de criar o artigo.');
-       return;
-    }
-    
     setError(null);
     try {
       if (editingArticle) {
-        await api.patch(`/knowledge/${editingArticle.id}`, { ...formData, empresa_id: selectedCompanyId || undefined });
+        await api.patch(`/knowledge/${editingArticle.id}`, formData);
       } else {
-        await api.post('/knowledge', { ...formData, empresa_id: selectedCompanyId || undefined });
+        await api.post('/knowledge', formData);
       }
       setIsModalOpen(false);
       fetchArticles();
@@ -180,19 +159,6 @@ export const KnowledgePage = ({ currentUser }: KnowledgeManagerProps) => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
-          {currentUser.desenvolvedor && (
-            <Select
-              value={selectedCompanyId}
-              onChange={setSelectedCompanyId}
-              placeholder="Empresa: Central"
-              options={[
-                { value: '', label: 'MetaBit' },
-                ...companies.map(c => ({ value: String(c.id), label: c.nome }))
-              ]}
-              buttonClassName="h-8 bg-slate-50 border-slate-200 rounded-md text-xs font-medium min-w-[120px] flex-1 sm:flex-none"
-            />
-          )}
-
           <Select
             value={selectedCategory}
             onChange={setSelectedCategory}

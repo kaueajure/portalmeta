@@ -23,7 +23,7 @@ import { Input } from "../ui/Input";
 import { Card } from "../ui/Card";
 import { cn } from "../../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
-import { EmailChannelsManager } from "../companies/EmailChannelsManager";
+import { EmailChannelsManager } from "../settings/EmailChannelsManager";
 import { TicketOptionsManager } from "../settings/TicketOptionsManager";
 import { SlaPoliciesManager } from "../settings/SlaPoliciesManager";
 import { AutomationsManager } from "../settings/AutomationsManager";
@@ -38,7 +38,7 @@ type AppTab =
   | "settings"
   | "reports";
 
-type SettingsSubTab = "company" | "system" | "tickets";
+type SettingsSubTab = "identity" | "system" | "tickets";
 
 interface SettingsPageProps {
   currentUser: User;
@@ -77,34 +77,45 @@ type HealthOverviewResponse = {
   };
 };
 
+type ApplicationSettings = {
+  nome: string;
+  cnpj?: string | null;
+  email?: string | null;
+  telefone?: string | null;
+  endereco?: string | null;
+  cor_principal?: string | null;
+  logo?: string | null;
+  email_assinatura?: string | null;
+  updated_at?: string;
+};
+
 import { PageShell } from "../layout/PageShell";
 
 export const SettingsPage = ({
   currentUser,
   onNavigate,
-  onUpdateUser,
+  onUpdateUser: _onUpdateUser,
 }: SettingsPageProps) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeSubTab, setActiveSubTab] =
-    useState<SettingsSubTab>("company");
+    useState<SettingsSubTab>("identity");
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [healthData, setHealthData] = useState<HealthOverviewResponse | null>(
     null,
   );
+  const [identity, setIdentity] = useState<ApplicationSettings | null>(null);
 
-  const canEditCompany = hasPermission(currentUser, "empresas.editar");
+  const canEditIdentity = hasPermission(currentUser, "configuracoes.identidade");
   const canManageEmailChannelsByBackend = Boolean(
     currentUser.desenvolvedor || currentUser.administrador,
   );
-  const canViewCompanyTab =
-    canEditCompany ||
-    (Boolean(currentUser.empresa_id) && canManageEmailChannelsByBackend);
+  const canViewIdentityTab = canEditIdentity || canManageEmailChannelsByBackend;
   const canManageTicketOptions = hasPermission(
     currentUser,
-    "empresas.gerenciar_configuracoes",
+    "configuracoes.atendimento",
   );
   const canManageSlaPolicies = hasPermission(
     currentUser,
@@ -118,10 +129,17 @@ export const SettingsPage = ({
     canManageTicketOptions || canManageSlaPolicies || canManageAutomations;
   const canViewSystemHealth = hasPermission(currentUser, "sistema.health");
   const availableSettingsTabs: Array<{ id: SettingsSubTab; visible: boolean }> = [
-    { id: "company", visible: canViewCompanyTab },
+    { id: "identity", visible: canViewIdentityTab },
     { id: "tickets", visible: canViewTicketSettings },
     { id: "system", visible: canViewSystemHealth },
   ];
+
+  React.useEffect(() => {
+    if (activeSubTab !== 'identity' || !canViewIdentityTab) return;
+    api.get<ApplicationSettings>('/application-settings')
+      .then(setIdentity)
+      .catch((err) => setError(err instanceof Error ? err.message : 'Erro ao carregar a identidade institucional.'));
+  }, [activeSubTab, canViewIdentityTab]);
 
   React.useEffect(() => {
     const currentIsAvailable = availableSettingsTabs.some(
@@ -134,7 +152,7 @@ export const SettingsPage = ({
     }
   }, [
     activeSubTab,
-    canViewCompanyTab,
+    canViewIdentityTab,
     canViewTicketSettings,
     canViewSystemHealth,
   ]);
@@ -158,13 +176,8 @@ export const SettingsPage = ({
     }
   }, [activeSubTab, canViewSystemHealth]);
 
-  const handleSaveCompany = async (e: React.FormEvent) => {
+  const handleSaveIdentity = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!currentUser.empresa_id) {
-      setError("Sua conta não possui empresa vinculada para editar.");
-      return;
-    }
 
     setLoading(true);
     setSuccess(null);
@@ -183,7 +196,7 @@ export const SettingsPage = ({
     };
 
     if (!payload.nome) {
-      setError("O nome da empresa é obrigatório.");
+      setError("O nome institucional é obrigatório.");
       setLoading(false);
       return;
     }
@@ -195,15 +208,10 @@ export const SettingsPage = ({
     }
 
     try {
-      await api.patch(`/companies/${currentUser.empresa_id}`, payload);
+      const updated = await api.patch<ApplicationSettings>('/application-settings', payload);
+      setIdentity(updated);
 
-      // Refresh context to avoid stale data
-      if (onUpdateUser) {
-        const updated = await api.get<User>("/profile");
-        onUpdateUser(updated);
-      }
-
-      setSuccess("Configurações da empresa atualizadas!");
+      setSuccess("Identidade institucional atualizada!");
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       const message =
@@ -218,21 +226,21 @@ export const SettingsPage = ({
     <>
       <PageShell
         title="Configurações"
-        subtitle="Ajuste chamados, empresa, telas e regras do sistema."
+        subtitle="Ajuste a identidade, os chamados e as regras do sistema."
         flush
         tabs={
           <div className="flex flex-wrap gap-1 py-3 bg-white w-fit">
-            {canViewCompanyTab && (
+            {canViewIdentityTab && (
               <button
-                onClick={() => setActiveSubTab("company")}
+                onClick={() => setActiveSubTab("identity")}
                 className={cn(
                   "h-8 px-3 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                  activeSubTab === "company"
+                  activeSubTab === "identity"
                     ? "bg-slate-100 text-slate-900 shadow-sm border border-slate-200/50"
                     : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
                 )}
               >
-                <Building2 size={14} /> Empresa
+                <Building2 size={14} /> Identidade
               </button>
             )}
 
@@ -277,33 +285,9 @@ export const SettingsPage = ({
               transition={{ duration: 0.15 }}
               className="space-y-4"
             >
-              {activeSubTab === "company" && canEditCompany && (
+              {activeSubTab === "identity" && canEditIdentity && (
                 <Card className="p-4 sm:p-5">
-                  {!currentUser.empresa_id ? (
-                    <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3">
-                      <div className="w-10 h-10 bg-amber-50 text-amber-500 rounded-lg flex items-center justify-center">
-                        <AlertCircle size={20} />
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-sm font-semibold text-slate-900">
-                          Empresa não vinculada
-                        </h4>
-                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                          Sua conta de usuário não possui uma empresa vinculada
-                          para editar configurações corporativas no momento.
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onNavigate("dashboard")}
-                        className="mt-2 text-xs"
-                      >
-                        Voltar ao Dashboard
-                      </Button>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleSaveCompany} className="space-y-5">
+                    <form key={identity?.updated_at || 'identity'} onSubmit={handleSaveIdentity} className="space-y-5">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-md flex items-center justify-center border border-blue-100">
@@ -311,7 +295,7 @@ export const SettingsPage = ({
                           </div>
                           <div>
                             <h4 className="text-sm font-semibold text-slate-900">
-                              Perfil Corporativo
+                              Identidade Institucional
                             </h4>
                             <p className="text-[11px] text-slate-500 font-medium">
                               Dados fundamentais da sua instância Portal Meta.
@@ -341,25 +325,25 @@ export const SettingsPage = ({
                         <Input
                           label="Razão Social / Nome Fantasia"
                           name="nome"
-                          defaultValue={currentUser.empresa_nome || ""}
+                          defaultValue={identity?.nome || ""}
                           required
                         />
                         <Input
                           label="Documento (CNPJ/CPF)"
                           name="cnpj"
-                          defaultValue={currentUser.empresa_cnpj || ""}
+                          defaultValue={identity?.cnpj || ""}
                           placeholder="00.000.000/0000-00"
                         />
                         <Input
                           label="E-mail de Contato Principal"
                           name="email"
                           type="email"
-                          defaultValue={currentUser.empresa_email || ""}
+                          defaultValue={identity?.email || ""}
                         />
                         <Input
                           label="Telefone de Suporte"
                           name="telefone"
-                          defaultValue={currentUser.empresa_telefone || ""}
+                          defaultValue={identity?.telefone || ""}
                         />
                       </div>
 
@@ -370,7 +354,7 @@ export const SettingsPage = ({
                         <textarea
                           name="endereco"
                           rows={2}
-                          defaultValue={currentUser.empresa_endereco || ""}
+                          defaultValue={identity?.endereco || ""}
                           className="w-full bg-white border border-slate-200 rounded-md p-2.5 text-xs focus:ring-2 focus:ring-blue-100 transition-all outline-none resize-none"
                         />
                       </div>
@@ -398,14 +382,14 @@ export const SettingsPage = ({
                             rows={4}
                             maxLength={2000}
                             defaultValue={
-                              currentUser.empresa_email_assinatura ||
-                              `Atenciosamente,\nEquipe de Atendimento\n${currentUser.empresa_nome || ""}`
+                              identity?.email_assinatura ||
+                              `Atenciosamente,\nEquipe de Atendimento\n${identity?.nome || ""}`
                             }
-                            placeholder={`Atenciosamente,\nEquipe de Atendimento\n${currentUser.empresa_nome || "Sua empresa"}`}
+                            placeholder={`Atenciosamente,\nEquipe de Atendimento\n${identity?.nome || "Portal Meta"}`}
                             className="w-full min-h-[96px] bg-white border border-slate-200 rounded-md p-2.5 text-xs leading-relaxed focus:ring-2 focus:ring-blue-100 transition-all outline-none resize-y"
                           />
                           <p className="text-[11px] text-slate-500">
-                            Use o nome da sua empresa ou da sua equipe. Evite incluir informações sensíveis.
+                            Use o nome da instituição ou da equipe. Evite incluir informações sensíveis.
                           </p>
                         </div>
                       </div>
@@ -424,14 +408,14 @@ export const SettingsPage = ({
                             label="Cor Principal (Hex)"
                             name="cor_principal"
                             defaultValue={
-                              currentUser.empresa_cor_principal || "#2563eb"
+                              identity?.cor_principal || "#2563eb"
                             }
                             placeholder="#2563eb"
                           />
                           <Input
                             label="URL do Logotipo"
                             name="logo"
-                            defaultValue={currentUser.empresa_logo || ""}
+                            defaultValue={identity?.logo || ""}
                             placeholder="https://exemplo.com/logo.png"
                           />
                         </div>
@@ -492,16 +476,13 @@ export const SettingsPage = ({
                         </Button>
                       </div>
                     </form>
-                  )}
                 </Card>
               )}
 
-              {activeSubTab === "company" &&
-                !!currentUser.empresa_id &&
+              {activeSubTab === "identity" &&
                 canManageEmailChannelsByBackend && (
                 <Card className="p-4 sm:p-5">
                   <EmailChannelsManager
-                    empresaId={currentUser.empresa_id}
                     canCreate={canManageEmailChannelsByBackend}
                     canEdit={canManageEmailChannelsByBackend}
                     canDelete={canManageEmailChannelsByBackend}
@@ -826,14 +807,10 @@ export const SettingsPage = ({
                     <TicketOptionsManager currentUser={currentUser} />
                   )}
                   {canManageSlaPolicies && (
-                    <SlaPoliciesManager
-                      currentCompanyId={currentUser.empresa_id!}
-                    />
+                    <SlaPoliciesManager />
                   )}
                   {canManageAutomations && (
-                    <AutomationsManager
-                      currentCompanyId={currentUser.empresa_id!}
-                    />
+                    <AutomationsManager />
                   )}
                 </div>
               )}

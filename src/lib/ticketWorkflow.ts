@@ -23,18 +23,13 @@ export const TICKET_STATUS_SPECIAL_OPTIONS: { value: TicketStatusSpecial; label:
   { value: "encerrado", label: "Encerrado", description: "Fechamento administrativo do ticket, protegido por permissão específica." },
 ];
 
-const STORAGE_KEY_PREFIX = "portalmeta.ticketWorkflow";
+const STORAGE_KEY = "portalmeta.ticketWorkflow";
 
-const getWorkflowKey = (companyId?: number | string | null) =>
-  `${STORAGE_KEY_PREFIX}.${companyId || "default"}`;
-
-export const loadTicketWorkflow = (
-  companyId?: number | string | null,
-): TicketWorkflowStatus[] => {
+export const loadTicketWorkflow = (): TicketWorkflowStatus[] => {
   if (typeof window === "undefined") return DEFAULT_TICKET_WORKFLOW;
 
   try {
-    const stored = window.localStorage.getItem(getWorkflowKey(companyId));
+    const stored = window.localStorage.getItem(STORAGE_KEY);
     if (!stored) return DEFAULT_TICKET_WORKFLOW;
 
     const parsed = JSON.parse(stored) as TicketWorkflowStatus[];
@@ -59,10 +54,9 @@ export const loadTicketWorkflow = (
 };
 
 export const saveTicketWorkflow = (
-  companyId: number | string | null | undefined,
   workflow: TicketWorkflowStatus[],
 ) => {
-  window.localStorage.setItem(getWorkflowKey(companyId), JSON.stringify(workflow));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workflow));
 };
 
 export const slugifyTicketStatus = (label: string) =>

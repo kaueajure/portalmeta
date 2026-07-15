@@ -9,7 +9,6 @@ import {
   ChevronRight,
   RefreshCw,
   FilterX,
-  Building2,
 } from "lucide-react";
 import { PageShell } from "../layout/PageShell";
 import { Badge } from "../ui/Badge";
@@ -158,7 +157,7 @@ export const LogsPage = () => {
                 />
                 <input
                   type="text"
-                  placeholder="Buscar por descrição, usuário ou empresa..."
+                  placeholder="Buscar por descrição ou usuário..."
                   className="w-full h-8 bg-slate-50 border border-slate-200 rounded-md pl-9 pr-4 text-xs font-medium outline-none focus:ring-1 focus:ring-blue-500 transition-all font-sans"
                   value={filters.search}
                   onChange={(e) =>
@@ -310,10 +309,6 @@ export const LogsPage = () => {
                             <div className="min-w-0">
                               <div className="text-[13px] font-medium text-slate-900 leading-tight truncate">
                                 {log.usuario_nome || "Sistema"}
-                              </div>
-                              <div className="text-[11px] font-medium text-slate-500 leading-tight flex items-center gap-1 mt-0.5">
-                                <Building2 size={10} />{" "}
-                                {log.empresa_nome || "Master"}
                               </div>
                             </div>
                           </div>

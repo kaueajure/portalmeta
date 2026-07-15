@@ -6,13 +6,11 @@ import {
   TicketListResponse,
   TicketKanbanResponse,
   TicketStatus,
-  Empresa,
 } from "../../types";
 import {
   Plus,
   Kanban,
   List as ListIcon,
-  Building,
   Layers,
   User as UserIcon,
   UserMinus,
@@ -45,7 +43,6 @@ import { TeamSidebar } from "../tickets/TeamSidebar";
 import { TicketFilterDrawer } from "../tickets/TicketFilterDrawer";
 import { LoadingState } from "../ui/LoadingState";
 import { ErrorState } from "../ui/ErrorState";
-import { EmptyState } from "../ui/EmptyState";
 import {
   TicketAdvancedFilters as IAdvancedFilters,
   TicketStatusSpecial,
@@ -102,45 +99,6 @@ const MORE_QUEUES: {
   },
   { id: "precisa_resposta", label: "Precisa resposta", icon: AlertCircle },
 ];
-
-const EMPTY_KANBAN_COLUMNS = [
-  { id: "aberto" as TicketStatus, title: "Aberto", count: 0, tickets: [] },
-  {
-    id: "em_andamento" as TicketStatus,
-    title: "Em andamento",
-    count: 0,
-    tickets: [],
-  },
-  {
-    id: "aguardando_cliente" as TicketStatus,
-    title: "Aguardando resposta",
-    count: 0,
-    tickets: [],
-  },
-  {
-    id: "resolvido" as TicketStatus,
-    title: "Finalizado",
-    count: 0,
-    tickets: [],
-  },
-  {
-    id: "fechado" as TicketStatus,
-    title: "Fechado",
-    count: 0,
-    tickets: [],
-  },
-];
-
-const EMPTY_QUEUES = {
-  todos: 0,
-  meus: 0,
-  sem_responsavel: 0,
-  urgentes: 0,
-  sla_vencido: 0,
-  vence_em_breve: 0,
-  aguardando_cliente: 0,
-  precisa_resposta: 0,
-};
 
 const queueChipBaseClass =
   "relative flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold rounded-md transition-all whitespace-nowrap border";
@@ -218,8 +176,8 @@ const TICKET_LOCAL_VIEWS_PREFIX = "portalmeta.ticketViews.local";
 const getTicketFilterStateKey = (userId: number) =>
   `${TICKET_FILTER_STATE_PREFIX}.${userId}`;
 
-const getTicketLocalViewsKey = (userId: number, companyScope: string | number | null | undefined) =>
-  `${TICKET_LOCAL_VIEWS_PREFIX}.${userId}.${companyScope || "global"}`;
+const getTicketLocalViewsKey = (userId: number) =>
+  `${TICKET_LOCAL_VIEWS_PREFIX}.${userId}`;
 
 const readStoredFilters = (userId: number): TicketFilterSnapshot | null => {
   if (typeof window === "undefined") return null;
@@ -233,13 +191,10 @@ const readStoredFilters = (userId: number): TicketFilterSnapshot | null => {
   }
 };
 
-const readLocalViews = (
-  userId: number,
-  companyScope: string | number | null | undefined,
-): TicketView[] => {
+const readLocalViews = (userId: number): TicketView[] => {
   if (typeof window === "undefined") return [];
   try {
-    const stored = window.localStorage.getItem(getTicketLocalViewsKey(userId, companyScope));
+    const stored = window.localStorage.getItem(getTicketLocalViewsKey(userId));
     if (!stored) return [];
     const parsed = JSON.parse(stored) as TicketView[];
     return Array.isArray(parsed) ? parsed : [];
@@ -250,12 +205,11 @@ const readLocalViews = (
 
 const writeLocalViews = (
   userId: number,
-  companyScope: string | number | null | undefined,
   views: TicketView[],
 ) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(
-    getTicketLocalViewsKey(userId, companyScope),
+    getTicketLocalViewsKey(userId),
     JSON.stringify(views),
   );
 };
@@ -363,12 +317,6 @@ export const TicketsPage = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [devCompanyId, setDevCompanyId] = useState<string>(() =>
-    currentUser.desenvolvedor && currentUser.empresa_id
-      ? String(currentUser.empresa_id)
-      : "",
-  );
-  const [companies, setCompanies] = useState<Empresa[]>([]);
   const [agents, setAgents] = useState<User[]>([]);
 
   // Bulk Selection
@@ -391,16 +339,7 @@ export const TicketsPage = ({
     activeServices,
     loading: ticketOptionsLoading,
     error: ticketOptionsError,
-  } = useTicketOptions(
-    currentUser.desenvolvedor
-      ? devCompanyId || undefined
-      : undefined,
-    { scope: "current-user" },
-  );
-
-  const workflowCompanyKey = currentUser.desenvolvedor
-    ? devCompanyId || "dev"
-    : currentUser.empresa_id;
+  } = useTicketOptions();
 
   useEffect(() => {
     const handleResize = () => {
@@ -438,20 +377,13 @@ export const TicketsPage = ({
 
   useEffect(() => {
     const fetchWorkflowStatuses = async () => {
-      if (!workflowCompanyKey || workflowCompanyKey === "dev") {
-        setWorkflowStatuses([]);
-        setWorkflowDraftStatuses([]);
-        setWorkflowUsage({ tickets: {}, automations: {} });
-        return;
-      }
-
       try {
         setWorkflowLoading(true);
         setWorkflowError(null);
         const [rows, usage] = await Promise.all([
-          api.get<any[]>(`/companies/${workflowCompanyKey}/ticket-statuses`),
+          api.get<any[]>('/ticket-settings/statuses'),
           api.get<{ tickets: Record<string, number>; automations: Record<string, number> }>(
-            `/companies/${workflowCompanyKey}/ticket-statuses/usage`,
+            '/ticket-settings/statuses/usage',
           ).catch(() => ({ tickets: {}, automations: {} })),
         ]);
         const mapped = mapWorkflowRows(rows);
@@ -459,7 +391,7 @@ export const TicketsPage = ({
         setWorkflowDraftStatuses(mapped);
         setWorkflowUsage(usage);
       } catch (err) {
-        const fallback = loadTicketWorkflow(workflowCompanyKey);
+        const fallback = loadTicketWorkflow();
         setWorkflowStatuses(fallback);
         setWorkflowDraftStatuses(fallback);
         setWorkflowError("Erro ao carregar status de atendimento.");
@@ -472,7 +404,7 @@ export const TicketsPage = ({
     fetchWorkflowStatuses();
     setPendingRemoveWorkflowStatusId(null);
     setNewWorkflowStatusLabel("");
-  }, [workflowCompanyKey]);
+  }, []);
 
   const validateWorkflowDraft = (next: TicketWorkflowStatus[]): string | null => {
     const activeStatuses = next.filter((status) => status.active);
@@ -488,8 +420,6 @@ export const TicketsPage = ({
   };
 
   const saveWorkflowStatuses = async () => {
-    if (!workflowCompanyKey || workflowCompanyKey === "dev") return;
-
     const validation = validateWorkflowDraft(workflowDraftStatuses);
     if (validation) {
       setWorkflowError(validation);
@@ -501,14 +431,14 @@ export const TicketsPage = ({
       setWorkflowSaving(true);
       setWorkflowError(null);
       const rows = await api.put<any[]>(
-        `/companies/${workflowCompanyKey}/ticket-statuses`,
+        '/ticket-settings/statuses',
         { statuses: buildWorkflowPayload(workflowDraftStatuses) },
       );
       const mapped = mapWorkflowRows(rows);
       setWorkflowStatuses(mapped);
       setWorkflowDraftStatuses(mapped);
       const usage = await api.get<{ tickets: Record<string, number>; automations: Record<string, number> }>(
-        `/companies/${workflowCompanyKey}/ticket-statuses/usage`,
+        '/ticket-settings/statuses/usage',
       ).catch(() => ({ tickets: {}, automations: {} }));
       setWorkflowUsage(usage);
       addToast("Fluxo de atendimento salvo.", "success");
@@ -629,7 +559,7 @@ export const TicketsPage = ({
   const canCreateTicket = hasPermission(currentUser, "tickets.criar");
   const canBulkActions = hasPermission(currentUser, "tickets.acoes_em_massa");
   const canViewTeam = hasPermission(currentUser, "usuarios.visualizar");
-  const canConfigureTicketStatuses = hasPermission(currentUser, "empresas.gerenciar_configuracoes");
+  const canConfigureTicketStatuses = hasPermission(currentUser, "configuracoes.atendimento");
   const canDeleteTickets = hasPermission(currentUser, "tickets.excluir");
 
   const categoryOptionsForFilter = [
@@ -678,8 +608,6 @@ export const TicketsPage = ({
 
   useEffect(() => {
     if (currentUser.desenvolvedor || hasPermission(currentUser, "tickets.ver_todos")) {
-      api.get<Empresa[]>("/companies").then(setCompanies).catch(console.error);
-
       // Fetch agents for bulk assignment
       api
         .get<User[]>("/users")
@@ -696,34 +624,6 @@ export const TicketsPage = ({
         .catch(console.error);
     }
   }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser.desenvolvedor || devCompanyId || companies.length === 0) {
-      return;
-    }
-
-    if (!currentUser.empresa_id) {
-      if (companies.length === 1) {
-        setDevCompanyId(String(companies[0].id));
-      }
-      return;
-    }
-
-    const linkedCompany = companies.find(
-      (company) => Number(company.id) === Number(currentUser.empresa_id),
-    );
-
-    if (linkedCompany) {
-      setDevCompanyId(String(linkedCompany.id));
-    }
-  }, [currentUser.desenvolvedor, currentUser.empresa_id, devCompanyId, companies]);
-
-  const handleDevCompanyChange = (companyId: string) => {
-    setDevCompanyId(companyId);
-    setCategoryFilter("todas");
-    setServiceFilter("todos");
-    setCurrentViewId(null);
-  };
 
   const getCurrentFilterSnapshot = (): TicketFilterSnapshot => ({
     status: statusFilter as any,
@@ -804,25 +704,14 @@ export const TicketsPage = ({
   };
 
   useEffect(() => {
-    if (currentUser.desenvolvedor) {
-      if (devCompanyId) {
-        fetchViews(devCompanyId);
-      } else {
-        setSavedViews([]);
-      }
-      setCurrentViewId(null);
-    } else {
-      fetchViews();
-    }
-  }, [currentUser, devCompanyId]);
+    fetchViews();
+    setCurrentViewId(null);
+  }, [currentUser.id]);
 
-  const fetchViews = async (empresaId?: string) => {
-    const localViews = readLocalViews(currentUser.id, empresaId || currentUser.empresa_id);
+  const fetchViews = async () => {
+    const localViews = readLocalViews(currentUser.id);
     try {
-      const url = empresaId
-        ? `/tickets/views?empresa_id=${empresaId}`
-        : "/tickets/views";
-      const views = await api.get<TicketView[]>(url);
+      const views = await api.get<TicketView[]>('/tickets/views');
       setSavedViews([...views, ...localViews]);
     } catch (err) {
       console.error("Erro ao carregar views:", err);
@@ -834,41 +723,10 @@ export const TicketsPage = ({
     const runId = fetchRunRef.current + 1;
     fetchRunRef.current = runId;
 
-    if (!!currentUser.desenvolvedor && !devCompanyId) {
-      setTicketsResponse({
-        data: [],
-        meta: { page: 1, limit: 15, total: 0, totalPages: 1 },
-        summary: {
-          total: 0,
-          aberto: 0,
-          em_andamento: 0,
-          aguardando_cliente: 0,
-          resolvido: 0,
-          fechado: 0,
-        },
-        queues: EMPTY_QUEUES,
-      });
-      setKanbanResponse({
-        columns: EMPTY_KANBAN_COLUMNS,
-        totals: {
-          total: 0,
-          aberto: 0,
-          em_andamento: 0,
-          aguardando_cliente: 0,
-          resolvido: 0,
-          fechado: 0,
-        },
-        queues: EMPTY_QUEUES,
-      });
-      if (fetchRunRef.current === runId) setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
     try {
       const query = new URLSearchParams();
-      if (!!currentUser.desenvolvedor) query.append("empresa_id", devCompanyId);
       if (searchTerm) query.append("search", searchTerm);
       if (statusFilter !== "todos") query.append("status", statusFilter);
       if (priorityFilter !== "todas")
@@ -960,7 +818,6 @@ export const TicketsPage = ({
     categoryFilter,
     serviceFilter,
     effectiveViewMode,
-    devCompanyId,
     selectedQueue,
     advancedFilters,
     sortBy,
@@ -980,7 +837,6 @@ export const TicketsPage = ({
     serviceFilter,
     effectiveViewMode,
     currentPage,
-    devCompanyId,
     selectedQueue,
     advancedFilters,
     sortBy,
@@ -1148,11 +1004,6 @@ export const TicketsPage = ({
   };
 
   const handleSaveView = async (nome: string) => {
-    if (currentUser.desenvolvedor && !devCompanyId) {
-      addToast("Selecione uma empresa antes de salvar uma view.", "error");
-      return;
-    }
-
     const cleanName = nome.trim();
     if (!cleanName) {
       addToast("Informe um nome para o filtro salvo.", "error");
@@ -1160,22 +1011,16 @@ export const TicketsPage = ({
     }
 
     const filtros_json = getCurrentFilterSnapshot();
-    const empresa_id = currentUser.desenvolvedor
-      ? Number(devCompanyId)
-      : currentUser.empresa_id;
-
     try {
       const response = await api.post<{ id: number }>("/tickets/views", {
         nome: cleanName,
         filtros_json,
-        empresa_id,
       });
 
       const newView: TicketView = {
         id: response.id,
         nome: cleanName,
         filtros_json,
-        empresa_id: empresa_id || 0,
         usuario_id: currentUser.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -1184,21 +1029,19 @@ export const TicketsPage = ({
       setCurrentViewId(response.id);
       addToast("Visualização salva com sucesso!");
     } catch (err) {
-      const companyScope = currentUser.desenvolvedor ? devCompanyId : currentUser.empresa_id;
       const localView: TicketView = {
         id: -Date.now(),
         nome: cleanName,
         filtros_json,
-        empresa_id: empresa_id || 0,
         usuario_id: currentUser.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       const nextLocalViews = [
-        ...readLocalViews(currentUser.id, companyScope),
+        ...readLocalViews(currentUser.id),
         localView,
       ];
-      writeLocalViews(currentUser.id, companyScope, nextLocalViews);
+      writeLocalViews(currentUser.id, nextLocalViews);
       setSavedViews((prev) => [...prev, localView]);
       setCurrentViewId(localView.id);
       addToast("Filtro salvo localmente neste navegador.", "info");
@@ -1209,9 +1052,8 @@ export const TicketsPage = ({
   const handleDeleteView = async (id: number) => {
     if (!confirm("Deseja excluir esta view?")) return;
     if (id < 0) {
-      const companyScope = currentUser.desenvolvedor ? devCompanyId : currentUser.empresa_id;
-      const nextLocalViews = readLocalViews(currentUser.id, companyScope).filter((v) => v.id !== id);
-      writeLocalViews(currentUser.id, companyScope, nextLocalViews);
+      const nextLocalViews = readLocalViews(currentUser.id).filter((v) => v.id !== id);
+      writeLocalViews(currentUser.id, nextLocalViews);
       setSavedViews((prev) => prev.filter((v) => v.id !== id));
       if (currentViewId === id) setCurrentViewId(null);
       addToast("Filtro salvo removido.");
@@ -1253,7 +1095,6 @@ export const TicketsPage = ({
       "Categoria",
       "Responsável",
       "Solicitante",
-      "Empresa",
       "Tags",
       "Criado em",
       "Atualizado em",
@@ -1271,7 +1112,6 @@ export const TicketsPage = ({
           t.categoria || "",
           t.responsavel_nome || "N/A",
           t.cliente_nome || "N/A",
-          t.empresa_nome || "N/A",
           `"${(t.tags || []).join(", ")}"`,
           safeFormatDateTime(t.created_at),
           safeFormatDateTime(t.updated_at),
@@ -1481,29 +1321,6 @@ export const TicketsPage = ({
                     </span>
                   </button>
                 </div>
-
-                {!!currentUser.desenvolvedor && (
-                  <div className="relative min-w-[150px] flex-1 sm:w-44 sm:flex-none">
-                    <Building
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"
-                      size={14}
-                    />
-                    <Select
-                      size="sm"
-                      value={devCompanyId}
-                      onChange={handleDevCompanyChange}
-                      placeholder="Empresa..."
-                      buttonClassName="pl-8 bg-slate-50 border-slate-200 h-9 text-[11px]"
-                      options={[
-                        { value: "", label: "Selecione a empresa" },
-                        ...companies.map((emp) => ({
-                          value: String(emp.id),
-                          label: emp.nome,
-                        })),
-                      ]}
-                    />
-                  </div>
-                )}
 
                 <div className="flex min-w-[180px] flex-1 items-center gap-1 sm:flex-none">
                   <Select
@@ -1770,13 +1587,9 @@ export const TicketsPage = ({
                         <div className="px-3 py-2 text-xs font-medium text-rose-600">
                           {ticketOptionsError}
                         </div>
-                      ) : currentUser.desenvolvedor && !devCompanyId ? (
-                        <div className="px-3 py-2 text-xs font-medium text-slate-400">
-                          Selecione uma empresa para ver categorias.
-                        </div>
                       ) : categoryQuickFilterOptions.length === 1 ? (
                         <div className="px-3 py-2 text-xs font-medium text-slate-400">
-                          Nenhuma categoria ativa nesta empresa.
+                          Nenhuma categoria ativa.
                         </div>
                       ) : (
                         categoryQuickFilterOptions.map((option) => {
@@ -1850,13 +1663,7 @@ export const TicketsPage = ({
               "relative z-0 transition-all duration-300 flex-1 min-h-0 bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden",
             )}
           >
-            {!!currentUser.desenvolvedor && !devCompanyId ? (
-              <EmptyState
-                title="Seleção de Ambiente Necessária"
-                description="Você está no modo desenvolvedor. Escolha uma empresa para visualizar os chamados."
-                icon={<Building size={24} />}
-              />
-            ) : loading && !kanbanResponse && !ticketsResponse ? (
+            {loading && !kanbanResponse && !ticketsResponse ? (
               <LoadingState message="Organizando sua central de chamados..." />
             ) : error ? (
               <ErrorState
@@ -1870,7 +1677,6 @@ export const TicketsPage = ({
                 onSelectTicket={onSelectTicket}
                 currentUser={currentUser}
                 onStatusChange={() => fetchData()}
-                devCompanyId={devCompanyId}
                 statusOptions={activeWorkflowStatusOptions}
                 onTicketContextMenu={handleTicketContextMenu}
               />
@@ -1904,10 +1710,7 @@ export const TicketsPage = ({
             exit={{ opacity: 0, x: 20 }}
             className="w-full lg:w-56 shrink-0"
           >
-            <TeamSidebar
-              currentUser={currentUser}
-              devCompanyId={devCompanyId}
-            />
+            <TeamSidebar currentUser={currentUser} />
           </motion.div>
         )}
       </div>

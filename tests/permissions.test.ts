@@ -11,7 +11,6 @@ import type { User } from '../src/types.ts';
 function makeUser(overrides: Partial<User> = {}): User {
   return {
     id: 1,
-    empresa_id: 10,
     nome: 'Test User',
     email: 'user@example.com',
     cargo: null,
@@ -28,7 +27,7 @@ function makeUser(overrides: Partial<User> = {}): User {
   };
 }
 
-test('master wildcard grants system permissions but not obsolete permissions', () => {
+test('master wildcard grants instance permissions but not developer-only permissions', () => {
   const user = makeUser({
     administrador: true,
     perfil: 'administrador',
@@ -38,10 +37,8 @@ test('master wildcard grants system permissions but not obsolete permissions', (
   assert.equal(hasPermission(user, 'tickets.visualizar'), true);
   assert.equal(hasPermission(user, 'ticket_mensagens.responder'), true);
   assert.equal(hasPermission(user, 'sistema.health'), true);
-  assert.equal(hasPermission(user, 'telas.visualizar'), false);
   assert.equal(hasPermission(user, 'sistema.developer'), false);
-  assert.equal(hasPermission(user, 'empresas.criar'), false);
-  assert.equal(hasPermission(user, 'empresas.excluir'), false);
+  assert.equal(hasPermission(user, 'configuracoes.identidade'), true);
 });
 
 test('explicit permissions remain precise without wildcard', () => {
@@ -54,12 +51,9 @@ test('explicit permissions remain precise without wildcard', () => {
   assert.equal(hasPermission(user, 'tickets.excluir'), false);
 });
 
-test('companies screen is unavailable after single-company refactor', () => {
-  const regularWithCompanyPermission = makeUser({
-    permissions: ['empresas.visualizar'],
-  });
-  assert.equal(hasPermission(regularWithCompanyPermission, 'empresas.visualizar'), true);
-  assert.equal(canAccessAppScreen(regularWithCompanyPermission, 'companies'), false);
+test('unknown screens are unavailable', () => {
+  const user = makeUser({ permissions: ['*'] });
+  assert.equal(canAccessAppScreen(user, 'unknown'), false);
 });
 
 test('hasAnyPermission and hasAllPermissions respect global-only wildcard exclusions', () => {
@@ -71,36 +65,25 @@ test('hasAnyPermission and hasAllPermissions respect global-only wildcard exclus
   assert.equal(hasAllPermissions(user, ['tickets.visualizar', 'sistema.developer']), false);
 });
 
-test('backend classifies only obsolete global permissions centrally', () => {
+test('backend classifies developer-only permissions centrally', () => {
   assert.equal(isGlobalOnlyPermission('*'), true);
-  assert.equal(isGlobalOnlyPermission('empresas.criar'), true);
   assert.equal(isGlobalOnlyPermission('sistema.developer'), true);
   assert.equal(isGlobalOnlyPermission('sistema.health'), false);
-  assert.equal(isGlobalOnlyPermission('telas.precos.editar'), true);
   assert.equal(isGlobalOnlyPermission('tickets.visualizar'), false);
 });
 
-test('backend allows instance system permissions and filters obsolete ones', () => {
+test('backend resolves instance permissions', () => {
   const user = makeUser({ perfil: 'atendente', desenvolvedor: false });
   const effective = resolveEffectivePermissionKeys(
     user,
     ['tickets.visualizar'],
     [
-      { permission_key: 'empresas.criar', effect: 'allow' },
+      { permission_key: 'configuracoes.identidade', effect: 'allow' },
       { permission_key: 'sistema.health', effect: 'allow' },
       { permission_key: 'tickets.editar', effect: 'allow' },
     ]
   );
 
-  assert.deepEqual(effective.sort(), ['sistema.health', 'tickets.editar', 'tickets.visualizar'].sort());
+  assert.deepEqual(effective.sort(), ['configuracoes.identidade', 'sistema.health', 'tickets.editar', 'tickets.visualizar'].sort());
   assert.equal(filterGlobalPermissionsForUser(user, ['sistema.health', 'tickets.visualizar']).includes('sistema.health'), true);
-});
-
-test('backend filters obsolete company permissions from regular profiles', () => {
-  const regular = makeUser({ perfil: 'atendente', desenvolvedor: false });
-
-  assert.deepEqual(
-    filterGlobalPermissionsForUser(regular, ['empresas.criar', 'tickets.visualizar']),
-    ['tickets.visualizar']
-  );
 });

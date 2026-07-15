@@ -182,7 +182,7 @@ router.post('/:id/ticket-categories', async (req: AuthRequest, res) => {
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -212,7 +212,7 @@ router.patch('/:id/ticket-categories/:catId', async (req: AuthRequest, res) => {
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
     const catId = parseInt(req.params.catId);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -257,7 +257,7 @@ router.delete('/:id/ticket-categories/:catId', async (req: AuthRequest, res) => 
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
     const catId = parseInt(req.params.catId);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -289,7 +289,7 @@ router.post('/:id/ticket-services', async (req: AuthRequest, res) => {
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -312,7 +312,7 @@ router.patch('/:id/ticket-services/:servId', async (req: AuthRequest, res) => {
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
     const servId = parseInt(req.params.servId);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -340,7 +340,7 @@ router.delete('/:id/ticket-services/:servId', async (req: AuthRequest, res) => {
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
     const servId = parseInt(req.params.servId);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -436,7 +436,7 @@ router.put('/:id/ticket-statuses', async (req: AuthRequest, res) => {
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
 
@@ -608,7 +608,7 @@ router.post('/:id/sla-policies', async (req: AuthRequest, res) => {
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -630,7 +630,7 @@ router.patch('/:id/sla-policies/:policyId', async (req: AuthRequest, res) => {
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
     const policyId = parseInt(req.params.policyId);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     
@@ -652,7 +652,7 @@ router.delete('/:id/sla-policies/:policyId', async (req: AuthRequest, res) => {
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     const id = parseInt(req.params.id);
     const policyId = parseInt(req.params.policyId);
-    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'empresas.gerenciar_configuracoes');
+    const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
     if (!currentUser.desenvolvedor && currentUser.empresa_id !== id) return sendError(res, 'Acesso negado', 403);
     

@@ -5,7 +5,6 @@ const userPermissionsCache = new Map();
 export function isGlobalOnlyPermission(permissionKey) {
     return (permissionKey === '*' ||
         permissionKey === 'sistema.developer' ||
-        permissionKey.startsWith('empresas.') ||
         permissionKey.startsWith('telas.'));
 }
 export function filterGlobalPermissionsForUser(user, permissionKeys) {

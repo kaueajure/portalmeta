@@ -107,7 +107,7 @@ export const Topbar = ({
               type: "ticket",
               id: ticket.id,
               title: ticket.titulo || `Chamado #${ticket.id}`,
-              subtitle: ticket.cliente_nome || ticket.empresa_nome || "Solicitante não informado",
+              subtitle: ticket.cliente_nome || "Solicitante não informado",
               meta: `#${ticket.id} - ${ticket.status?.replace(/_/g, " ") || "sem status"}`,
             });
           });
@@ -120,7 +120,7 @@ export const Topbar = ({
             id: user.id,
             title: user.nome,
             subtitle: user.email,
-            meta: user.empresa_nome || user.cargo || "Usuário",
+            meta: user.cargo || "Usuário",
           });
         });
       }

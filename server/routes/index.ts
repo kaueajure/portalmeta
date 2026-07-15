@@ -2,7 +2,6 @@ import { Router } from 'express';
 import  authRoutes from  './auth.routes.js';
 import  userRoutes from  './users.routes.js';
 import  ticketRoutes from  './tickets.routes.js';
-import  companyRoutes from  './companies.routes.js';
 import  dashboardRoutes from  './dashboard.routes.js';
 import  profileRoutes from  './profile.routes.js';
 import  logsRoutes from  './logs.routes.js';
@@ -24,13 +23,16 @@ import accessProfilesRoutes from './access-profiles.routes.js';
 import internalJobsRoutes from './internal-jobs.routes.js';
 import internalOutboxRoutes from './internal-outbox.routes.js';
 import whatsappRoutes from './whatsapp.routes.js';
+import ticketSettingsRoutes from './ticket-settings.routes.js';
+import applicationSettingsRoutes from './application-settings.routes.js';
 
 const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/tickets', ticketRoutes);
-router.use('/companies', companyRoutes);
+router.use('/ticket-settings', ticketSettingsRoutes);
+router.use('/application-settings', applicationSettingsRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/profile', profileRoutes);
 router.use('/logs', logsRoutes);
@@ -51,6 +53,6 @@ router.use('/access-profiles', accessProfilesRoutes);
 router.use('/internal/jobs', internalJobsRoutes);
 router.use('/internal/outbox', internalOutboxRoutes);
 router.use('/whatsapp', whatsappRoutes);
-router.use('/', emailChannelsRoutes); // mounted at /api/companies/:companyId/email-channels
+router.use('/', emailChannelsRoutes);
 
 export default router;
