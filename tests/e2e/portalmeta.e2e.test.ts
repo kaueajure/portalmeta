@@ -24,8 +24,8 @@ type BrowserHandle = {
 
 const RUN_E2E = process.env.RUN_E2E === '1';
 const BASE_URL = process.env.E2E_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-const E2E_EMAIL = process.env.E2E_EMAIL || process.env.DEV_EMAIL;
-const E2E_PASSWORD = process.env.E2E_PASSWORD || process.env.DEV_PASSWORD;
+const E2E_EMAIL = process.env.E2E_EMAIL;
+const E2E_PASSWORD = process.env.E2E_PASSWORD;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -119,7 +119,7 @@ async function launchBrowser(startUrl: string): Promise<BrowserHandle> {
   const chromePath = findChromeExecutable();
   assert.ok(chromePath, 'Chrome ou Edge nao encontrado. Defina CHROME_PATH para rodar e2e.');
 
-  const userDataDir = mkdtempSync(path.join(tmpdir(), 'metabit-e2e-'));
+  const userDataDir = mkdtempSync(path.join(tmpdir(), 'portalmeta-e2e-'));
   const chrome = spawn(chromePath, [
     '--headless=new',
     '--remote-debugging-port=0',
@@ -236,7 +236,7 @@ async function apiGet<T>(session: CdpSession, endpoint: string): Promise<T> {
   `, true);
 }
 
-test('metabit e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, async (t) => {
+test('portalmeta e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, async (t) => {
   const browser = await launchBrowser(`${BASE_URL}/login`);
   const { session } = browser;
   const pageErrors: string[] = [];
@@ -286,7 +286,7 @@ test('metabit e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, asy
 
     await t.test('busca global tem estado vazio ou resultados', async () => {
       const profile = await apiGet<any>(session, '/api/profile');
-      let query = 'metabit-sem-resultado-e2e';
+      let query = 'portalmeta-sem-resultado-e2e';
       if (profile?.desenvolvedor) {
         const companies = await apiGet<any[]>(session, '/api/companies').catch(() => []);
         query = companies[0]?.nome || query;
@@ -312,7 +312,7 @@ test('metabit e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, asy
       }
 
       await evaluate<void>(session, `
-        localStorage.setItem('metabit.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: ${Number(ticket.id)} }));
+        localStorage.setItem('portalmeta.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: ${Number(ticket.id)} }));
       `);
       await navigate(session, BASE_URL);
       await waitFor(session, `document.body.innerText.includes('Chamado') && (document.body.innerText.includes('Enviar resposta') || document.body.innerText.includes('Propriedades'))`, 20000);
@@ -320,7 +320,7 @@ test('metabit e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, asy
 
     await t.test('criacao de chamado abre modal', async () => {
       await evaluate<void>(session, `
-        localStorage.setItem('metabit.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
+        localStorage.setItem('portalmeta.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
       `);
       await navigate(session, BASE_URL);
       await waitFor(session, `document.body.innerText.includes('Central de Chamados')`, 15000);
@@ -345,7 +345,7 @@ test('metabit e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, asy
         mobile: true,
       });
       await evaluate<void>(session, `
-        localStorage.setItem('metabit.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
+        localStorage.setItem('portalmeta.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
       `);
       await navigate(session, BASE_URL);
       await waitFor(session, `document.body.innerText.includes('Central de Chamados')`, 15000);

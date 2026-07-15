@@ -444,7 +444,7 @@ export const EmailChannelsManager = ({
           </div>
           <div className="space-y-1">
             <p className="text-sm font-semibold text-slate-700">Nenhum canal configurado</p>
-            <p className="text-xs text-slate-500 max-w-xs mx-auto">Transforme e-mails encaminhados em chamados no MetaBit.</p>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">Transforme e-mails encaminhados em chamados no Portal Meta.</p>
           </div>
           {canCreate && (
             <Button size="sm" onClick={openCreateModal} variant="outline" className="h-8 text-xs">
@@ -879,7 +879,7 @@ export const EmailChannelsManager = ({
               <p className="text-[11px] text-slate-600 leading-relaxed">
                 Para <strong>receber</strong> chamados por e-mail, crie no seu provedor um encaminhamento automático de{' '}
                 <strong className="break-all">{smtpModalChannel.email_publico}</strong> para o endereço de entrada abaixo.
-                Assim, quando o cliente enviar um e-mail, o MetaBit cria ou atualiza o chamado.
+                Assim, quando o cliente enviar um e-mail, o Portal Meta cria ou atualiza o chamado.
               </p>
 
               <div className="space-y-1">
@@ -890,7 +890,7 @@ export const EmailChannelsManager = ({
               </div>
 
               <div className="space-y-1">
-                <span className="text-[11px] font-medium text-slate-500">Endereço de entrada MetaBit</span>
+                <span className="text-[11px] font-medium text-slate-500">Endereço de entrada do Portal Meta</span>
                 <div className="bg-white p-2 rounded-md border border-slate-200 flex items-center justify-between gap-3">
                   <p className="text-xs font-mono text-slate-600 truncate select-all">{smtpModalChannel.inbound_address}</p>
                   <Button

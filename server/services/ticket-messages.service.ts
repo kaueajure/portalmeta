@@ -289,7 +289,7 @@ class TicketMessagesService {
           // Get the original messageId from the ticket or the latest message for threading
           const replyToId = ticket.message_id;
           
-          const outboundMessageId = `<ticket-${ticket_id}-msg-${messageId}@metabit.com.br>`;
+          const outboundMessageId = `<ticket-${ticket_id}-msg-${messageId}@portalmeta.com.br>`;
           console.log(`[TicketMessagesService] Generated outboundMessageId: ${maskIdentifier(outboundMessageId)}`);
           
           try {

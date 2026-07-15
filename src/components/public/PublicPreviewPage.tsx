@@ -94,7 +94,7 @@ export const PublicPreviewPage = ({ onNavigate }: PublicPreviewPageProps) => {
             Prévia Visual
           </div>
           <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-slate-900">
-            Veja como o MetaBit organiza sua operação.
+            Veja como o Portal Meta organiza sua operação.
           </h1>
           <p className="text-base lg:text-lg font-medium text-slate-600 leading-relaxed max-w-2xl mx-auto">
             Abaixo preparamos uma demonstração da interface logada do sistema. Você pode navegar visualmente entre os módulos simulados.
@@ -130,7 +130,7 @@ export const PublicPreviewPage = ({ onNavigate }: PublicPreviewPageProps) => {
                <div className="h-12 flex items-center justify-between px-4 border-b border-slate-100 shrink-0">
                   <div className="flex items-center gap-2">
                      <AppLogo size={24} />
-                     <span className="text-[14px] font-bold text-slate-900 tracking-tight">MetaBit</span>
+                     <span className="text-[14px] font-bold text-slate-900 tracking-tight">Portal Meta</span>
                   </div>
                </div>
 

@@ -126,7 +126,7 @@ export const PERMISSIONS_CATALOG = [
     { key: 'configuracoes.preferencias', modulo: 'Configurações', grupo: 'Preferências', nome: 'Ver e editar preferências gerais', descricao: 'Parametrizar configurações menores.', nivel_risk: 'baixo', order: 1515 },
     { key: 'configuracoes.empresa', modulo: 'Configurações', grupo: 'Preferências', nome: 'Configurar dados da empresa sede', descricao: 'Atualizar contatos padrões e políticas globais.', nivel_risk: 'medio', order: 1520 },
     { key: 'configuracoes.atendimento', modulo: 'Configurações', grupo: 'Preferências', nome: 'Configurar central de chamados', descricao: 'Mudar status válidos, tipos de chamado padrão e campos obrigatórios.', nivel_risk: 'alto', order: 1530 },
-    { key: 'configuracoes.sistema', modulo: 'Configurações', grupo: 'Segurança', nome: 'Ver configurações de sistema', descricao: 'Sincronizações críticas do MetaBit.', nivel_risk: 'alto', order: 1540 },
+    { key: 'configuracoes.sistema', modulo: 'Configurações', grupo: 'Segurança', nome: 'Ver configurações de sistema', descricao: 'Sincronizações críticas do Portal Meta.', nivel_risk: 'alto', order: 1540 },
     { key: 'configuracoes.gerenciar', modulo: 'Configurações', grupo: 'Geral', nome: 'Gestão completa de configurações', descricao: 'Controle mestre de todas as telas administrativas.', nivel_risk: 'critico', order: 1550 },
     // TELAS PÚBLICAS
     { key: 'telas.visualizar', modulo: 'Telas Públicas', grupo: 'Acesso', nome: 'Ver painel de telas públicas', descricao: 'Olhar as áreas editáveis de site externo.', nivel_risk: 'baixo', order: 1600 },

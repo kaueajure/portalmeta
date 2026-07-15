@@ -174,7 +174,7 @@ export const Sidebar = ({
                 isCollapsed && "lg:pointer-events-none lg:max-w-0 lg:opacity-0",
               )}
             >
-              MetaBit
+              Portal Meta
             </span>
           </div>
           {onToggleCollapse && (

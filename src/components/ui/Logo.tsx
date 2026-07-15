@@ -60,7 +60,7 @@ export const AppLogo = ({ size = 20, className }: LogoProps) => {
       style={{ width: size, height: size }}
     >
       <img
-        src="/logo.png"
+        src="/favicon.png"
         alt="MetaBit Logo"
         width={size}
         height={size}

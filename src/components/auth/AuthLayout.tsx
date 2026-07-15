@@ -23,7 +23,7 @@ export const AuthLayout = ({ children }: AuthLayoutProps) => {
             <div className="relative z-10 space-y-8 flex-1">
               <div className="flex items-center gap-2.5">
                 <AppLogo size={28} />
-                <span className="text-xl font-bold tracking-tight text-slate-900">MetaBit</span>
+                <span className="text-xl font-bold tracking-tight text-slate-900">Portal Meta</span>
               </div>
               
               <div className="space-y-4 max-w-md">

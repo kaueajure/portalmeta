@@ -5,10 +5,14 @@ const SOURCE_COMPANY_ID = 1;
  * depois do backup e da validacao das contagens.
  */
 export async function up(connection) {
+    // Banco novo: cria somente a identidade legada minima necessaria durante a
+    // fase de compatibilidade. Ela sera removida na migration de contrato.
+    await connection.query(`INSERT INTO empresas (id, nome, ativo)
+     VALUES (?, 'MetaBit', 1)
+     ON DUPLICATE KEY UPDATE nome = 'MetaBit', ativo = 1`, [SOURCE_COMPANY_ID]);
     const [companies] = await connection.query('SELECT id, nome FROM empresas WHERE id = ? LIMIT 1', [SOURCE_COMPANY_ID]);
-    if (companies.length !== 1) {
-        throw new Error('Migracao single-company abortada: empresa de origem ID 1 nao encontrada.');
-    }
+    if (companies.length !== 1)
+        throw new Error('Falha ao preparar a identidade MetaBit.');
     await connection.query(`
     CREATE TABLE IF NOT EXISTS application_settings (
       id TINYINT UNSIGNED NOT NULL PRIMARY KEY,

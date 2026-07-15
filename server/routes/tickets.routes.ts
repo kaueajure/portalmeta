@@ -182,7 +182,7 @@ async function sendPublicAttachmentEmail(params: {
     return;
   }
 
-  const outboundMessageId = `<ticket-${ticketId}-msg-${messageId}-attachments@metabit.com.br>`;
+  const outboundMessageId = `<ticket-${ticketId}-msg-${messageId}-attachments@portalmeta.com.br>`;
   await emailOutboxService.enqueueTicketEmail({
     to: row.cliente_email,
     ticketId,

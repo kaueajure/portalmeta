@@ -13,9 +13,8 @@ const userPermissionsCache = new Map<number, { permissions: string[]; expiresAt:
 export function isGlobalOnlyPermission(permissionKey: string): boolean {
   return (
     permissionKey === '*' ||
-    permissionKey.startsWith('sistema.') ||
-    permissionKey.startsWith('telas.') ||
-    ['empresas.criar', 'empresas.excluir', 'empresas.desativar', 'configuracoes.sistema'].includes(permissionKey)
+    permissionKey === 'sistema.developer' ||
+    permissionKey.startsWith('empresas.')
   );
 }
 

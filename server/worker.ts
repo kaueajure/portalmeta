@@ -1,5 +1,5 @@
 /**
- * MetaBit Worker Entrypoint
+ * Portal Meta Worker Entrypoint
  * 
  * Este arquivo é um alias para rodar o processo como worker.
  * Ele configura as variáveis de ambiente para desativar o servidor web 
@@ -12,7 +12,7 @@ if (process.env.ENABLE_WEB_SERVER === undefined) {
 }
 
 console.log('--------------------------------------------------');
-console.log('🛠️  METABIT WORKER MODE');
+console.log('🛠️  PORTAL META WORKER MODE');
 console.log('--------------------------------------------------');
 
 // Dynamic import ensures that the environment variable set above is picked up

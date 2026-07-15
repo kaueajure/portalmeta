@@ -6,7 +6,6 @@ import {
   isGlobalOnlyPermission,
   resolveEffectivePermissionKeys
 } from '../server/services/permissions.service.ts';
-import { isDeveloperUser } from '../server/utils/user-scope.ts';
 import type { User } from '../src/types.ts';
 
 function makeUser(overrides: Partial<User> = {}): User {
@@ -29,21 +28,7 @@ function makeUser(overrides: Partial<User> = {}): User {
   };
 }
 
-test('desenvolvedor is the only global user scope', () => {
-  assert.equal(isDeveloperUser(makeUser({ desenvolvedor: true })), true);
-  assert.equal(isDeveloperUser(makeUser({ perfil: 'desenvolvedor' })), true);
-  assert.equal(isDeveloperUser(makeUser({ administrador: true, perfil: 'administrador' })), false);
-});
-
-test('desenvolvedor can access global permissions', () => {
-  const user = makeUser({ desenvolvedor: true, permissions: [] });
-
-  assert.equal(hasPermission(user, 'sistema.health'), true);
-  assert.equal(hasPermission(user, 'empresas.criar'), true);
-  assert.equal(hasPermission(user, 'tickets.visualizar'), true);
-});
-
-test('tenant wildcard does not grant global-only permissions', () => {
+test('master wildcard grants system permissions but not obsolete permissions', () => {
   const user = makeUser({
     administrador: true,
     perfil: 'administrador',
@@ -52,8 +37,9 @@ test('tenant wildcard does not grant global-only permissions', () => {
 
   assert.equal(hasPermission(user, 'tickets.visualizar'), true);
   assert.equal(hasPermission(user, 'ticket_mensagens.responder'), true);
-  assert.equal(hasPermission(user, 'sistema.health'), false);
-  assert.equal(hasPermission(user, 'telas.visualizar'), false);
+  assert.equal(hasPermission(user, 'sistema.health'), true);
+  assert.equal(hasPermission(user, 'telas.visualizar'), true);
+  assert.equal(hasPermission(user, 'sistema.developer'), false);
   assert.equal(hasPermission(user, 'empresas.criar'), false);
   assert.equal(hasPermission(user, 'empresas.excluir'), false);
 });
@@ -68,19 +54,12 @@ test('explicit permissions remain precise without wildcard', () => {
   assert.equal(hasPermission(user, 'tickets.excluir'), false);
 });
 
-test('companies screen is visible only to developer users', () => {
+test('companies screen is unavailable after single-company refactor', () => {
   const regularWithCompanyPermission = makeUser({
     permissions: ['empresas.visualizar'],
   });
-  const developer = makeUser({
-    perfil: 'desenvolvedor',
-    desenvolvedor: true,
-    permissions: [],
-  });
-
   assert.equal(hasPermission(regularWithCompanyPermission, 'empresas.visualizar'), true);
   assert.equal(canAccessAppScreen(regularWithCompanyPermission, 'companies'), false);
-  assert.equal(canAccessAppScreen(developer, 'companies'), true);
 });
 
 test('hasAnyPermission and hasAllPermissions respect global-only wildcard exclusions', () => {
@@ -88,18 +67,20 @@ test('hasAnyPermission and hasAllPermissions respect global-only wildcard exclus
 
   assert.equal(hasAnyPermission(user, ['sistema.health', 'tickets.visualizar']), true);
   assert.equal(hasAllPermissions(user, ['tickets.visualizar', 'ticket_mensagens.responder']), true);
-  assert.equal(hasAllPermissions(user, ['tickets.visualizar', 'sistema.health']), false);
+  assert.equal(hasAllPermissions(user, ['tickets.visualizar', 'sistema.health']), true);
+  assert.equal(hasAllPermissions(user, ['tickets.visualizar', 'sistema.developer']), false);
 });
 
-test('backend classifies SaaS-global permissions centrally', () => {
+test('backend classifies only obsolete global permissions centrally', () => {
   assert.equal(isGlobalOnlyPermission('*'), true);
   assert.equal(isGlobalOnlyPermission('empresas.criar'), true);
-  assert.equal(isGlobalOnlyPermission('sistema.health'), true);
-  assert.equal(isGlobalOnlyPermission('telas.precos.editar'), true);
+  assert.equal(isGlobalOnlyPermission('sistema.developer'), true);
+  assert.equal(isGlobalOnlyPermission('sistema.health'), false);
+  assert.equal(isGlobalOnlyPermission('telas.precos.editar'), false);
   assert.equal(isGlobalOnlyPermission('tickets.visualizar'), false);
 });
 
-test('backend filters explicit global overrides for non-developers', () => {
+test('backend allows instance system permissions and filters obsolete ones', () => {
   const user = makeUser({ perfil: 'atendente', desenvolvedor: false });
   const effective = resolveEffectivePermissionKeys(
     user,
@@ -111,15 +92,13 @@ test('backend filters explicit global overrides for non-developers', () => {
     ]
   );
 
-  assert.deepEqual(effective.sort(), ['tickets.editar', 'tickets.visualizar'].sort());
-  assert.equal(filterGlobalPermissionsForUser(user, ['sistema.health', 'tickets.visualizar']).includes('sistema.health'), false);
+  assert.deepEqual(effective.sort(), ['sistema.health', 'tickets.editar', 'tickets.visualizar'].sort());
+  assert.equal(filterGlobalPermissionsForUser(user, ['sistema.health', 'tickets.visualizar']).includes('sistema.health'), true);
 });
 
-test('backend keeps global permissions available only for developers', () => {
-  const developer = makeUser({ perfil: 'desenvolvedor', desenvolvedor: true });
+test('backend filters obsolete company permissions from regular profiles', () => {
   const regular = makeUser({ perfil: 'atendente', desenvolvedor: false });
 
-  assert.deepEqual(resolveEffectivePermissionKeys(developer, [], []), ['*']);
   assert.deepEqual(
     filterGlobalPermissionsForUser(regular, ['empresas.criar', 'tickets.visualizar']),
     ['tickets.visualizar']

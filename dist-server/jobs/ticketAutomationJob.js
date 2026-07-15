@@ -2,7 +2,7 @@ import pool from '../db/connection.js';
 import { runAutomations } from '../services/automations.service.js';
 // Fase 1 (escalabilidade): nome do lock distribuído (MySQL GET_LOCK) que impede
 // a execução simultânea das automações em múltiplas instâncias/processos.
-const AUTOMATION_LOCK_NAME = 'metabit:ticket-automations';
+const AUTOMATION_LOCK_NAME = 'portalmeta:ticket-automations';
 const AUTOMATION_TICKET_BATCH_SIZE = 200;
 const SLA_UPDATE_BATCH_SIZE = 1000;
 async function runBatchedUpdate(sql, params = []) {

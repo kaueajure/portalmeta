@@ -24,14 +24,14 @@ export const LoginPage = ({ onSubmit, authError, onForgotPassword, onBackToSite,
       <div className="text-center lg:text-left mb-6">
         <div className="lg:hidden flex items-center justify-center gap-2 mb-6">
           <AppLogo size={24} />
-          <span className="text-lg font-bold tracking-tight text-slate-900">MetaBit</span>
+          <span className="text-lg font-bold tracking-tight text-slate-900">Portal Meta</span>
         </div>
         
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-[11px] font-bold mb-4 uppercase tracking-wider">
-          <Cloud size={12} /> MetaBit Cloud
+          <Cloud size={12} /> Portal Meta Cloud
         </div>
         
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">Entrar no MetaBit</h2>
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight mb-2">Entrar no Portal Meta</h2>
         <p className="text-[14px] font-medium text-slate-500">Acesse sua central de atendimento.</p>
       </div>
 

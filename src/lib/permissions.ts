@@ -8,9 +8,8 @@ export function isDeveloperUser(user: User | null | undefined): boolean {
 
 function isGlobalOnlyPermission(permission: string): boolean {
   return (
-    permission.startsWith('sistema.') ||
-    permission.startsWith('telas.') ||
-    ['empresas.criar', 'empresas.excluir', 'empresas.desativar', 'configuracoes.sistema'].includes(permission)
+    permission === 'sistema.developer' ||
+    permission.startsWith('empresas.')
   );
 }
 

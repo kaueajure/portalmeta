@@ -18,7 +18,7 @@ export const PublicHomePage = ({ onNavigate }: PublicHomePageProps) => {
               Centralize atendimentos, controle SLAs e organize sua equipe.
             </h1>
             <p className="text-base lg:text-lg text-slate-500 font-medium leading-relaxed max-w-2xl mx-auto lg:mx-0">
-              O MetaBit ajuda empresas a transformar e-mails soltos, solicitações informais e demandas urgentes em tickets organizados, rastreáveis e mensuráveis.
+              O Portal Meta ajuda empresas a transformar e-mails soltos, solicitações informais e demandas urgentes em tickets organizados, rastreáveis e mensuráveis.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
                <button 
@@ -57,7 +57,7 @@ export const PublicHomePage = ({ onNavigate }: PublicHomePageProps) => {
                   <div className="w-2.5 h-2.5 rounded-full bg-red-400"></div>
                   <div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
-                  <div className="ml-4 h-5 w-48 bg-white/10 rounded text-[10px] flex items-center px-2 text-white/50 font-mono">app.metabit.com.br</div>
+                  <div className="ml-4 h-5 w-48 bg-white/10 rounded text-[10px] flex items-center px-2 text-white/50 font-mono">app.portalmeta.com.br</div>
                </div>
                <div className="flex-1 p-5 bg-slate-50">
                   <div className="flex items-center justify-between mb-5">
@@ -135,7 +135,7 @@ export const PublicHomePage = ({ onNavigate }: PublicHomePageProps) => {
       <section className="py-16 px-6 bg-white">
          <div className="max-w-6xl mx-auto space-y-12">
             <div className="text-center max-w-2xl mx-auto space-y-3">
-              <h2 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">Com o MetaBit, cada solicitação vira um fluxo claro.</h2>
+              <h2 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900">Com o Portal Meta, cada solicitação vira um fluxo claro.</h2>
               <p className="text-base lg:text-lg text-slate-500">Uma esteira completa que vai do acionamento pelo cliente até o encerramento pela equipe técnica.</p>
             </div>
             
@@ -196,7 +196,7 @@ export const PublicHomePage = ({ onNavigate }: PublicHomePageProps) => {
          <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-10">
             <div className="space-y-6">
                <div>
-                 <h2 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 mb-3">Para quem o MetaBit é ideal?</h2>
+                 <h2 className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 mb-3">Para quem o Portal Meta é ideal?</h2>
                  <p className="text-base lg:text-lg text-slate-500 mb-6">Nascemos para atender operações estruturadas que precisam de rastreabilidade, mas recusam a complexidade de sistemas legados.</p>
                </div>
                
@@ -228,7 +228,7 @@ export const PublicHomePage = ({ onNavigate }: PublicHomePageProps) => {
                      </ul>
                   </div>
                   <div className="flex-1 space-y-3">
-                     <div className="text-xs font-bold text-blue-600 uppercase tracking-tight text-center pb-2 border-b border-blue-50">Com MetaBit</div>
+                     <div className="text-xs font-bold text-blue-600 uppercase tracking-tight text-center pb-2 border-b border-blue-50">Com Portal Meta</div>
                      <ul className="space-y-3">
                        {['Central de chamados estruturada', 'Portal cliente transparente', 'Dashboard operacional', 'SLA visual por urgência'].map((t, i) => (
                          <li key={i} className="text-[13px] font-bold text-slate-800 flex items-start gap-2">
@@ -251,11 +251,11 @@ export const PublicHomePage = ({ onNavigate }: PublicHomePageProps) => {
             
             <div className="space-y-4">
                {[
-                 { q: 'O MetaBit atende operações de TI interna?', a: 'Sim. Você pode usar a plataforma tanto para clientes externos B2B quanto para chamados internos (manutenção, acessos, equipamentos).' },
+                 { q: 'O Portal Meta atende operações de TI interna?', a: 'Sim. Você pode usar a plataforma tanto para clientes externos B2B quanto para chamados internos (manutenção, acessos, equipamentos).' },
                  { q: 'Existe um limite de empresas ou clientes a cadastrar?', a: 'Depende do plano escolhido, mas nossa arquitetura é feita para suportar desde poucas dezenas até múltiplas unidades e clientes.' },
                  { q: 'Posso configurar SLA para diferentes urgências?', a: 'Sim. A plataforma permite determinar os tempos exatos para resposta e resolução conforme a prioridade (Baixa, Média, Alta, Urgente).' },
                  { q: 'As métricas estão disponíveis a qualquer momento?', a: 'Sim. O Dashboard é atualizado constantemente com informações operacionais recentes para evitar extrações manuais.' },
-                 { q: 'O formulário de contato envia e-mail automático?', a: 'Ainda não. O formulário público atual é um registro local de intenção. A melhor via de contato comercial por enquanto é enviando e-mail para contato@metabit.com.br.' },
+                 { q: 'O formulário de contato envia e-mail automático?', a: 'Ainda não. O formulário público atual é um registro local de intenção. A melhor via de contato comercial por enquanto é enviando e-mail para contato@portalmeta.com.br.' },
                ].map((faq, idx) => (
                  <div key={idx} className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
                    <h4 className="text-[14px] font-bold text-slate-900 flex items-center gap-2 mb-2">
@@ -272,7 +272,7 @@ export const PublicHomePage = ({ onNavigate }: PublicHomePageProps) => {
       <section className="py-16 px-6 bg-white border-t border-slate-100 text-center">
          <div className="max-w-2xl mx-auto space-y-6">
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Pronto para organizar seu atendimento?</h2>
-            <p className="text-slate-500 text-base lg:text-lg font-medium">Deixe a rotina caótica no passado. Fale conosco e entenda como usar o MetaBit na sua operação.</p>
+            <p className="text-slate-500 text-base lg:text-lg font-medium">Deixe a rotina caótica no passado. Fale conosco e entenda como usar o Portal Meta na sua operação.</p>
             <div className="pt-2 flex justify-center">
               <button 
                  onClick={() => onNavigate('/contato')}

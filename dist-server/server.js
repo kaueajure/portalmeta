@@ -281,7 +281,7 @@ async function startServer() {
     }
     app.use(errorHandler);
     httpServer.listen(PORT, "0.0.0.0", () => {
-        console.log(`🚀 MetaBit Server Instance running on port ${PORT}`);
+        console.log(`🚀 Portal Meta Server Instance running on port ${PORT}`);
         console.log(`Environment: ${env.NODE_ENV}`);
         console.log(`Roles: [WEB: ${env.ENABLE_WEB_SERVER}] [EMAIL_LISTENER: ${env.ENABLE_EMAIL_LISTENER}] [JOBS: ${env.ENABLE_TICKET_JOBS}]`);
         // Fase 1 (escalabilidade): avisos sobre topologia web/worker.
@@ -301,16 +301,33 @@ async function startServer() {
         // Start Jobs only if role is enabled
         if (env.ENABLE_TICKET_JOBS) {
             console.log('[BOOT] Starting Ticket Automation Jobs...');
-            setInterval(() => {
-                runTicketAutomations().catch(err => console.error('[JOB ERROR] runTicketAutomations:', err));
-            }, 5 * 60 * 1000);
-            setInterval(() => {
-                emailOutboxService.processPending().catch(err => console.error('[JOB ERROR] processEmailOutbox:', err));
-            }, 60 * 1000);
-            setTimeout(() => {
-                runTicketAutomations().catch(err => console.error('[JOB ERROR INITIAL] runTicketAutomations:', err));
-                emailOutboxService.processPending().catch(err => console.error('[JOB ERROR INITIAL] processEmailOutbox:', err));
-            }, 5000);
+            let jobsRunning = false;
+            let lastAutomationRun = 0;
+            const runBackgroundJobs = async (initial = false) => {
+                if (jobsRunning) {
+                    console.warn('[JOBS] Ciclo anterior ainda em execucao; novo ciclo ignorado.');
+                    return;
+                }
+                jobsRunning = true;
+                try {
+                    const now = Date.now();
+                    if (initial || now - lastAutomationRun >= 5 * 60 * 1000) {
+                        await runTicketAutomations();
+                        lastAutomationRun = Date.now();
+                    }
+                    // Executa depois das automacoes para reutilizar a conexao devolvida
+                    // ao pool, evitando duas negociacoes simultaneas com o MySQL remoto.
+                    await emailOutboxService.processPending();
+                }
+                catch (err) {
+                    console.error(initial ? '[JOB ERROR INITIAL]' : '[JOB ERROR]', err);
+                }
+                finally {
+                    jobsRunning = false;
+                }
+            };
+            setInterval(() => void runBackgroundJobs(false), 60 * 1000);
+            setTimeout(() => void runBackgroundJobs(true), 5000);
         }
     });
 }

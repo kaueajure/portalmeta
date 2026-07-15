@@ -212,8 +212,8 @@ import { PageShell } from "../layout/PageShell";
 
 type TicketFilterSnapshot = TicketView["filtros_json"];
 
-const TICKET_FILTER_STATE_PREFIX = "metabit.ticketFilters";
-const TICKET_LOCAL_VIEWS_PREFIX = "metabit.ticketViews.local";
+const TICKET_FILTER_STATE_PREFIX = "portalmeta.ticketFilters";
+const TICKET_LOCAL_VIEWS_PREFIX = "portalmeta.ticketViews.local";
 
 const getTicketFilterStateKey = (userId: number) =>
   `${TICKET_FILTER_STATE_PREFIX}.${userId}`;

@@ -19,7 +19,7 @@ export async function up(connection: Connection) {
   const defaultPricing = {
     header: {
       title: "Planos para diferentes fases da sua operação.",
-      subtitle: "O MetaBit pode ser adaptado ao tamanho da sua equipe, volume de tickets e necessidade de gestão de desempenho."
+      subtitle: "O Portal Meta pode ser adaptado ao tamanho da sua equipe, volume de tickets e necessidade de gestão de desempenho."
     },
     plans: [
       {
@@ -63,7 +63,7 @@ export async function up(connection: Connection) {
         highlightText: "Para operações complexas",
         priceLabel: "Sob consulta",
         features: [
-          "Gestão Multi-empresa (Multi-tenant)",
+          "Operação centralizada em uma única instância",
           "Auditoria e Logs refinados",
           "Configuração por equipe",
           "Onboarding Dedicado (Implantação)",
@@ -77,7 +77,7 @@ export async function up(connection: Connection) {
     proposalFactors: [
       "Quantidade de Atendentes",
       "Volume mensal de atendimentos",
-      "Multi-empresas e marcas",
+      "Quantidade de áreas e equipes",
       "Necessidade rigorosa de SLA",
       "Portal do Cliente para operações B2B",
       "Treinamento de Implantação"

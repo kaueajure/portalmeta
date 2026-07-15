@@ -50,9 +50,9 @@ export const sendTestEmail = async (to) => {
     const mailOptions = {
         from: env.SMTP.FROM,
         to,
-        subject: 'Teste de E-mail - MetaBit',
-        text: 'Se você está recebendo isso, a configuração SMTP do MetaBit está funcionando corretamente!',
-        html: '<b>Se você está recebendo isso, a configuração SMTP do MetaBit está funcionando corretamente!</b>',
+        subject: 'Teste de E-mail - Portal Meta',
+        text: 'Se você está recebendo isso, a configuração SMTP do Portal Meta está funcionando corretamente!',
+        html: '<b>Se você está recebendo isso, a configuração SMTP do Portal Meta está funcionando corretamente!</b>',
     };
     try {
         const info = await transporter.sendMail(mailOptions);
@@ -68,7 +68,7 @@ export const sendPasswordRecoveryEmail = async (email, token) => {
     const mailOptions = {
         from: env.SMTP.FROM,
         to: email,
-        subject: 'Recuperação de Senha - MetaBit',
+        subject: 'Recuperação de Senha - Portal Meta',
         html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
         <div style="background-color: #2563eb; padding: 24px; text-align: center;">
@@ -188,7 +188,7 @@ export const buildTicketEmailTemplate = (params) => {
                       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="email-header-row" style="border-collapse:collapse;">
                         <tr>
                           <td class="email-header-cell" style="font-family:Arial, Helvetica, sans-serif; color:#0f172a; vertical-align:top;">
-                            <div style="font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#0f172a; font-weight:700;">MetaBit</div>
+                            <div style="font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:#0f172a; font-weight:700;">Portal Meta</div>
                             <div style="font-size:13px; line-height:1.5; color:#64748b; font-weight:600; margin-top:4px;">Central de Atendimento</div>
                             <div class="email-title" style="font-size:22px; line-height:1.25; color:#0f172a; font-weight:700; margin:18px 0 8px 0;">${headline}</div>
                             <div style="font-size:14px; line-height:1.55; color:#64748b; font-weight:500; margin:0;">${safeTitle}</div>
@@ -260,7 +260,7 @@ export const sendTicketEmail = async (params, options) => {
         console.error('[Mailer] SMTP not configured. Skipping email notification.');
         return { success: false, error: 'SMTP not configured' };
     }
-    const msgId = params.messageId || `<ticket-${params.ticketId}-${Date.now()}@metabit.com.br>`;
+    const msgId = params.messageId || `<ticket-${params.ticketId}-${Date.now()}@portalmeta.com.br>`;
     const template = buildTicketEmailTemplate(params);
     const mailOptions = {
         // From: identidade do canal quando fornecida; senão, global (fallback técnico).
@@ -271,11 +271,11 @@ export const sendTicketEmail = async (params, options) => {
         replyTo: params.replyTo || env.IMAP.USER || env.SMTP.FROM,
         headers: {
             'X-Auto-Response-Suppress': 'OOF, AutoReply',
-            'X-MetaBit-Ticket-ID': params.ticketId.toString(),
+            'X-PortalMeta-Ticket-ID': params.ticketId.toString(),
             'Auto-Submitted': 'no',
-            'X-MetaBit-System': 'true',
-            'X-MetaBit-Message-Type': params.type,
-            'X-MetaBit-Thread-Key': `ticket-${params.ticketId}`
+            'X-PortalMeta-System': 'true',
+            'X-PortalMeta-Message-Type': params.type,
+            'X-PortalMeta-Thread-Key': `ticket-${params.ticketId}`
         },
         html: template.html,
         text: template.text,
@@ -329,7 +329,7 @@ export const sendPortalAccessCodeEmail = async (params) => {
           <p style="font-size: 14px; color: #94a3b8; margin-top: 24px;">Se você não solicitou este acesso, pode ignorar este e-mail com segurança.</p>
         </div>
         <div style="background-color: #f8fafc; padding: 16px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
-          Enviado por MetaBit - Gestão de Atendimento
+          Enviado por Portal Meta - Gestão de Atendimento
         </div>
       </div>
     `,

@@ -332,7 +332,7 @@ export const SettingsPage = ({
                               Perfil Corporativo
                             </h4>
                             <p className="text-[11px] text-slate-500 font-medium">
-                              Dados fundamentais da sua instância MetaBit.
+                              Dados fundamentais da sua instância Portal Meta.
                             </p>
                           </div>
                         </div>
@@ -771,7 +771,7 @@ export const SettingsPage = ({
 
                         <p className="text-[13px] text-slate-500 leading-relaxed max-w-3xl">
                           Acesso restrito para diagnóstico e manutenção
-                          estrutural do ecossistema MetaBit. Ações aqui
+                          estrutural do ecossistema Portal Meta. Ações aqui
                           impactam múltiplos módulos.
                         </p>
 

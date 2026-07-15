@@ -118,8 +118,6 @@ export const env = {
   CORS_ORIGINS: process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
     : ['https://portalmeta.com.br', 'https://www.portalmeta.com.br'],
-  DEV_EMAIL: process.env.DEV_EMAIL,
-  DEV_PASSWORD: process.env.DEV_PASSWORD,
   INBOUND_EMAIL_DOMAIN: process.env.INBOUND_EMAIL_DOMAIN || 'portalmeta.com.br',
   INBOUND_EMAIL_PREFIX: process.env.INBOUND_EMAIL_PREFIX || 'canal',
 
@@ -145,7 +143,7 @@ export const env = {
     PORT: parseInt(process.env.SMTP_PORT || '587'),
     USER: process.env.SMTP_USER as string,
     PASS: process.env.SMTP_PASS as string,
-    FROM: process.env.MAIL_FROM || '"MetaBit" <suporte@metabit.com>',
+    FROM: process.env.MAIL_FROM || '"Portal Meta" <suporte@portalmeta.com.br>',
   },
 
   // S1: TLS de e-mail. Padrão SEGURO (valida certificado).
@@ -161,7 +159,7 @@ export const env = {
   // Obrigatória quando há SMTP por canal configurado (validada no momento do uso).
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
 
-  // Fallback de envio de resposta de ticket pelo SMTP GLOBAL do MetaBit.
+  // Fallback de envio de resposta de ticket pelo SMTP GLOBAL do Portal Meta.
   // Padrão SEGURO = false: se o canal não tiver SMTP, a resposta NÃO sai com a
   // identidade global do SaaS; vira erro controlado. Ative só conscientemente.
   ALLOW_GLOBAL_TICKET_EMAIL_FALLBACK: process.env.ALLOW_GLOBAL_TICKET_EMAIL_FALLBACK === 'true',

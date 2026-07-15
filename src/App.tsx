@@ -109,7 +109,7 @@ type ActiveTab =
   | "knowledge"
   | "ai";
 
-const DASHBOARD_STATE_KEY = "metabit.dashboardState";
+const DASHBOARD_STATE_KEY = "portalmeta.dashboardState";
 
 const isActiveTab = (value: string | null): value is ActiveTab =>
   !!value &&
@@ -184,7 +184,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    return window.localStorage.getItem("metabit-sidebar-collapsed") === "true";
+    return window.localStorage.getItem("portalmeta-sidebar-collapsed") === "true";
   });
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(
     () => loadDashboardState().selectedTicketId,
@@ -196,7 +196,7 @@ export default function App() {
   const [resetEmail, setResetEmail] = useState("");
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem("metabit-theme");
+    const savedTheme = window.localStorage.getItem("portalmeta-theme");
     document.documentElement.classList.toggle(
       "theme-dark-beta",
       savedTheme === "dark-beta",
@@ -682,7 +682,7 @@ export default function App() {
         case "settings":
           return "Preferências";
         default:
-          return "MetaBit";
+          return "Portal Meta";
       }
     };
 
@@ -701,7 +701,7 @@ export default function App() {
           onToggleCollapse={() => {
             setIsSidebarCollapsed((current) => {
               const next = !current;
-              window.localStorage.setItem("metabit-sidebar-collapsed", String(next));
+              window.localStorage.setItem("portalmeta-sidebar-collapsed", String(next));
               return next;
             });
           }}

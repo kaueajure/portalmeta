@@ -4,9 +4,8 @@ import { isDeveloperUser } from '../utils/user-scope.js';
 const userPermissionsCache = new Map();
 export function isGlobalOnlyPermission(permissionKey) {
     return (permissionKey === '*' ||
-        permissionKey.startsWith('sistema.') ||
-        permissionKey.startsWith('telas.') ||
-        ['empresas.criar', 'empresas.excluir', 'empresas.desativar', 'configuracoes.sistema'].includes(permissionKey));
+        permissionKey === 'sistema.developer' ||
+        permissionKey.startsWith('empresas.'));
 }
 export function filterGlobalPermissionsForUser(user, permissionKeys) {
     if (isDeveloperUser(user))

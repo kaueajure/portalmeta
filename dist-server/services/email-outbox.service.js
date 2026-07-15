@@ -4,7 +4,7 @@ import { emailOutboundService, trackTicketEmailMessageIds } from './email-outbou
 import { maskEmail, maskIdentifier } from '../utils/sanitize.js';
 const MAX_ATTEMPTS = 5;
 const BACKOFF_MINUTES = [5, 15, 30, 60];
-const LOCK_NAME = 'metabit:email_outbox_processor';
+const LOCK_NAME = 'portalmeta:email_outbox_processor';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function serializePayload(params) {
     return JSON.stringify(params);

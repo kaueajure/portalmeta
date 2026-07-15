@@ -42,7 +42,7 @@ export async function trackTicketEmailMessageIds(empresaId, ticketId, outboundMe
 }
 class EmailOutboundService {
     async sendTicketEmail(params) {
-        const msgId = params.messageId || `<ticket-${params.ticketId}-${Date.now()}@metabit.com.br>`;
+        const msgId = params.messageId || `<ticket-${params.ticketId}-${Date.now()}@portalmeta.com.br>`;
         const emailIdentity = await getCompanyTicketEmailIdentity(params.empresaId);
         const ticketEmailParams = {
             ...params,
@@ -91,7 +91,7 @@ class EmailOutboundService {
             }
         }
         else if (!env.ALLOW_GLOBAL_TICKET_EMAIL_FALLBACK) {
-            // Canal sem SMTP configurado: NÃO enviar como MetaBit para o cliente final.
+            // Canal sem SMTP configurado: NÃO enviar como Portal Meta para o cliente final.
             return {
                 success: false,
                 error: 'Canal de envio não configurado: configure o SMTP do canal para responder ao cliente por e-mail com a identidade da empresa.'

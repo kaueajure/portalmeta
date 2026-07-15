@@ -73,7 +73,7 @@ export const PublicFeaturesPage = ({ onNavigate }: PublicFeaturesPageProps) => {
             Tudo que sua equipe precisa para atender melhor.
           </h1>
           <p className="text-lg font-medium text-slate-500 leading-relaxed max-w-2xl mx-auto">
-            Do primeiro contato até a resolução, o MetaBit organiza cada etapa do suporte sem a poluição visual de sistemas antigos.
+            Do primeiro contato até a resolução, o Portal Meta organiza cada etapa do suporte sem a poluição visual de sistemas antigos.
           </p>
         </div>
       </section>

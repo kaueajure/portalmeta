@@ -443,7 +443,7 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
                         <div className="flex items-center gap-1.5">
                           <Building2 size={12} className="text-slate-400" />
                           <span className="text-xs font-medium text-slate-600 truncate max-w-[180px]">
-                            {user.empresa_nome || "MetaBit Master"}
+                            {user.empresa_nome || "MetaBit"}
                           </span>
                         </div>
                       </td>
@@ -683,10 +683,10 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
                 }
                 onChange={setEmpresaId}
                 disabled={!!selectedUser}
-                placeholder="MetaBit Central"
+                placeholder="MetaBit"
                 buttonClassName="h-8 text-xs font-medium"
                 options={[
-                  { value: "", label: "MetaBit Central" },
+                  { value: "", label: "MetaBit" },
                   ...companies.map((c) => ({
                     value: String(c.id),
                     label: c.nome,

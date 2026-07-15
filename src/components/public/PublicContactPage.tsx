@@ -34,9 +34,9 @@ Tamanho da equipe: ${contactData.tamanhoEquipe}
 Formato atual: ${contactData.formatoAtual}
 Mensagem: ${contactData.mensagem}`;
 
-  const encodedSubject = encodeURIComponent('Demonstração MetaBit');
+  const encodedSubject = encodeURIComponent('Demonstração Portal Meta');
   const encodedBody = encodeURIComponent(bodyText);
-  const mailtoHref = `mailto:contato@metabit.com.br?subject=${encodedSubject}&body=${encodedBody}`;
+  const mailtoHref = `mailto:contato@portalmeta.com.br?subject=${encodedSubject}&body=${encodedBody}`;
 
   return (
     <div className="flex flex-col bg-white">
@@ -46,7 +46,7 @@ Mensagem: ${contactData.mensagem}`;
             Vamos entender sua operação de atendimento?
           </h1>
           <p className="text-base font-medium text-slate-500 leading-relaxed max-w-xl mx-auto">
-            Conte um pouco sobre sua equipe. Enquanto a integração automática não está ativa, o contato comercial oficial é feito por <span className="font-bold">contato@metabit.com.br</span>.
+            Conte um pouco sobre sua equipe. Enquanto a integração automática não está ativa, o contato comercial oficial é feito por <span className="font-bold">contato@portalmeta.com.br</span>.
           </p>
         </div>
       </section>
@@ -79,7 +79,7 @@ Mensagem: ${contactData.mensagem}`;
              ) : (
                <form onSubmit={handleSubmit} className="space-y-4">
                  <h2 className="text-lg font-bold text-slate-900 mb-1">Agende uma demonstração</h2>
-                 <p className="text-[13px] font-medium text-slate-500 mb-6 border-b border-slate-100 pb-4">Preencha os dados para organizar sua solicitação. No momento, o contato comercial oficial deve ser feito por contato@metabit.com.br.</p>
+                 <p className="text-[13px] font-medium text-slate-500 mb-6 border-b border-slate-100 pb-4">Preencha os dados para organizar sua solicitação. No momento, o contato comercial oficial deve ser feito por contato@portalmeta.com.br.</p>
                  
                  <div className="grid sm:grid-cols-2 gap-4">
                    <Input name="nome" value={contactData.nome} onChange={handleChange} label="Seu Nome Completo" required placeholder="Ex: João Silva" className="h-10" />
@@ -153,7 +153,7 @@ Mensagem: ${contactData.mensagem}`;
                          <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">2</div>
                          <div>
                             <div className="text-[14px] font-bold text-slate-900">Você envia o e-mail</div>
-                            <div className="text-[13px] text-slate-500 mt-1 leading-relaxed">Seu cliente de e-mail abrirá com os dados preenchidos para envio ao contato@metabit.com.br.</div>
+                            <div className="text-[13px] text-slate-500 mt-1 leading-relaxed">Seu cliente de e-mail abrirá com os dados preenchidos para envio ao contato@portalmeta.com.br.</div>
                          </div>
                       </div>
                       <div className="flex items-start gap-4">
@@ -172,7 +172,7 @@ Mensagem: ${contactData.mensagem}`;
                  <div className="space-y-3">
                     <div className="flex items-center gap-3">
                        <Mail size={16} className="text-blue-500" />
-                       <span className="text-[13px] font-bold">contato@metabit.com.br</span>
+                       <span className="text-[13px] font-bold">contato@portalmeta.com.br</span>
                     </div>
                     <div className="flex items-center gap-3">
                        <Clock size={16} className="text-blue-500" />

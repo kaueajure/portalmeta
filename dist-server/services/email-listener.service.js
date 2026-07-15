@@ -18,7 +18,7 @@ function normalizeEmailAddress(value) {
     const match = lowered.match(/<([^>]+)>/);
     return (match ? match[1] : lowered).trim();
 }
-function extractTicketIdFromMetaBitMessageId(value) {
+function extractTicketIdFromPortalMetaMessageId(value) {
     if (!value)
         return null;
     const raw = Array.isArray(value) ? value.join(' ') : String(value);
@@ -28,19 +28,19 @@ function extractTicketIdFromMetaBitMessageId(value) {
     const id = Number(match[1]);
     return Number.isInteger(id) && id > 0 ? id : null;
 }
-function looksLikeMetaBitTicketThread(subject, parsed) {
+function looksLikePortalMetaTicketThread(subject, parsed) {
     const normalizedSubject = subject || '';
     const hasTicketSubject = /\[Ticket\s*#\d+\]/i.test(normalizedSubject) ||
         /Chamado\s*#\d+/i.test(normalizedSubject) ||
         /Ticket\s*#\d+/i.test(normalizedSubject);
-    const hasMetaBitHeader = !!parsed.headers.get('x-metabit-ticket-id');
+    const hasPortalMetaHeader = !!parsed.headers.get('x-portalmeta-ticket-id');
     const refs = [
         parsed.messageId,
         parsed.inReplyTo,
         ...(Array.isArray(parsed.references) ? parsed.references : parsed.references ? [parsed.references] : [])
     ].filter(Boolean).join(' ');
-    const hasMetaBitMessageId = /ticket-\d+(?:-|@)/i.test(refs);
-    return hasTicketSubject || hasMetaBitHeader || hasMetaBitMessageId;
+    const hasPortalMetaMessageId = /ticket-\d+(?:-|@)/i.test(refs);
+    return hasTicketSubject || hasPortalMetaHeader || hasPortalMetaMessageId;
 }
 function normalizeDedupText(value) {
     return String(value || '')
@@ -71,7 +71,7 @@ function buildFallbackEmailDedupKey(parsed, subject, senderEmail, recipients = [
         attachments,
     });
     const digest = createHash('sha256').update(raw).digest('hex').slice(0, 48);
-    return `<fallback-${digest}@metabit.local>`;
+    return `<fallback-${digest}@portalmeta.local>`;
 }
 function decodeHtmlEntities(value) {
     return String(value || '')
@@ -383,7 +383,7 @@ export class EmailListenerService {
                 redirect: 'follow',
                 signal: controller.signal,
                 headers: {
-                    'User-Agent': 'MetaBit-Forwarding-Confirmation/1.0',
+                    'User-Agent': 'PortalMeta-Forwarding-Confirmation/1.0',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 },
             });
@@ -573,16 +573,16 @@ export class EmailListenerService {
                         continue;
                     }
                     const identifyTicket = async (companyId) => {
-                        // A) By X-MetaBit-Ticket-ID in headers, scoped to the recipient company
-                        const headerTicketIdStr = parsed.headers.get('x-metabit-ticket-id');
+                        // A) By X-PortalMeta-Ticket-ID in headers, scoped to the recipient company
+                        const headerTicketIdStr = parsed.headers.get('x-portalmeta-ticket-id');
                         if (headerTicketIdStr && typeof headerTicketIdStr === 'string' && !isNaN(parseInt(headerTicketIdStr))) {
                             const id = parseInt(headerTicketIdStr);
                             const [rows] = await pool.query('SELECT id, empresa_id FROM tickets WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1', [id, companyId]);
                             if (rows.length > 0) {
-                                console.log(`[Email Listener] Identified existing ticket #${id} via X-MetaBit-Ticket-ID header for company ${companyId}.`);
+                                console.log(`[Email Listener] Identified existing ticket #${id} via X-PortalMeta-Ticket-ID header for company ${companyId}.`);
                                 return { ticketId: id, hadExplicitTicketReference: true };
                             }
-                            console.warn(`[Email Listener] X-MetaBit-Ticket-ID header indicated ticket #${id}, but it is not in company ${companyId}.`);
+                            console.warn(`[Email Listener] X-PortalMeta-Ticket-ID header indicated ticket #${id}, but it is not in company ${companyId}.`);
                             return { ticketId: null, hadExplicitTicketReference: true, invalidTicketId: id };
                         }
                         // B) By [Ticket #ID], Chamado #ID, etc in subject, scoped to the recipient company
@@ -606,14 +606,14 @@ export class EmailListenerService {
                             ...references
                         ].filter(Boolean);
                         for (const candidate of candidates) {
-                            const extractedTicketId = extractTicketIdFromMetaBitMessageId(candidate);
+                            const extractedTicketId = extractTicketIdFromPortalMetaMessageId(candidate);
                             if (extractedTicketId) {
                                 const [rows] = await pool.query('SELECT id, empresa_id FROM tickets WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1', [extractedTicketId, companyId]);
                                 if (rows.length > 0) {
-                                    console.log(`[Email Listener] Identified existing ticket #${extractedTicketId} via MetaBit Message-ID pattern for company ${companyId}.`);
+                                    console.log(`[Email Listener] Identified existing ticket #${extractedTicketId} via Portal Meta Message-ID pattern for company ${companyId}.`);
                                     return { ticketId: extractedTicketId, hadExplicitTicketReference: true };
                                 }
-                                console.warn(`[Email Listener] MetaBit Message-ID pattern indicated ticket #${extractedTicketId}, but it is not in company ${companyId}.`);
+                                console.warn(`[Email Listener] Portal Meta Message-ID pattern indicated ticket #${extractedTicketId}, but it is not in company ${companyId}.`);
                                 return { ticketId: null, hadExplicitTicketReference: true, invalidTicketId: extractedTicketId };
                             }
                         }
@@ -682,7 +682,7 @@ export class EmailListenerService {
                     // 4. Anti-Loop & System Prevention
                     const precedence = (parsed.headers.get('precedence') || '').toLowerCase();
                     const autoSubmitted = (parsed.headers.get('auto-submitted') || '').toLowerCase();
-                    const isSystemHeader = parsed.headers.get('x-metabit-system') === 'true';
+                    const isSystemHeader = parsed.headers.get('x-portalmeta-system') === 'true';
                     // Better checks for system emails using normalized helpers
                     const systemEmailsNormalized = [
                         normalizeEmailAddress(env.IMAP.USER),
@@ -702,9 +702,9 @@ export class EmailListenerService {
                         await this.connection.addFlags(uid, '\\Seen');
                         continue;
                     }
-                    // Thread duplication prevention check for responses that look like MetaBit thread and have system indicators but no valid DB match
-                    if (!targetTicketId && looksLikeMetaBitTicketThread(subject, parsed)) {
-                        console.warn(`[Email Listener] [UID:${uid}] Ignored email from ${maskEmail(senderEmail)} because it looks like a MetaBit ticket thread fallback replica without active matching ticket.`);
+                    // Thread duplication prevention check for responses that look like Portal Meta thread and have system indicators but no valid DB match
+                    if (!targetTicketId && looksLikePortalMetaTicketThread(subject, parsed)) {
+                        console.warn(`[Email Listener] [UID:${uid}] Ignored email from ${maskEmail(senderEmail)} because it looks like a Portal Meta ticket thread fallback replica without active matching ticket.`);
                         await this.logSystem(targetEmpresaId, 'EMAIL_THREAD_REPLICA_IGNORED', `Email de ${maskEmail(senderEmail)} (Assunto: "${subject}") ignorado pois aparenta ser uma réplica antiga/inválida de thread sem ticket correspondente ativo.`);
                         claimedMessageHandled = true;
                         await this.connection.addFlags(uid, '\\Seen');
@@ -715,7 +715,7 @@ export class EmailListenerService {
                     // 6. Cleanup Message Body
                     let text = parsed.text || '';
                     // Common patterns to strip previous conversation
-                    text = text.split(/Em \d+ de [a-zç]+ de \d{4}.*pelo MetaBit.*escreveu:/i)[0]; // MetaBit specific
+                    text = text.split(/Em \d+ de [a-zç]+ de \d{4}.*pelo Portal Meta.*escreveu:/i)[0]; // Portal Meta specific
                     text = text.split(/Em \d+ de \w+ de \d{4}.*escreveu:/i)[0]; // Generic Portuguese
                     text = text.split(/On .* wrote:/i)[0]; // Generic English
                     text = text.split(/\r?\n\s*-+\s*Mensagem original\s*-+\s*/i)[0]; // "Original Message" separator
