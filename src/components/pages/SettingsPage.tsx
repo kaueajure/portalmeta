@@ -3,6 +3,7 @@ import { User } from "../../types";
 import { api } from "../../lib/api";
 import {
   Building2,
+  MessageCircle,
   ShieldCheck,
   Database,
   Cpu,
@@ -13,9 +14,9 @@ import {
   AlertCircle,
   Layout,
   Globe,
-  Building,
   Shield,
   RefreshCw,
+  Settings2,
 } from "lucide-react";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -27,18 +28,25 @@ import { EmailChannelsManager } from "../settings/EmailChannelsManager";
 import { TicketOptionsManager } from "../settings/TicketOptionsManager";
 import { SlaPoliciesManager } from "../settings/SlaPoliciesManager";
 import { AutomationsManager } from "../settings/AutomationsManager";
+import { WhatsAppSettingsManager } from "../settings/WhatsAppSettingsManager";
 import { hasPermission } from "../../lib/permissions";
 
 type AppTab =
   | "dashboard"
   | "tickets"
+  | "whatsapp"
   | "users"
   | "logs"
   | "profile"
   | "settings"
   | "reports";
 
-type SettingsSubTab = "identity" | "system" | "tickets";
+type SettingsSubTab =
+  | "general"
+  | "tickets"
+  | "whatsapp"
+  | "identity"
+  | "system";
 
 interface SettingsPageProps {
   currentUser: User;
@@ -99,8 +107,16 @@ export const SettingsPage = ({
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] =
-    useState<SettingsSubTab>("identity");
+  const [activeSubTab, setActiveSubTab] = useState<SettingsSubTab>(() => {
+    const requested = window.sessionStorage.getItem("portalmeta.settingsTab");
+    window.sessionStorage.removeItem("portalmeta.settingsTab");
+    return requested === "tickets" ||
+      requested === "whatsapp" ||
+      requested === "identity" ||
+      requested === "system"
+      ? requested
+      : "general";
+  });
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [healthData, setHealthData] = useState<HealthOverviewResponse | null>(
@@ -112,7 +128,7 @@ export const SettingsPage = ({
   const canManageEmailChannelsByBackend = Boolean(
     currentUser.desenvolvedor || currentUser.administrador,
   );
-  const canViewIdentityTab = canEditIdentity || canManageEmailChannelsByBackend;
+  const canViewIdentityTab = canEditIdentity;
   const canManageTicketOptions = hasPermission(
     currentUser,
     "configuracoes.atendimento",
@@ -126,20 +142,32 @@ export const SettingsPage = ({
     "automacoes.gerenciar",
   );
   const canViewTicketSettings =
-    canManageTicketOptions || canManageSlaPolicies || canManageAutomations;
+    canManageTicketOptions ||
+    canManageSlaPolicies ||
+    canManageAutomations ||
+    canManageEmailChannelsByBackend ||
+    canEditIdentity;
+  const canViewWhatsAppSettings =
+    hasPermission(currentUser, "integracoes.whatsapp.visualizar") ||
+    hasPermission(currentUser, "integracoes.whatsapp.gerenciar");
   const canViewSystemHealth = hasPermission(currentUser, "sistema.health");
   const availableSettingsTabs: Array<{ id: SettingsSubTab; visible: boolean }> = [
-    { id: "identity", visible: canViewIdentityTab },
+    { id: "general", visible: true },
     { id: "tickets", visible: canViewTicketSettings },
+    { id: "whatsapp", visible: canViewWhatsAppSettings },
+    { id: "identity", visible: canViewIdentityTab },
     { id: "system", visible: canViewSystemHealth },
   ];
 
   React.useEffect(() => {
-    if (activeSubTab !== 'identity' || !canViewIdentityTab) return;
+    if (
+      (activeSubTab !== "identity" && activeSubTab !== "tickets") ||
+      !canEditIdentity
+    ) return;
     api.get<ApplicationSettings>('/application-settings')
       .then(setIdentity)
       .catch((err) => setError(err instanceof Error ? err.message : 'Erro ao carregar a identidade institucional.'));
-  }, [activeSubTab, canViewIdentityTab]);
+  }, [activeSubTab, canEditIdentity]);
 
   React.useEffect(() => {
     const currentIsAvailable = availableSettingsTabs.some(
@@ -154,6 +182,7 @@ export const SettingsPage = ({
     activeSubTab,
     canViewIdentityTab,
     canViewTicketSettings,
+    canViewWhatsAppSettings,
     canViewSystemHealth,
   ]);
 
@@ -192,7 +221,6 @@ export const SettingsPage = ({
       endereco: String(formData.get("endereco") || ""),
       cor_principal: String(formData.get("cor_principal") || "#2563eb"),
       logo: String(formData.get("logo") || ""),
-      email_assinatura: String(formData.get("email_assinatura") || ""),
     };
 
     if (!payload.nome) {
@@ -222,54 +250,56 @@ export const SettingsPage = ({
     }
   };
 
+  const handleSaveTicketEmailSignature = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setSuccess(null);
+    setError(null);
+
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    try {
+      const updated = await api.patch<ApplicationSettings>(
+        "/application-settings",
+        { email_assinatura: String(formData.get("email_assinatura") || "") },
+      );
+      setIdentity(updated);
+      setSuccess("Assinatura dos tickets atualizada!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar a assinatura.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <PageShell
         flush
         tabs={
           <div className="flex flex-wrap gap-1 py-3 bg-white w-fit">
-            {canViewIdentityTab && (
-              <button
-                onClick={() => setActiveSubTab("identity")}
-                className={cn(
-                  "h-8 px-3 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                  activeSubTab === "identity"
-                    ? "bg-slate-100 text-slate-900 shadow-sm border border-slate-200/50"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
-                )}
-              >
-                <Building2 size={14} /> Identidade
-              </button>
-            )}
-
-            {canViewTicketSettings && (
-              <button
-                onClick={() => setActiveSubTab("tickets")}
-                className={cn(
-                  "h-8 px-3 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                  activeSubTab === "tickets"
-                    ? "bg-slate-100 text-slate-900 shadow-sm border border-slate-200/50"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
-                )}
-              >
-                <Layout size={14} /> Chamados
-              </button>
-            )}
-
-            {canViewSystemHealth && (
-              <button
-                onClick={() => setActiveSubTab("system")}
-                className={cn(
-                  "h-8 px-3 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                  activeSubTab === "system"
-                    ? "bg-slate-100 text-slate-900 shadow-sm border border-slate-200/50"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
-                )}
-              >
-                <Cpu size={14} /> Sistema
-              </button>
-            )}
-
+            {[
+              { id: "general" as const, label: "Geral", icon: <Settings2 size={14} />, visible: true },
+              { id: "tickets" as const, label: "Tickets", icon: <Layout size={14} />, visible: canViewTicketSettings },
+              { id: "whatsapp" as const, label: "WhatsApp", icon: <MessageCircle size={14} />, visible: canViewWhatsAppSettings },
+              { id: "identity" as const, label: "Identidade", icon: <Building2 size={14} />, visible: canViewIdentityTab },
+              { id: "system" as const, label: "Sistema", icon: <Cpu size={14} />, visible: canViewSystemHealth },
+            ]
+              .filter((tab) => tab.visible)
+              .map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveSubTab(tab.id)}
+                  className={cn(
+                    "h-8 px-3 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
+                    activeSubTab === tab.id
+                      ? "bg-slate-100 text-slate-900 shadow-sm border border-slate-200/50"
+                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
+                  )}
+                >
+                  {tab.icon} {tab.label}
+                </button>
+              ))}
           </div>
         }
       >
@@ -283,6 +313,61 @@ export const SettingsPage = ({
               transition={{ duration: 0.15 }}
               className="space-y-4"
             >
+              {activeSubTab === "general" && (
+                <Card className="p-4 sm:p-5 space-y-5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-slate-100 text-slate-700">
+                      <Settings2 size={17} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">Configurações gerais</h3>
+                      <p className="text-[11px] font-medium text-slate-500">
+                        Acessos administrativos e visão geral dos módulos do Portal Meta.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {hasPermission(currentUser, "usuarios.visualizar") && (
+                      <Button
+                        variant="outline"
+                        onClick={() => onNavigate("users")}
+                        className="h-11 justify-between bg-white text-xs text-slate-700"
+                      >
+                        Equipe <ShieldCheck size={14} className="text-blue-500" />
+                      </Button>
+                    )}
+                    {hasPermission(currentUser, "auditoria.visualizar") && (
+                      <Button
+                        variant="outline"
+                        onClick={() => onNavigate("logs")}
+                        className="h-11 justify-between bg-white text-xs text-slate-700"
+                      >
+                        Auditoria <Database size={14} className="text-indigo-500" />
+                      </Button>
+                    )}
+                    {hasPermission(currentUser, "tickets.visualizar") && (
+                      <Button
+                        variant="outline"
+                        onClick={() => onNavigate("tickets")}
+                        className="h-11 justify-between bg-white text-xs text-slate-700"
+                      >
+                        Tickets <Layout size={14} className="text-emerald-500" />
+                      </Button>
+                    )}
+                    {hasPermission(currentUser, "integracoes.whatsapp.visualizar") && (
+                      <Button
+                        variant="outline"
+                        onClick={() => onNavigate("whatsapp")}
+                        className="h-11 justify-between bg-white text-xs text-slate-700"
+                      >
+                        WhatsApp <MessageCircle size={14} className="text-emerald-500" />
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              )}
+
               {activeSubTab === "identity" && canEditIdentity && (
                 <Card className="p-4 sm:p-5">
                     <form key={identity?.updated_at || 'identity'} onSubmit={handleSaveIdentity} className="space-y-5">
@@ -358,41 +443,6 @@ export const SettingsPage = ({
                       </div>
 
                       <div className="pt-4 border-t border-slate-100 space-y-3">
-                        <div className="flex items-start gap-2">
-                          <div className="w-6 h-6 bg-slate-50 text-slate-500 rounded flex items-center justify-center border border-slate-100 mt-0.5">
-                            <Globe size={12} />
-                          </div>
-                          <div>
-                            <h4 className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                              Comunicação com clientes
-                            </h4>
-                            <p className="text-[11px] text-slate-500">
-                              Esta assinatura aparece no rodapé dos e-mails de criação e resposta de chamados.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5 flex flex-col">
-                          <label className="text-xs font-medium text-slate-700">
-                            Assinatura de e-mail dos chamados
-                          </label>
-                          <textarea
-                            name="email_assinatura"
-                            rows={4}
-                            maxLength={2000}
-                            defaultValue={
-                              identity?.email_assinatura ||
-                              `Atenciosamente,\nEquipe de Atendimento\n${identity?.nome || ""}`
-                            }
-                            placeholder={`Atenciosamente,\nEquipe de Atendimento\n${identity?.nome || "Portal Meta"}`}
-                            className="w-full min-h-[96px] bg-white border border-slate-200 rounded-md p-2.5 text-xs leading-relaxed focus:ring-2 focus:ring-blue-100 transition-all outline-none resize-y"
-                          />
-                          <p className="text-[11px] text-slate-500">
-                            Use o nome da instituição ou da equipe. Evite incluir informações sensíveis.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="pt-4 border-t border-slate-100 space-y-3">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 bg-slate-50 text-slate-500 rounded flex items-center justify-center border border-slate-100">
                             <Palette size={12} />
@@ -419,49 +469,6 @@ export const SettingsPage = ({
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-100 space-y-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 bg-slate-50 text-slate-500 rounded flex items-center justify-center border border-slate-100">
-                            <Layout size={12} />
-                          </div>
-                          <h4 className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                            Atalhos Administrativos
-                          </h4>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {hasPermission(currentUser, "usuarios.visualizar") && (
-                            <Button
-                              variant="outline"
-                              onClick={() => onNavigate("users")}
-                              className="bg-white border-slate-200 text-slate-700 justify-between h-10 text-xs"
-                            >
-                              Equipe{" "}
-                              <ShieldCheck size={14} className="text-blue-500" />
-                            </Button>
-                          )}
-                          {hasPermission(currentUser, "auditoria.visualizar") && (
-                            <Button
-                              variant="outline"
-                              onClick={() => onNavigate("logs")}
-                              className="bg-white border-slate-200 text-slate-700 justify-between h-10 text-xs"
-                            >
-                              Auditoria{" "}
-                              <Database size={14} className="text-indigo-500" />
-                            </Button>
-                          )}
-                          {hasPermission(currentUser, "tickets.visualizar") && (
-                            <Button
-                              variant="outline"
-                              onClick={() => onNavigate("tickets")}
-                              className="bg-white border-slate-200 text-slate-700 justify-between h-10 text-xs"
-                            >
-                              Chamados{" "}
-                              <Layout size={14} className="text-emerald-500" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
                       <div className="pt-2 flex justify-end">
                         <Button
                           type="submit"
@@ -474,18 +481,6 @@ export const SettingsPage = ({
                         </Button>
                       </div>
                     </form>
-                </Card>
-              )}
-
-              {activeSubTab === "identity" &&
-                canManageEmailChannelsByBackend && (
-                <Card className="p-4 sm:p-5">
-                  <EmailChannelsManager
-                    canCreate={canManageEmailChannelsByBackend}
-                    canEdit={canManageEmailChannelsByBackend}
-                    canDelete={canManageEmailChannelsByBackend}
-                    canTest={canManageEmailChannelsByBackend}
-                  />
                 </Card>
               )}
 
@@ -801,6 +796,54 @@ export const SettingsPage = ({
 
               {activeSubTab === "tickets" && (
                 <div className="space-y-4">
+                  {canEditIdentity && (
+                    <Card className="p-4 sm:p-5">
+                      <form
+                        key={identity?.updated_at || "ticket-email-signature"}
+                        onSubmit={handleSaveTicketEmailSignature}
+                        className="space-y-4"
+                      >
+                        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                          <div>
+                            <h3 className="text-sm font-semibold text-slate-900">
+                              Assinatura dos e-mails de tickets
+                            </h3>
+                            <p className="mt-0.5 text-[11px] text-slate-500">
+                              Aplicada nas mensagens de criação e resposta enviadas aos clientes.
+                            </p>
+                          </div>
+                          {(success || error) && (
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11px] font-semibold",
+                                success
+                                  ? "border-emerald-100 bg-emerald-50 text-emerald-600"
+                                  : "border-red-100 bg-red-50 text-red-600",
+                              )}
+                            >
+                              {success ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                              {success || error}
+                            </div>
+                          )}
+                        </div>
+                        <textarea
+                          name="email_assinatura"
+                          rows={4}
+                          maxLength={2000}
+                          defaultValue={
+                            identity?.email_assinatura ||
+                            `Atenciosamente,\nEquipe de Atendimento\n${identity?.nome || "Portal Meta"}`
+                          }
+                          className="min-h-[96px] w-full resize-y rounded-md border border-slate-200 bg-white p-2.5 text-xs leading-relaxed outline-none transition-all focus:ring-2 focus:ring-blue-100"
+                        />
+                        <div className="flex justify-end">
+                          <Button type="submit" loading={loading} size="sm">
+                            <Save size={14} className="mr-1.5" /> Salvar assinatura
+                          </Button>
+                        </div>
+                      </form>
+                    </Card>
+                  )}
                   {canManageTicketOptions && (
                     <TicketOptionsManager currentUser={currentUser} />
                   )}
@@ -810,7 +853,21 @@ export const SettingsPage = ({
                   {canManageAutomations && (
                     <AutomationsManager />
                   )}
+                  {canManageEmailChannelsByBackend && (
+                    <Card className="p-4 sm:p-5">
+                      <EmailChannelsManager
+                        canCreate={canManageEmailChannelsByBackend}
+                        canEdit={canManageEmailChannelsByBackend}
+                        canDelete={canManageEmailChannelsByBackend}
+                        canTest={canManageEmailChannelsByBackend}
+                      />
+                    </Card>
+                  )}
                 </div>
+              )}
+
+              {activeSubTab === "whatsapp" && canViewWhatsAppSettings && (
+                <WhatsAppSettingsManager currentUser={currentUser} />
               )}
 
             </motion.div>

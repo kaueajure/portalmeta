@@ -721,7 +721,16 @@ export default function App() {
 
                   {activeTab === "whatsapp" &&
                     (canAccessAppScreen(currentUser, "whatsapp") ? (
-                      <WhatsappPage currentUser={currentUser} />
+                      <WhatsappPage
+                        currentUser={currentUser}
+                        onOpenSettings={() => {
+                          window.sessionStorage.setItem(
+                            "portalmeta.settingsTab",
+                            "whatsapp",
+                          );
+                          setActiveTab("settings");
+                        }}
+                      />
                     ) : (
                       <AccessDenied />
                     ))}

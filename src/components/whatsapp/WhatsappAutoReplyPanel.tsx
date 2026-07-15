@@ -390,7 +390,7 @@ export function WhatsappAutoReplyPanel({
 
           {!loadingServices && availableServices.length === 0 ? (
             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-              Nenhuma categoria com sigla ativa. Cadastre siglas em Configurações → Categorias de chamado.
+              Nenhuma categoria com sigla ativa. Cadastre siglas em Configurações → Tickets.
             </p>
           ) : null}
 

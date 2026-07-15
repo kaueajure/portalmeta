@@ -3,18 +3,12 @@ import {
   MessageCircle,
   RefreshCw,
   Send,
-  Copy,
   Check,
   AlertTriangle,
-  ShieldCheck,
-  Link2,
   Phone,
-  Settings2,
   Search,
   Plus,
   ArrowLeft,
-  ExternalLink,
-  Save,
   Folder,
   FolderOpen,
   Hand,
@@ -23,30 +17,19 @@ import {
 } from "lucide-react";
 import { PageShell } from "../layout/PageShell";
 import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import { User } from "../../types";
 import { hasPermission } from "../../lib/permissions";
 import { getSocket } from "../../lib/socket";
-import { WhatsappAutoReplyPanel, type WhatsAppFlowToolbar } from "../whatsapp/WhatsappAutoReplyPanel";
 
 interface WhatsappPageProps {
   currentUser: User;
+  onOpenSettings?: () => void;
 }
 
 interface WhatsAppStatus {
-  enabled: boolean;
   configured: boolean;
-  phoneNumberId: string | null;
-  businessAccountId: string | null;
-  apiVersion: string;
-  hasAccessToken: boolean;
-  accessTokenPreview: string | null;
-  hasAppSecret: boolean;
-  verifyToken: string | null;
-  callbackUrl: string | null;
-  displayPhoneNumber: string | null;
 }
 
 interface WhatsAppConversation {
@@ -76,52 +59,6 @@ interface WhatsAppMessage {
   status: string | null;
   created_at: string;
 }
-
-const META_CREDENTIALS = [
-  {
-    env: "ENABLE_WHATSAPP",
-    value: "true",
-    where:
-      "Você define. Coloque true para ligar o módulo no Portal Meta.",
-  },
-  {
-    env: "WHATSAPP_PHONE_NUMBER_ID",
-    where:
-      "Meta → App → WhatsApp → Configuração da API → Número de telefone → campo Phone number ID (não é o número em si).",
-  },
-  {
-    env: "WHATSAPP_BUSINESS_ACCOUNT_ID",
-    where:
-      "Meta → App → WhatsApp → Configuração da API → WhatsApp Business Account ID.",
-  },
-  {
-    env: "WHATSAPP_ACCESS_TOKEN",
-    where:
-      "Meta → App → WhatsApp → Configuração da API → Token de acesso temporário (teste) ou token permanente do usuário do sistema.",
-  },
-  {
-    env: "WHATSAPP_VERIFY_TOKEN",
-    where:
-      "Você inventa (string secreta). Use o mesmo valor no .env e em Meta → Webhook → Verificar token.",
-  },
-  {
-    env: "META_APP_SECRET",
-    where:
-      "Meta → App → Configurações → Básico → Segredo do app (mostrar).",
-  },
-  {
-    env: "WHATSAPP_DISPLAY_PHONE_NUMBER",
-    where:
-      "O número exibido (DDI + DDD + número), ex.: 5511999999999. Mesmo número da tela Números de telefone.",
-  },
-  {
-    env: "FRONTEND_URL",
-    where:
-      "URL pública HTTPS do Portal Meta, ex.: https://portalmeta.com.br — usada para montar a callback do webhook.",
-  },
-] as const;
-
-type SetupTab = "messages" | "credentials";
 
 function formatPhoneLabel(phone: string) {
   const digits = phone.replace(/\D/g, "");
@@ -192,12 +129,8 @@ function hasActiveService(conversation: WhatsAppConversation | null): boolean {
   );
 }
 
-const META_CREDENTIALS_ALLOWED_EMAIL = "kaueajure@gmail.com";
-
-export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
+export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps) => {
   const canManage = hasPermission(currentUser, "integracoes.whatsapp.gerenciar");
-  const canViewMetaCredentials =
-    String(currentUser.email || "").trim().toLowerCase() === META_CREDENTIALS_ALLOWED_EMAIL;
   const [status, setStatus] = useState<WhatsAppStatus | null>(null);
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -209,9 +142,6 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   const [assignmentDetails, setAssignmentDetails] = useState<WhatsAppAssignmentDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [showSetup, setShowSetup] = useState(false);
-  const [flowToolbar, setFlowToolbar] = useState<WhatsAppFlowToolbar | null>(null);
   const [search, setSearch] = useState("");
   const [composer, setComposer] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
@@ -293,7 +223,6 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
       ]);
       setStatus(statusData);
       setConversations(conversationData);
-      if (!statusData.configured) setShowSetup(true);
     } catch (err: any) {
       setError(err?.message || "Não foi possível carregar o WhatsApp.");
     } finally {
@@ -379,16 +308,6 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
     };
   }, [loadStatusAndConversations, loadThread, loadAssignment, selectedPhone]);
-
-  const copyValue = async (field: string, value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedField(field);
-      window.setTimeout(() => setCopiedField(null), 1600);
-    } catch {
-      setError("Não foi possível copiar para a área de transferência.");
-    }
-  };
 
   const selectConversation = (phone: string) => {
     setSelectedPhone(phone);
@@ -506,40 +425,6 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
       <PageShell
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {showSetup && flowToolbar && canManage ? (
-              <>
-                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 accent-emerald-600"
-                    checked={flowToolbar.enabled}
-                    onChange={(e) => flowToolbar.setEnabled(e.target.checked)}
-                  />
-                  {flowToolbar.enabled ? "Ligado" : "Desligado"}
-                </label>
-                <Button
-                  size="sm"
-                  disabled={flowToolbar.saving}
-                  onClick={() => flowToolbar.submit()}
-                >
-                  <Save size={14} />
-                  {flowToolbar.saving ? "Salvando…" : "Salvar"}
-                </Button>
-              </>
-            ) : null}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setShowSetup((v) => {
-                  if (v) setFlowToolbar(null);
-                  return !v;
-                });
-              }}
-            >
-              <Settings2 size={14} />
-              {showSetup ? "Fechar" : "Configuração"}
-            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -568,20 +453,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
           </div>
         )}
 
-        {showSetup ? (
-          <SetupPanel
-            status={status}
-            canManage={canManage}
-            canViewMetaCredentials={canViewMetaCredentials}
-            copiedField={copiedField}
-            onCopy={copyValue}
-            onError={setError}
-            onSuccess={setSuccess}
-            onFlowToolbarChange={setFlowToolbar}
-          />
-        ) : null}
-
-        <div className={cn("flex min-h-0 flex-1 overflow-hidden", showSetup && "hidden")}>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Conversation list */}
           <aside
             className={cn(
@@ -685,11 +557,12 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
               {!status?.configured && (
                 <button
                   type="button"
-                  onClick={() => setShowSetup(true)}
+                  onClick={onOpenSettings}
+                  disabled={!onOpenSettings}
                   className="flex w-full items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-left text-xs text-amber-900"
                 >
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                  Integração incompleta. Abra a configuração e preencha o .env.
+                  Integração incompleta. Acesse Configurações → WhatsApp.
                 </button>
               )}
             </div>
@@ -1051,160 +924,6 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   );
 };
 
-function SetupPanel({
-  status,
-  canManage,
-  canViewMetaCredentials,
-  copiedField,
-  onCopy,
-  onError,
-  onSuccess,
-  onFlowToolbarChange,
-}: {
-  status: WhatsAppStatus | null;
-  canManage: boolean;
-  canViewMetaCredentials: boolean;
-  copiedField: string | null;
-  onCopy: (field: string, value: string) => void;
-  onError: (message: string | null) => void;
-  onSuccess: (message: string | null) => void;
-  onFlowToolbarChange: (toolbar: WhatsAppFlowToolbar | null) => void;
-}) {
-  const [tab, setTab] = useState<SetupTab>("messages");
-  const activeTab: SetupTab =
-    tab === "credentials" && !canViewMetaCredentials ? "messages" : tab;
-
-  useEffect(() => {
-    if (activeTab !== "messages") onFlowToolbarChange(null);
-  }, [activeTab, onFlowToolbarChange]);
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/80 px-3 py-2 sm:px-4">
-      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <Settings2 size={14} className="text-emerald-600" />
-            <h2 className="text-xs font-semibold text-slate-900">Configuração</h2>
-          </div>
-          {canViewMetaCredentials && (
-            <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5">
-              <button
-                type="button"
-                onClick={() => setTab("messages")}
-                className={cn(
-                  "rounded px-2 py-1 text-[11px] font-semibold transition-colors",
-                  activeTab === "messages" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                Fluxo
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("credentials")}
-                className={cn(
-                  "rounded px-2 py-1 text-[11px] font-semibold transition-colors",
-                  activeTab === "credentials" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                Credenciais Meta
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {activeTab === "messages" || !canViewMetaCredentials ? (
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <WhatsappAutoReplyPanel
-            canManage={canManage}
-            onError={onError}
-            onSuccess={onSuccess}
-            onToolbarChange={onFlowToolbarChange}
-          />
-        </div>
-      ) : (
-        <div className="grid min-h-0 flex-1 gap-2 overflow-hidden lg:grid-cols-2">
-          <section className="min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-3">
-            <div className="mb-2 flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-emerald-600" />
-              <h3 className="text-xs font-semibold text-slate-900">Status</h3>
-            </div>
-            <dl className="space-y-1 text-xs">
-              <StatusRow label="Habilitado" value={status?.enabled ? "Sim" : "Não"} ok={!!status?.enabled} />
-              <StatusRow
-                label="Configurado"
-                value={status?.configured ? "Pronto" : "Incompleto"}
-                ok={!!status?.configured}
-              />
-              <StatusRow label="Phone Number ID" value={status?.phoneNumberId || "—"} />
-              <StatusRow label="WABA ID" value={status?.businessAccountId || "—"} />
-              <StatusRow
-                label="Token"
-                value={status?.accessTokenPreview || "Ausente"}
-                ok={!!status?.hasAccessToken}
-              />
-              <StatusRow
-                label="App Secret"
-                value={status?.hasAppSecret ? "Configurado" : "Não definido"}
-                ok={!!status?.hasAppSecret}
-              />
-            </dl>
-            <div className="mt-3 space-y-2 border-t border-slate-100 pt-2">
-              <div className="flex items-center gap-1.5">
-                <Link2 size={14} className="text-blue-600" />
-                <h3 className="text-xs font-semibold text-slate-900">Webhook</h3>
-              </div>
-              <CopyField
-                label="URL de callback"
-                value={status?.callbackUrl || "https://seu-dominio.com.br/api/whatsapp/webhook"}
-                fieldKey="callback"
-                copiedField={copiedField}
-                onCopy={onCopy}
-              />
-              <CopyField
-                label="Verificar token"
-                value={status?.verifyToken || "—"}
-                fieldKey="verify"
-                copiedField={copiedField}
-                onCopy={onCopy}
-              />
-              <a
-                href="https://developers.facebook.com/apps/"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:underline"
-              >
-                Meta for Developers
-                <ExternalLink size={11} />
-              </a>
-            </div>
-          </section>
-
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <div className="shrink-0 border-b border-slate-100 px-3 py-2">
-              <h3 className="text-xs font-semibold text-slate-900">.env (credenciais)</h3>
-              <p className="mt-0.5 text-[10px] text-slate-500">
-                Cole no <code className="rounded bg-slate-50 px-1">.env</code> e reinicie o servidor.
-              </p>
-            </div>
-            <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-hidden">
-              {META_CREDENTIALS.map((item) => (
-                <li
-                  key={item.env}
-                  className="grid gap-0.5 px-3 py-1.5 sm:grid-cols-[minmax(0,200px)_1fr] sm:gap-3"
-                >
-                  <code className="text-[10px] font-semibold text-emerald-800">{item.env}</code>
-                  <p className="line-clamp-2 text-[10px] leading-snug text-slate-600">{item.where}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function FolderChip({
   active,
   icon,
@@ -1246,69 +965,5 @@ function FolderChip({
       ) : null}
       <span className="shrink-0 tabular-nums text-[10px] text-slate-400">{count}</span>
     </button>
-  );
-}
-
-function StatusRow({
-  label,
-  value,
-  ok,
-}: {
-  label: string;
-  value: string;
-  ok?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <dt className="text-slate-500">{label}</dt>
-      <dd
-        className={cn(
-          "truncate text-right font-medium",
-          ok === true && "text-emerald-700",
-          ok === false && "text-amber-700",
-          ok === undefined && "text-slate-900",
-        )}
-      >
-        {value}
-      </dd>
-    </div>
-  );
-}
-
-function CopyField({
-  label,
-  value,
-  fieldKey,
-  copiedField,
-  onCopy,
-  className,
-}: {
-  label: string;
-  value: string;
-  fieldKey: string;
-  copiedField: string | null;
-  onCopy: (field: string, value: string) => void;
-  className?: string;
-}) {
-  const copied = copiedField === fieldKey;
-  return (
-    <div className={className}>
-      <label className="mb-0.5 block text-[10px] font-semibold text-slate-700">{label}</label>
-      <div className="flex items-center gap-1.5">
-        <code className="min-w-0 flex-1 truncate rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] text-slate-800">
-          {value}
-        </code>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 px-2 text-[10px]"
-          onClick={() => onCopy(fieldKey, value)}
-          disabled={!value || value === "—"}
-        >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-        </Button>
-      </div>
-    </div>
   );
 }
