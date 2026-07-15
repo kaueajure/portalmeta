@@ -27,7 +27,6 @@ import { EmailChannelsManager } from "../companies/EmailChannelsManager";
 import { TicketOptionsManager } from "../settings/TicketOptionsManager";
 import { SlaPoliciesManager } from "../settings/SlaPoliciesManager";
 import { AutomationsManager } from "../settings/AutomationsManager";
-import { ScreensSettingsManager } from "../settings/ScreensSettingsManager";
 import { hasPermission } from "../../lib/permissions";
 
 type AppTab =
@@ -39,7 +38,7 @@ type AppTab =
   | "settings"
   | "reports";
 
-type SettingsSubTab = "company" | "system" | "tickets" | "screens";
+type SettingsSubTab = "company" | "system" | "tickets";
 
 interface SettingsPageProps {
   currentUser: User;
@@ -118,13 +117,10 @@ export const SettingsPage = ({
   const canViewTicketSettings =
     canManageTicketOptions || canManageSlaPolicies || canManageAutomations;
   const canViewSystemHealth = hasPermission(currentUser, "sistema.health");
-  const canViewScreens = hasPermission(currentUser, "telas.visualizar");
-
   const availableSettingsTabs: Array<{ id: SettingsSubTab; visible: boolean }> = [
     { id: "company", visible: canViewCompanyTab },
     { id: "tickets", visible: canViewTicketSettings },
     { id: "system", visible: canViewSystemHealth },
-    { id: "screens", visible: canViewScreens },
   ];
 
   React.useEffect(() => {
@@ -141,7 +137,6 @@ export const SettingsPage = ({
     canViewCompanyTab,
     canViewTicketSettings,
     canViewSystemHealth,
-    canViewScreens,
   ]);
 
   const fetchHealthOverview = async () => {
@@ -269,19 +264,6 @@ export const SettingsPage = ({
               </button>
             )}
 
-            {canViewScreens && (
-              <button
-                onClick={() => setActiveSubTab("screens")}
-                className={cn(
-                  "h-8 px-3 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
-                  activeSubTab === "screens"
-                    ? "bg-slate-100 text-slate-900 shadow-sm border border-slate-200/50"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50",
-                )}
-              >
-                <Globe size={14} /> Telas
-              </button>
-            )}
           </div>
         }
       >
@@ -856,9 +838,6 @@ export const SettingsPage = ({
                 </div>
               )}
 
-              {activeSubTab === "screens" && canViewScreens && (
-                <ScreensSettingsManager currentUser={currentUser} />
-              )}
             </motion.div>
           </AnimatePresence>
         </div>

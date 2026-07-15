@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, Eye, EyeOff, Loader2, ShieldCheck, Cloud } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ShieldCheck, Cloud } from 'lucide-react';
 import { AppLogo } from '../ui/Logo';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
@@ -11,12 +11,10 @@ interface LoginPageProps {
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   authError: string | null;
   onForgotPassword: () => void;
-  onBackToSite: () => void;
   loading: boolean;
-  onOpenCustomerPortal?: () => void;
 }
 
-export const LoginPage = ({ onSubmit, authError, onForgotPassword, onBackToSite, loading, onOpenCustomerPortal }: LoginPageProps) => {
+export const LoginPage = ({ onSubmit, authError, onForgotPassword, loading }: LoginPageProps) => {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -98,28 +96,7 @@ export const LoginPage = ({ onSubmit, authError, onForgotPassword, onBackToSite,
         </form>
       </Card>
 
-      <div className="mt-8 text-center space-y-4">
-        {onOpenCustomerPortal && (
-          <div className="pb-4 border-b border-slate-200">
-            <button
-              type="button"
-              onClick={onOpenCustomerPortal}
-              className="text-[14px] font-bold text-blue-600 hover:text-blue-700 transition-colors w-full h-11 rounded-lg bg-blue-50 hover:bg-blue-100/80 outline-none"
-              disabled={loading}
-            >
-              Acessar portal do cliente
-            </button>
-          </div>
-        )}
-
-        <button
-          onClick={onBackToSite}
-          className="text-[13px] font-semibold text-slate-500 hover:text-slate-800 transition-colors outline-none inline-flex items-center gap-1.5"
-          disabled={loading}
-        >
-          <ArrowRight size={14} className="rotate-180" /> Voltar ao site público
-        </button>
-        
+      <div className="mt-8 text-center">
         <div className="flex items-center justify-center gap-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
            <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-500" /> Ambiente protegido</span>
            <span className="text-slate-300">•</span>
@@ -129,4 +106,3 @@ export const LoginPage = ({ onSubmit, authError, onForgotPassword, onBackToSite,
     </AuthLayout>
   );
 };
-

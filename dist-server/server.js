@@ -15,6 +15,7 @@ import { errorHandler } from './middlewares/error-handler.js';
 import { env } from './config/env.js';
 import { EmailListenerService } from './services/email-listener.service.js';
 import { runTicketAutomations } from './jobs/ticketAutomationJob.js';
+import { runWhatsAppInactivityJob } from './jobs/whatsappInactivityJob.js';
 import { emailOutboxService } from './services/email-outbox.service.js';
 import { setRealtimeServer } from './realtime.js';
 export let io;
@@ -329,6 +330,7 @@ async function startServer() {
                     // Executa depois das automacoes para reutilizar a conexao devolvida
                     // ao pool, evitando duas negociacoes simultaneas com o MySQL remoto.
                     await emailOutboxService.processPending();
+                    await runWhatsAppInactivityJob();
                 }
                 catch (err) {
                     console.error(initial ? '[JOB ERROR INITIAL]' : '[JOB ERROR]', err);

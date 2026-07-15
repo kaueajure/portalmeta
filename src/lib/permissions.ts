@@ -9,7 +9,8 @@ export function isDeveloperUser(user: User | null | undefined): boolean {
 function isGlobalOnlyPermission(permission: string): boolean {
   return (
     permission === 'sistema.developer' ||
-    permission.startsWith('empresas.')
+    permission.startsWith('empresas.') ||
+    permission.startsWith('telas.')
   );
 }
 

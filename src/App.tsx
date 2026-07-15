@@ -17,11 +17,6 @@ const DashboardPage = lazy(() =>
     default: module.DashboardPage,
   })),
 );
-const PublicSite = lazy(() =>
-  import("./components/public/PublicSite").then((module) => ({
-    default: module.PublicSite,
-  })),
-);
 const SatisfactionPage = lazy(() =>
   import("./components/public/SatisfactionPage").then((module) => ({
     default: module.SatisfactionPage,
@@ -90,7 +85,6 @@ const AITesterPage = lazy(() =>
 );
 
 type ViewState =
-  | "landing"
   | "login"
   | "forgot-password"
   | "reset-password"
@@ -172,7 +166,7 @@ export default function App() {
     if (pathname === "/esqueci-senha") return "forgot-password";
     if (pathname === "/reset-password") return "reset-password";
     if (pathname === "/portal") return "portal-access";
-    return "landing";
+    return "login";
   };
 
   const [view, setView] = useState<ViewState>(() =>
@@ -250,12 +244,10 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      // Sync browser history with the app state for public routes
+      // Sync browser history with authentication routes.
       const path = window.location.pathname;
       const parsedView = getViewFromPath(path);
 
-      // If user is logged in, do not kick them to landing just because of popstate
-      // unless specifically intended. We'll handle basic public state syncing here.
       setView((currentView) => {
         // If they are on dashboard/portal, don't break their session on back button
         // They would explicitly logout
@@ -328,7 +320,15 @@ export default function App() {
           setView("dashboard");
         }
       } catch (err) {
-        setView(getViewFromPath(window.location.pathname));
+        const unauthenticatedView = getViewFromPath(window.location.pathname);
+        setView(unauthenticatedView);
+        if (
+          !["/", "/login", "/esqueci-senha", "/reset-password", "/portal"].includes(
+            window.location.pathname,
+          )
+        ) {
+          window.history.replaceState({}, "", "/login");
+        }
       } finally {
         setIsBooting(false);
       }
@@ -426,7 +426,7 @@ export default function App() {
     localStorage.removeItem("portal_token");
     localStorage.removeItem(DASHBOARD_STATE_KEY);
     setCurrentUser(null);
-    setView("landing");
+    setView("login");
     window.history.pushState({}, "", "/");
   };
 
@@ -534,19 +534,6 @@ export default function App() {
 
   // --- RENDERING VIEWS ---
 
-  if (view === "landing") {
-    return (
-      <Suspense fallback={<LazyPageFallback />}>
-        <PublicSite
-          onLogin={() => {
-            setView("login");
-            window.history.pushState({}, "", "/login");
-          }}
-        />
-      </Suspense>
-    );
-  }
-
   if (view === "login") {
     return (
       <LoginPage
@@ -558,16 +545,6 @@ export default function App() {
           setAuthError(null);
           setAuthSuccess(null);
           window.history.pushState({}, "", "/esqueci-senha");
-        }}
-        onBackToSite={() => {
-          setView("landing");
-          window.history.pushState({}, "", "/");
-        }}
-        onOpenCustomerPortal={() => {
-          setAuthError(null);
-          setAuthSuccess(null);
-          setView("portal-access");
-          window.history.pushState({}, "", "/portal");
         }}
       />
     );
@@ -586,10 +563,6 @@ export default function App() {
           setAuthSuccess(null);
           window.history.pushState({}, "", "/login");
         }}
-        onBackToSite={() => {
-          setView("landing");
-          window.history.pushState({}, "", "/");
-        }}
       />
     );
   }
@@ -607,10 +580,6 @@ export default function App() {
           setAuthError(null);
           setAuthSuccess(null);
           window.history.pushState({}, "", "/login");
-        }}
-        onBackToSite={() => {
-          setView("landing");
-          window.history.pushState({}, "", "/");
         }}
       />
     );

@@ -43,13 +43,65 @@ router.post('/webhook', async (req, res) => {
     }
 });
 router.use(authMiddleware);
-router.get('/status', requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }), async (_req, res) => {
+const META_CREDENTIALS_ALLOWED_EMAIL = 'kaueajure@gmail.com';
+function canViewMetaCredentials(email) {
+    return String(email || '').trim().toLowerCase() === META_CREDENTIALS_ALLOWED_EMAIL;
+}
+router.get('/status', requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }), async (req, res) => {
     try {
-        return sendSuccess(res, whatsappService.getPublicStatus());
+        const status = whatsappService.getPublicStatus();
+        if (canViewMetaCredentials(req.user?.email)) {
+            return sendSuccess(res, status);
+        }
+        // Demais usuários veem só o essencial da inbox — sem IDs/token/webhook.
+        return sendSuccess(res, {
+            enabled: status.enabled,
+            configured: status.configured,
+            phoneNumberId: null,
+            businessAccountId: null,
+            apiVersion: status.apiVersion,
+            hasAccessToken: status.hasAccessToken,
+            accessTokenPreview: null,
+            hasAppSecret: status.hasAppSecret,
+            verifyToken: null,
+            callbackUrl: null,
+            displayPhoneNumber: status.displayPhoneNumber,
+        });
     }
     catch (err) {
         console.error(err);
         return sendError(res, 'Erro ao obter status do WhatsApp', 500);
+    }
+});
+router.get('/settings', requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }), async (_req, res) => {
+    try {
+        const settings = await whatsappService.getBotSettings();
+        return sendSuccess(res, settings);
+    }
+    catch (err) {
+        console.error(err);
+        return sendError(res, 'Erro ao obter configurações do WhatsApp', 500);
+    }
+});
+router.put('/settings', requirePermission('integracoes.whatsapp.gerenciar', { allowDeveloper: true }), async (req, res) => {
+    try {
+        const body = req.body || {};
+        const settings = await whatsappService.updateBotSettings({
+            autoReplyEnabled: body.autoReplyEnabled,
+            menuType: body.menuType,
+            welcomeHeader: body.welcomeHeader,
+            welcomeBody: body.welcomeBody,
+            buttons: body.buttons,
+            listButtonText: body.listButtonText,
+            listSectionTitle: body.listSectionTitle,
+            inactivityMinutes: body.inactivityMinutes,
+            closingMessage: body.closingMessage,
+        });
+        return sendSuccess(res, settings, 'Configurações do WhatsApp salvas');
+    }
+    catch (err) {
+        console.error('[WhatsApp] update settings error:', err);
+        return sendError(res, err?.message || 'Erro ao salvar configurações do WhatsApp', err?.status || 500);
     }
 });
 router.get('/conversations', requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }), async (req, res) => {

@@ -128,15 +128,6 @@ export const PERMISSIONS_CATALOG = [
     { key: 'configuracoes.atendimento', modulo: 'Configurações', grupo: 'Preferências', nome: 'Configurar central de chamados', descricao: 'Mudar status válidos, tipos de chamado padrão e campos obrigatórios.', nivel_risk: 'alto', order: 1530 },
     { key: 'configuracoes.sistema', modulo: 'Configurações', grupo: 'Segurança', nome: 'Ver configurações de sistema', descricao: 'Sincronizações críticas do Portal Meta.', nivel_risk: 'alto', order: 1540 },
     { key: 'configuracoes.gerenciar', modulo: 'Configurações', grupo: 'Geral', nome: 'Gestão completa de configurações', descricao: 'Controle mestre de todas as telas administrativas.', nivel_risk: 'critico', order: 1550 },
-    // TELAS PÚBLICAS
-    { key: 'telas.visualizar', modulo: 'Telas Públicas', grupo: 'Acesso', nome: 'Ver painel de telas públicas', descricao: 'Olhar as áreas editáveis de site externo.', nivel_risk: 'baixo', order: 1600 },
-    { key: 'telas.precos.visualizar', modulo: 'Telas Públicas', grupo: 'Preços', nome: 'Ver editores de planos', descricao: 'Olhar o portfólio de assinaturas público.', nivel_risk: 'baixo', order: 1610 },
-    { key: 'telas.precos.editar', modulo: 'Telas Públicas', grupo: 'Preços', nome: 'Editar planos, preços e textos', descricao: 'Redigir valores, termos de contratação e FAQ públicos.', nivel_risk: 'critico', order: 1620 },
-    { key: 'telas.precos.resetar', modulo: 'Telas Públicas', grupo: 'Preços', nome: 'Reverter configurações de preços para o original', descricao: 'Apagar alterações em lote devolvendo aos padrões de fábrica.', nivel_risk: 'alto', order: 1630 },
-    { key: 'telas.home.editar', modulo: 'Telas Públicas', grupo: 'Futuro', nome: 'Editar Home Pública', descricao: 'Ajustar imagens e logotipos públicos da capa.', nivel_risk: 'baixo', order: 1640 },
-    { key: 'telas.funcionalidades.editar', modulo: 'Telas Públicas', grupo: 'Futuro', nome: 'Editar Funcionalidades', descricao: 'Modificar carrosséis de produtos secundários.', nivel_risk: 'baixo', order: 1650 },
-    { key: 'telas.contato.editar', modulo: 'Telas Públicas', grupo: 'Futuro', nome: 'Editar contatos', descricao: 'Substituir e-mails de canais de suporte no rodapé público.', nivel_risk: 'baixo', order: 1660 },
-    { key: 'telas.gerenciar', modulo: 'Telas Públicas', grupo: 'Geral', nome: 'Gestão irrestrita das telas públicas', descricao: 'Mudar qualquer dado das landing pages do software.', nivel_risk: 'alto', order: 1670 },
     // PORTAL DO CLIENTE
     { key: 'portal.visualizar', modulo: 'Portal do Cliente', grupo: 'Acesso', nome: 'Ver portal do cliente', descricao: 'Visão externa do cliente.', nivel_risk: 'baixo', order: 1700 },
     { key: 'portal.configurar', modulo: 'Portal do Cliente', grupo: 'Geral', nome: 'Configurar portal', descricao: 'Ativar subdomínios, termos de uso.', nivel_risk: 'medio', order: 1710 },

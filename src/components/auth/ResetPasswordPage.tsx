@@ -12,12 +12,11 @@ interface ResetPasswordPageProps {
   authError: string | null;
   authSuccess: string | null;
   onBackToLogin: () => void;
-  onBackToSite: () => void;
   loading: boolean;
   initialEmail: string;
 }
 
-export const ResetPasswordPage = ({ onSubmit, authError, authSuccess, onBackToLogin, onBackToSite, loading, initialEmail }: ResetPasswordPageProps) => {
+export const ResetPasswordPage = ({ onSubmit, authError, authSuccess, onBackToLogin, loading, initialEmail }: ResetPasswordPageProps) => {
   const [email, setEmail] = useState(initialEmail);
   const [token, setToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -183,14 +182,6 @@ export const ResetPasswordPage = ({ onSubmit, authError, authSuccess, onBackToLo
         >
           <ArrowRight size={14} className="rotate-180" /> Voltar ao login
         </button>
-        <button
-          onClick={onBackToSite}
-          className="text-[12px] font-semibold text-slate-400 hover:text-slate-600 transition-colors outline-none inline-flex items-center gap-1.5"
-          disabled={loading}
-        >
-           Ir para o site público
-        </button>
-        
         <div className="flex items-center justify-center gap-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 pt-2">
            <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-500" /> Ambiente protegido</span>
         </div>

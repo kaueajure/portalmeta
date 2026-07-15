@@ -12,11 +12,10 @@ interface ForgotPasswordPageProps {
   authError: string | null;
   authSuccess: string | null;
   onBackToLogin: () => void;
-  onBackToSite: () => void;
   loading: boolean;
 }
 
-export const ForgotPasswordPage = ({ onSubmit, authError, authSuccess, onBackToLogin, onBackToSite, loading }: ForgotPasswordPageProps) => {
+export const ForgotPasswordPage = ({ onSubmit, authError, authSuccess, onBackToLogin, loading }: ForgotPasswordPageProps) => {
   return (
     <AuthLayout>
       <div className="text-center lg:text-left mb-6">
@@ -71,14 +70,6 @@ export const ForgotPasswordPage = ({ onSubmit, authError, authSuccess, onBackToL
         >
           <ArrowRight size={14} className="rotate-180" /> Voltar ao login
         </button>
-        <button
-          onClick={onBackToSite}
-          className="text-[12px] font-semibold text-slate-400 hover:text-slate-600 transition-colors outline-none inline-flex items-center gap-1.5"
-          disabled={loading}
-        >
-           Ir para o site público
-        </button>
-        
         <div className="flex items-center justify-center gap-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 pt-2">
            <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-500" /> Ambiente protegido</span>
         </div>

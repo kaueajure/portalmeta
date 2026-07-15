@@ -38,7 +38,7 @@ test('master wildcard grants system permissions but not obsolete permissions', (
   assert.equal(hasPermission(user, 'tickets.visualizar'), true);
   assert.equal(hasPermission(user, 'ticket_mensagens.responder'), true);
   assert.equal(hasPermission(user, 'sistema.health'), true);
-  assert.equal(hasPermission(user, 'telas.visualizar'), true);
+  assert.equal(hasPermission(user, 'telas.visualizar'), false);
   assert.equal(hasPermission(user, 'sistema.developer'), false);
   assert.equal(hasPermission(user, 'empresas.criar'), false);
   assert.equal(hasPermission(user, 'empresas.excluir'), false);
@@ -76,7 +76,7 @@ test('backend classifies only obsolete global permissions centrally', () => {
   assert.equal(isGlobalOnlyPermission('empresas.criar'), true);
   assert.equal(isGlobalOnlyPermission('sistema.developer'), true);
   assert.equal(isGlobalOnlyPermission('sistema.health'), false);
-  assert.equal(isGlobalOnlyPermission('telas.precos.editar'), false);
+  assert.equal(isGlobalOnlyPermission('telas.precos.editar'), true);
   assert.equal(isGlobalOnlyPermission('tickets.visualizar'), false);
 });
 
