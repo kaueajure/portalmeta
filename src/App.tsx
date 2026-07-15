@@ -531,12 +531,6 @@ export default function App() {
         onSubmit={handleLogin}
         authError={authError}
         loading={authLoading}
-        onForgotPassword={() => {
-          setView("forgot-password");
-          setAuthError(null);
-          setAuthSuccess(null);
-          window.history.pushState({}, "", "/esqueci-senha");
-        }}
       />
     );
   }
