@@ -106,10 +106,12 @@ export const env = {
         CONNECT_TIMEOUT_MS: parsePositiveIntEnv('DB_CONNECT_TIMEOUT_MS', 10000),
     },
     IS_PROD: process.env.NODE_ENV === 'production',
-    CORS_ORIGINS: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [],
+    CORS_ORIGINS: process.env.CORS_ORIGINS
+        ? process.env.CORS_ORIGINS.split(',')
+        : ['https://portalmeta.com.br', 'https://www.portalmeta.com.br'],
     DEV_EMAIL: process.env.DEV_EMAIL,
     DEV_PASSWORD: process.env.DEV_PASSWORD,
-    INBOUND_EMAIL_DOMAIN: process.env.INBOUND_EMAIL_DOMAIN || 'inbound.portalmeta.com.br',
+    INBOUND_EMAIL_DOMAIN: process.env.INBOUND_EMAIL_DOMAIN || 'portalmeta.com.br',
     INBOUND_EMAIL_PREFIX: process.env.INBOUND_EMAIL_PREFIX || 'canal',
     // Confirma automaticamente e-mails de validacao de encaminhamento recebidos
     // no inbound tecnico. Por seguranca, apenas links HTTPS em hosts permitidos
@@ -120,13 +122,13 @@ export const env = {
         .map(host => host.trim().toLowerCase())
         .filter(Boolean),
     IMAP: {
-        HOST: process.env.IMAP_HOST,
+        HOST: process.env.IMAP_HOST || 'imap.hostinger.com',
         PORT: parseInt(process.env.IMAP_PORT || '993'),
         USER: process.env.IMAP_USER,
         PASS: process.env.IMAP_PASS,
     },
     SMTP: {
-        HOST: process.env.SMTP_HOST,
+        HOST: process.env.SMTP_HOST || 'smtp.hostinger.com',
         PORT: parseInt(process.env.SMTP_PORT || '587'),
         USER: process.env.SMTP_USER,
         PASS: process.env.SMTP_PASS,
@@ -177,6 +179,27 @@ export const env = {
         BUCKET_NAME: process.env.STORAGE_BUCKET_NAME,
         REGION: process.env.STORAGE_REGION,
         ENDPOINT: process.env.STORAGE_ENDPOINT,
+    },
+    FRONTEND_URL: process.env.FRONTEND_URL || 'https://portalmeta.com.br',
+    WHATSAPP: {
+        ENABLED: process.env.ENABLE_WHATSAPP === 'true',
+        ACCESS_TOKEN: process.env.WHATSAPP_ACCESS_TOKEN || '',
+        PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
+        BUSINESS_ACCOUNT_ID: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '',
+        VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN || '',
+        APP_SECRET: process.env.META_APP_SECRET || '',
+        API_VERSION: process.env.WHATSAPP_API_VERSION || 'v25.0',
+        DISPLAY_PHONE_NUMBER: process.env.WHATSAPP_DISPLAY_PHONE_NUMBER || '',
+        /** Auto-envia menu com botões quando o cliente mandar a palavra-gatilho. */
+        AUTO_REPLY: process.env.ENABLE_WHATSAPP_AUTO_REPLY === 'true',
+        /** Palavra que dispara o menu (ex.: teste). Comparação sem maiúsculas/minúsculas. */
+        AUTO_REPLY_TRIGGER: (process.env.WHATSAPP_AUTO_REPLY_TRIGGER || 'teste').trim().toLowerCase(),
+        WELCOME_HEADER: process.env.WHATSAPP_WELCOME_HEADER || 'MetaBit - Sistemas para Gestão Pública',
+        WELCOME_BODY: process.env.WHATSAPP_WELCOME_BODY ||
+            'Seja Bem-Vindo, antes de iniciarmos seu atendimento, sobre qual sistema gostaria de falar?',
+        /** Formato: id:titulo|id:titulo|id:titulo  (título max 20 caracteres) */
+        WELCOME_BUTTONS: process.env.WHATSAPP_WELCOME_BUTTONS ||
+            'pgp:Gestão Pública|pci:Controle Interno|pts:Terceiro Setor',
     },
 };
 // S1: aviso explícito quando a validação TLS de e-mail está desativada.

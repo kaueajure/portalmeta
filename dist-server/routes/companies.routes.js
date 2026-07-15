@@ -399,6 +399,7 @@ router.get('/:id/ticket-statuses/usage', async (req, res) => {
         const [ticketRows] = await pool.query(`SELECT status, COUNT(*) AS total
        FROM tickets
        WHERE empresa_id = ?
+         AND deleted_at IS NULL
        GROUP BY status`, [id]);
         const [automationRows] = await pool.query(`SELECT id, nome, condicoes_json, acoes_json
        FROM ticket_automacoes

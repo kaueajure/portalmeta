@@ -24,6 +24,7 @@ import permissionsRoutes from './permissions.routes.js';
 import accessProfilesRoutes from './access-profiles.routes.js';
 import internalJobsRoutes from './internal-jobs.routes.js';
 import internalOutboxRoutes from './internal-outbox.routes.js';
+import whatsappRoutes from './whatsapp.routes.js';
 const router = Router();
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
@@ -49,5 +50,6 @@ router.use('/permissions', permissionsRoutes);
 router.use('/access-profiles', accessProfilesRoutes);
 router.use('/internal/jobs', internalJobsRoutes);
 router.use('/internal/outbox', internalOutboxRoutes);
+router.use('/whatsapp', whatsappRoutes);
 router.use('/', emailChannelsRoutes); // mounted at /api/companies/:companyId/email-channels
 export default router;
