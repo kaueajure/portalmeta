@@ -177,9 +177,6 @@ export default function App() {
   );
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    return window.localStorage.getItem("portalmeta-sidebar-collapsed") === "true";
-  });
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(
     () => loadDashboardState().selectedTicketId,
   );
@@ -665,15 +662,7 @@ export default function App() {
             setSelectedTicketId(null);
           }}
           isOpen={isSidebarOpen}
-          isCollapsed={isSidebarCollapsed}
           onClose={() => setIsSidebarOpen(false)}
-          onToggleCollapse={() => {
-            setIsSidebarCollapsed((current) => {
-              const next = !current;
-              window.localStorage.setItem("portalmeta-sidebar-collapsed", String(next));
-              return next;
-            });
-          }}
           onLogout={handleLogout}
           onNavigate={handleNotificationNavigate}
         />
@@ -702,12 +691,7 @@ export default function App() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  className={cn(
-                    "min-h-0",
-                    activeTab === "tickets" && selectedTicketId
-                      ? "h-full w-full"
-                      : "mx-auto h-full w-full max-w-[1560px]",
-                  )}
+                  className="h-full min-h-0 w-full"
                 >
                   <Suspense fallback={<LazyPageFallback />}>
                   {activeTab === "dashboard" &&
