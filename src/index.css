@@ -91,13 +91,20 @@
 
   html.theme-dark-beta .bg-\[\#F4F7FA\],
   html.theme-dark-beta .bg-\[\#FDFDFF\],
+  html.theme-dark-beta .bg-\[\#F5F7FA\],
+  html.theme-dark-beta .bg-\[\#f0f2f5\],
   html.theme-dark-beta .bg-slate-50,
+  html.theme-dark-beta .bg-slate-50\/50,
+  html.theme-dark-beta .bg-slate-50\/60,
   html.theme-dark-beta .bg-slate-50\/70,
-  html.theme-dark-beta .bg-slate-50\/80 {
+  html.theme-dark-beta .bg-slate-50\/80,
+  html.theme-dark-beta .bg-slate-50\/90 {
     background-color: var(--dark-bg) !important;
   }
 
+  html.theme-dark-beta .bg-\[\#F8FAFC\],
   html.theme-dark-beta .bg-white,
+  html.theme-dark-beta .bg-white\/90,
   html.theme-dark-beta .bg-white\/95 {
     background-color: var(--dark-panel) !important;
   }
@@ -107,9 +114,13 @@
   }
 
   html.theme-dark-beta .bg-slate-100,
+  html.theme-dark-beta .bg-slate-100\/70,
   html.theme-dark-beta .bg-slate-100\/80,
   html.theme-dark-beta .bg-slate-200,
+  html.theme-dark-beta .bg-slate-200\/50,
+  html.theme-dark-beta .bg-slate-200\/60,
   html.theme-dark-beta .bg-blue-100,
+  html.theme-dark-beta .bg-amber-100,
   html.theme-dark-beta .bg-emerald-100,
   html.theme-dark-beta .bg-orange-100,
   html.theme-dark-beta .bg-purple-50,
@@ -123,12 +134,19 @@
   }
 
   html.theme-dark-beta .border-slate-100,
+  html.theme-dark-beta .border-slate-100\/50,
+  html.theme-dark-beta .border-slate-100\/80,
   html.theme-dark-beta .border-slate-200,
   html.theme-dark-beta .border-slate-200\/50,
   html.theme-dark-beta .border-slate-200\/70,
   html.theme-dark-beta .border-slate-200\/80,
   html.theme-dark-beta .border-slate-300 {
     border-color: var(--dark-border) !important;
+  }
+
+  html.theme-dark-beta .border-slate-900,
+  html.theme-dark-beta .border-slate-950 {
+    border-color: var(--dark-border-strong) !important;
   }
 
   html.theme-dark-beta .text-slate-950,
@@ -153,17 +171,25 @@
 
   html.theme-dark-beta .bg-blue-50,
   html.theme-dark-beta .bg-blue-50\/30,
+  html.theme-dark-beta .bg-blue-50\/70,
   html.theme-dark-beta .bg-indigo-50,
+  html.theme-dark-beta .bg-indigo-50\/50,
+  html.theme-dark-beta .bg-indigo-50\/60,
   html.theme-dark-beta .bg-violet-50 {
     background-color: var(--dark-accent-panel) !important;
   }
 
   html.theme-dark-beta .border-blue-100,
+  html.theme-dark-beta .border-blue-100\/50,
   html.theme-dark-beta .border-blue-200,
   html.theme-dark-beta .border-blue-200\/60,
   html.theme-dark-beta .border-blue-200\/70,
   html.theme-dark-beta .border-indigo-100,
+  html.theme-dark-beta .border-indigo-100\/40,
+  html.theme-dark-beta .border-indigo-100\/70,
+  html.theme-dark-beta .border-indigo-200,
   html.theme-dark-beta .border-indigo-200\/70,
+  html.theme-dark-beta .border-violet-200,
   html.theme-dark-beta .border-violet-200\/70,
   html.theme-dark-beta .border-purple-100 {
     border-color: var(--dark-accent-border) !important;
@@ -173,6 +199,7 @@
   html.theme-dark-beta .text-blue-600,
   html.theme-dark-beta .text-blue-700,
   html.theme-dark-beta .text-blue-800,
+  html.theme-dark-beta .text-blue-950,
   html.theme-dark-beta .text-indigo-500,
   html.theme-dark-beta .text-indigo-600,
   html.theme-dark-beta .text-indigo-700,
@@ -181,8 +208,13 @@
     color: var(--dark-accent-hover) !important;
   }
 
-  html.theme-dark-beta .bg-emerald-50 {
+  html.theme-dark-beta .bg-emerald-50,
+  html.theme-dark-beta .bg-emerald-50\/80 {
     background-color: #052e1a !important;
+  }
+
+  html.theme-dark-beta .bg-\[\#d9fdd3\] {
+    background-color: #064e3b !important;
   }
 
   html.theme-dark-beta .border-emerald-100,
@@ -192,16 +224,23 @@
   }
 
   html.theme-dark-beta .text-emerald-600,
-  html.theme-dark-beta .text-emerald-700 {
+  html.theme-dark-beta .text-emerald-700,
+  html.theme-dark-beta .text-emerald-700\/80,
+  html.theme-dark-beta .text-emerald-800,
+  html.theme-dark-beta .text-emerald-800\/70,
+  html.theme-dark-beta .text-emerald-900 {
     color: #34d399 !important;
   }
 
   html.theme-dark-beta .bg-amber-50,
+  html.theme-dark-beta .bg-amber-50\/30,
+  html.theme-dark-beta .bg-amber-50\/60,
   html.theme-dark-beta .bg-orange-50 {
     background-color: #2a1b05 !important;
   }
 
   html.theme-dark-beta .border-amber-100,
+  html.theme-dark-beta .border-amber-100\/50,
   html.theme-dark-beta .border-amber-200,
   html.theme-dark-beta .border-amber-200\/60,
   html.theme-dark-beta .border-amber-200\/70,
@@ -210,21 +249,28 @@
     border-color: #92400e !important;
   }
 
+  html.theme-dark-beta .text-amber-500,
   html.theme-dark-beta .text-amber-600,
   html.theme-dark-beta .text-amber-700,
   html.theme-dark-beta .text-amber-800,
+  html.theme-dark-beta .text-amber-900,
+  html.theme-dark-beta .text-amber-950,
   html.theme-dark-beta .text-orange-600,
   html.theme-dark-beta .text-orange-700 {
     color: #fbbf24 !important;
   }
 
   html.theme-dark-beta .bg-red-50,
+  html.theme-dark-beta .bg-red-50\/50,
+  html.theme-dark-beta .bg-red-100,
   html.theme-dark-beta .bg-rose-50 {
     background-color: #2b0b0e !important;
   }
 
   html.theme-dark-beta .border-red-100,
+  html.theme-dark-beta .border-red-200,
   html.theme-dark-beta .border-red-200\/70,
+  html.theme-dark-beta .border-rose-100,
   html.theme-dark-beta .border-rose-200 {
     border-color: #991b1b !important;
   }
@@ -232,12 +278,24 @@
   html.theme-dark-beta .text-red-500,
   html.theme-dark-beta .text-red-600,
   html.theme-dark-beta .text-red-700,
-  html.theme-dark-beta .text-rose-600 {
+  html.theme-dark-beta .text-rose-500,
+  html.theme-dark-beta .text-rose-600,
+  html.theme-dark-beta .text-rose-700 {
     color: #fb7185 !important;
   }
 
   html.theme-dark-beta .divide-slate-50 > :not([hidden]) ~ :not([hidden]) {
     border-color: var(--dark-border-soft) !important;
+  }
+
+  html.theme-dark-beta .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--dark-border-soft) !important;
+  }
+
+  html.theme-dark-beta .ring-slate-200,
+  html.theme-dark-beta .ring-slate-200\/80,
+  html.theme-dark-beta .ring-slate-300 {
+    --tw-ring-color: var(--dark-border) !important;
   }
 
   html.theme-dark-beta input,
