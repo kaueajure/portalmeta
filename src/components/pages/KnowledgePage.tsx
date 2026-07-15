@@ -135,8 +135,6 @@ export const KnowledgePage = ({ currentUser: _currentUser }: KnowledgeManagerPro
   return (
     <>
     <PageShell
-      title="Base de Conhecimento"
-      subtitle="Documentação técnica para equipe e autoatendimento para clientes"
       actions={
         <Button onClick={openNew} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm">
           <Plus size={16} className="mr-2" /> Novo Artigo

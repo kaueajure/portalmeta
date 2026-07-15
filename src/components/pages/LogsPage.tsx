@@ -128,8 +128,6 @@ export const LogsPage = () => {
   return (
     <>
       <PageShell
-        title="Logs do Sistema"
-        subtitle="Acompanhe todas as atividades e operações realizadas na plataforma."
         actions={
           <Button
             variant="outline"

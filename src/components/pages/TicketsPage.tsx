@@ -1266,8 +1266,6 @@ export const TicketsPage = ({
 
   return (
     <PageShell
-      title="Central de Chamados"
-      subtitle="Priorize filas, acompanhe SLA e resolva chamados com clareza operacional."
       flush
       contentClassName="!overflow-hidden flex flex-col"
     >

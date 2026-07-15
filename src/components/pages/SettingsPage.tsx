@@ -225,8 +225,6 @@ export const SettingsPage = ({
   return (
     <>
       <PageShell
-        title="Configurações"
-        subtitle="Ajuste a identidade, os chamados e as regras do sistema."
         flush
         tabs={
           <div className="flex flex-wrap gap-1 py-3 bg-white w-fit">

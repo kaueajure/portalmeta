@@ -186,8 +186,6 @@ export const ProfilePage = ({
 
   return (
     <PageShell
-      title="Meu Perfil"
-      subtitle="Gerencie seus dados pessoais, segurança da conta e preferências de trabalho."
       contentClassName="p-4 sm:p-5 bg-slate-50"
       tabs={
         <div className="flex w-fit flex-wrap gap-1 bg-white py-3">

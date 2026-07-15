@@ -233,8 +233,6 @@ export function ReportsPage({ currentUser: _currentUser }: ReportsPageProps) {
 
   return (
     <PageShell
-      title="Relatórios Avançados"
-      subtitle="Analise métricas, SLAs e desempenho da operação."
       actions={
         <div className="flex flex-wrap gap-2 lg:justify-end">
           <Button

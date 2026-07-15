@@ -252,8 +252,6 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
   return (
     <>
       <PageShell
-        title="Equipe"
-        subtitle="Gerencie usuários, perfis de acesso e permissões da operação."
         actions={
           activeTab === "users" ? (
             <Button

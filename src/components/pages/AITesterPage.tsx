@@ -107,8 +107,6 @@ Posso ajudar você a responder clientes, resumir chamados, organizar fluxos de s
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
       <PageShell
-        title="Falar com o Tique"
-        subtitle="O seu assistente inteligente integrado do Portal Meta"
         actions={
           <div className="hidden sm:flex items-center gap-2 text-slate-400 text-xs px-2 py-1 bg-slate-50 rounded-lg">
             <HelpCircle size={14} />

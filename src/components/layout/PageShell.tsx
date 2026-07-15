@@ -2,8 +2,6 @@ import React from "react";
 import { cn } from "../../lib/utils";
 
 interface PageShellProps {
-  title?: string;
-  subtitle?: string;
   actions?: React.ReactNode;
   tabs?: React.ReactNode;
   children: React.ReactNode;
@@ -14,8 +12,6 @@ interface PageShellProps {
 }
 
 export function PageShell({
-  title,
-  subtitle,
   actions,
   tabs,
   children,
@@ -33,30 +29,14 @@ export function PageShell({
         className,
       )}
     >
-      {(title || subtitle || actions) && (
-        <header className="shrink-0 flex flex-col gap-4 border-b border-slate-200/80 bg-white px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5 sm:py-4">
-          <div>
-            {title && (
-              <h1 className="text-lg font-semibold tracking-tight text-slate-950 sm:text-xl">
-                {title}
-              </h1>
-            )}
-            {subtitle && (
-              <p className="mt-1 max-w-3xl text-sm font-medium leading-relaxed text-slate-500">
-                {subtitle}
-              </p>
-            )}
-          </div>
-
+      {(tabs || actions) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200/70 bg-white px-4 sm:px-5">
+          {tabs && <div className="min-w-0 flex-1">{tabs}</div>}
           {actions && (
-            <div className="flex flex-wrap items-center gap-2">{actions}</div>
+            <div className="ml-auto flex flex-wrap items-center gap-2 py-2.5">
+              {actions}
+            </div>
           )}
-        </header>
-      )}
-
-      {tabs && (
-        <div className="shrink-0 border-b border-slate-200/70 bg-white px-5">
-          {tabs}
         </div>
       )}
 

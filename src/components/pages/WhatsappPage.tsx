@@ -504,8 +504,6 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
       <PageShell
-        title="WhatsApp"
-        subtitle="Inbox de conversas — receba pelo webhook e responda pelo Portal Meta."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {showSetup && flowToolbar && canManage ? (

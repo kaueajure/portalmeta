@@ -274,8 +274,6 @@ export const DashboardPage = ({ currentUser, onNavigate }: DashboardPageProps) =
 
   return (
     <PageShell
-      title="Visão operacional"
-      subtitle="Acompanhe a saúde da operação, gargalos de SLA e produtividade do atendimento."
       flush
     >
       <div className="w-full space-y-4 p-3 sm:p-5">
