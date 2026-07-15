@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
-  Building2,
   Loader2,
   Menu,
   Search,
@@ -9,7 +8,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { api } from "../../lib/api";
-import { Empresa, Ticket, TicketListResponse, User } from "../../types";
+import { Ticket, TicketListResponse, User } from "../../types";
 import { cn } from "../../lib/utils";
 
 interface TopbarProps {
@@ -22,13 +21,6 @@ interface TopbarProps {
 type SearchResult =
   | {
       type: "ticket";
-      id: number;
-      title: string;
-      subtitle: string;
-      meta: string;
-    }
-  | {
-      type: "company";
       id: number;
       title: string;
       subtitle: string;
@@ -98,9 +90,8 @@ export const Topbar = ({
         page: "1",
       });
 
-      const [ticketsResult, companiesResult, usersResult] = await Promise.allSettled([
+      const [ticketsResult, usersResult] = await Promise.allSettled([
         api.get<TicketListResponse | Ticket[]>(`/tickets?${params.toString()}`),
-        api.get<Empresa[]>(`/companies?search=${encodeURIComponent(trimmedQuery)}`),
         api.get<User[]>(`/users?search=${encodeURIComponent(trimmedQuery)}&status=ativo`),
       ]);
 
@@ -122,18 +113,6 @@ export const Topbar = ({
           });
       }
 
-      if (companiesResult.status === "fulfilled") {
-        companiesResult.value.slice(0, 5).forEach((company) => {
-          nextResults.push({
-            type: "company",
-            id: company.id,
-            title: company.nome,
-            subtitle: company.email || company.email_suporte || "Sem e-mail cadastrado",
-            meta: company.ativo ? "Empresa ativa" : "Empresa inativa",
-          });
-        });
-      }
-
       if (usersResult.status === "fulfilled") {
         usersResult.value.slice(0, 5).forEach((user) => {
           nextResults.push({
@@ -148,7 +127,6 @@ export const Topbar = ({
 
       if (
         ticketsResult.status === "rejected" &&
-        companiesResult.status === "rejected" &&
         usersResult.status === "rejected"
       ) {
         setError("Não foi possível buscar agora.");
@@ -164,7 +142,6 @@ export const Topbar = ({
   const groupedResults = useMemo(
     () => ({
       tickets: results.filter((result) => result.type === "ticket"),
-      companies: results.filter((result) => result.type === "company"),
       users: results.filter((result) => result.type === "user"),
     }),
     [results],
@@ -179,16 +156,11 @@ export const Topbar = ({
       return;
     }
 
-    onNavigate?.({ tab: result.type === "user" ? "users" : "companies" });
+    onNavigate?.({ tab: "users" });
   };
 
   const renderResult = (result: SearchResult) => {
-    const Icon =
-      result.type === "ticket"
-        ? TicketIcon
-        : result.type === "company"
-          ? Building2
-          : UserRound;
+    const Icon = result.type === "ticket" ? TicketIcon : UserRound;
     return (
       <button
         key={`${result.type}-${result.id}`}
@@ -202,9 +174,7 @@ export const Topbar = ({
             "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border",
             result.type === "ticket"
               ? "border-blue-100 bg-blue-50 text-blue-700"
-              : result.type === "company"
-                ? "border-indigo-100 bg-indigo-50 text-indigo-700"
-                : "border-emerald-100 bg-emerald-50 text-emerald-700",
+              : "border-emerald-100 bg-emerald-50 text-emerald-700",
           )}
         >
           <Icon size={15} />
@@ -254,7 +224,7 @@ export const Topbar = ({
                 setIsOpen(true);
               }}
               onFocus={() => trimmedQuery.length >= 2 && setIsOpen(true)}
-              placeholder="Buscar chamados, clientes ou empresas..."
+              placeholder="Buscar chamados, clientes ou usuários..."
               className="h-8 w-full rounded-md border border-slate-200 bg-slate-50/80 pl-8 pr-8 text-xs text-slate-700 shadow-[0_1px_1px_rgba(15,23,42,0.02)] outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
             />
             {loading && (
@@ -281,7 +251,7 @@ export const Topbar = ({
                   <div className="px-3 py-4 text-center">
                     <div className="text-xs font-semibold text-slate-800">Nenhum resultado</div>
                     <div className="mt-1 text-[11px] font-medium text-slate-500">
-                      Tente buscar por número, título, cliente, empresa ou usuário.
+                      Tente buscar por número, título, cliente ou usuário.
                     </div>
                   </div>
                 ) : (
@@ -292,14 +262,6 @@ export const Topbar = ({
                           Chamados
                         </div>
                         {groupedResults.tickets.map(renderResult)}
-                      </div>
-                    )}
-                    {groupedResults.companies.length > 0 && (
-                      <div>
-                        <div className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          Clientes e empresas
-                        </div>
-                        {groupedResults.companies.map(renderResult)}
                       </div>
                     )}
                     {groupedResults.users.length > 0 && (

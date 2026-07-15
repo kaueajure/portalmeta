@@ -4,7 +4,6 @@ import {
   Ticket,
   BarChart3,
   Users,
-  Building2,
   Shield,
   UserCircle,
   Settings,
@@ -102,12 +101,6 @@ export const Sidebar = ({
           label: "Usuários e Permissões",
           access: canAccessAppScreen(currentUser, "users"),
         },
-        {
-          id: "companies",
-          icon: Building2,
-          label: "Clientes e Empresas",
-          access: canAccessAppScreen(currentUser, "companies"),
-        },
       ],
     },
     {
@@ -181,7 +174,7 @@ export const Sidebar = ({
                 isCollapsed && "lg:pointer-events-none lg:max-w-0 lg:opacity-0",
               )}
             >
-              Gestifique
+              MetaBit
             </span>
           </div>
           {onToggleCollapse && (

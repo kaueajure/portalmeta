@@ -5,7 +5,7 @@ import { PoolConnection } from 'mysql2/promise';
  *
  * Fase 1 (envio por canal): adiciona credenciais/identidade SMTP por canal em
  * empresa_email_canais, para que respostas de ticket saiam com a identidade da
- * EMPRESA (email_publico) e não com o e-mail global do Gestifique.
+ * EMPRESA (email_publico) e não com o e-mail global do MetaBit.
  *
  * - A senha SMTP é armazenada CIFRADA (smtp_pass_enc) via utils/crypto.ts.
  * - Idempotente (columnExists).

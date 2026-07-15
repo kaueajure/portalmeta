@@ -156,7 +156,7 @@ async function sendPublicAttachmentEmail(params) {
     if (messageAuthorId !== null && requesterUserId !== null && messageAuthorId === requesterUserId) {
         return;
     }
-    const outboundMessageId = `<ticket-${ticketId}-msg-${messageId}-attachments@gestifique.com.br>`;
+    const outboundMessageId = `<ticket-${ticketId}-msg-${messageId}-attachments@metabit.com.br>`;
     await emailOutboxService.enqueueTicketEmail({
         to: row.cliente_email,
         ticketId,

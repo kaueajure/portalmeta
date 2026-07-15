@@ -52,8 +52,6 @@ export function canAccessAppScreen(
       return hasPermission(user, 'integracoes.whatsapp.visualizar');
     case 'users':
       return hasPermission(user, 'usuarios.visualizar');
-    case 'companies':
-      return isDeveloperUser(user);
     case 'logs':
       return hasPermission(user, 'auditoria.visualizar');
     case 'reports':
@@ -79,10 +77,8 @@ export function getFirstAccessibleAppScreen(user: User | null | undefined): stri
     'knowledge',
     'reports',
     'users',
-    'companies',
     'settings',
     'logs',
     'profile',
   ].find((screen) => canAccessAppScreen(user, screen)) || 'profile';
 }
-

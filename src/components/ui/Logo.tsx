@@ -10,7 +10,7 @@ export const Logo = ({ size = 20, className }: LogoProps) => {
   return (
     <img
       src="/logo.png"
-      alt="Gestifique"
+      alt="MetaBit"
       width={size}
       height={size}
       className={cn("object-contain", className)}
@@ -61,7 +61,7 @@ export const AppLogo = ({ size = 20, className }: LogoProps) => {
     >
       <img
         src="/logo.png"
-        alt="Gestifique Logo"
+        alt="MetaBit Logo"
         width={size}
         height={size}
         className="object-contain z-10 w-full h-full"

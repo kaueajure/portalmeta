@@ -10,7 +10,7 @@ interface PublicPricingPageProps {
 const DEFAULT_PRICING_SETTINGS: PricingSettings = {
   header: {
     title: "Planos para diferentes fases da sua operação.",
-    subtitle: "O Gestifique pode ser adaptado ao tamanho da sua equipe, volume de tickets e necessidade de gestão de desempenho."
+    subtitle: "O MetaBit pode ser adaptado ao tamanho da sua equipe, volume de tickets e necessidade de gestão de desempenho."
   },
   plans: [
     {

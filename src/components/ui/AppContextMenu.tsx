@@ -129,7 +129,7 @@ export const AppContextMenu = () => {
         className="absolute w-[232px] overflow-hidden rounded-lg border border-slate-200 bg-white py-1.5 shadow-[0_18px_48px_rgba(15,23,42,0.18)]"
         style={{ left: menu.x, top: menu.y }}
         role="menu"
-        aria-label="Menu contextual do Gestifique"
+        aria-label="Menu contextual do MetaBit"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">

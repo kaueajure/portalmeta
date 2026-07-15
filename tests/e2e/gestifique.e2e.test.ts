@@ -119,7 +119,7 @@ async function launchBrowser(startUrl: string): Promise<BrowserHandle> {
   const chromePath = findChromeExecutable();
   assert.ok(chromePath, 'Chrome ou Edge nao encontrado. Defina CHROME_PATH para rodar e2e.');
 
-  const userDataDir = mkdtempSync(path.join(tmpdir(), 'gestifique-e2e-'));
+  const userDataDir = mkdtempSync(path.join(tmpdir(), 'metabit-e2e-'));
   const chrome = spawn(chromePath, [
     '--headless=new',
     '--remote-debugging-port=0',
@@ -236,7 +236,7 @@ async function apiGet<T>(session: CdpSession, endpoint: string): Promise<T> {
   `, true);
 }
 
-test('gestifique e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, async (t) => {
+test('metabit e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, async (t) => {
   const browser = await launchBrowser(`${BASE_URL}/login`);
   const { session } = browser;
   const pageErrors: string[] = [];
@@ -286,7 +286,7 @@ test('gestifique e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, 
 
     await t.test('busca global tem estado vazio ou resultados', async () => {
       const profile = await apiGet<any>(session, '/api/profile');
-      let query = 'gestifique-sem-resultado-e2e';
+      let query = 'metabit-sem-resultado-e2e';
       if (profile?.desenvolvedor) {
         const companies = await apiGet<any[]>(session, '/api/companies').catch(() => []);
         query = companies[0]?.nome || query;
@@ -312,7 +312,7 @@ test('gestifique e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, 
       }
 
       await evaluate<void>(session, `
-        localStorage.setItem('gestifique.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: ${Number(ticket.id)} }));
+        localStorage.setItem('metabit.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: ${Number(ticket.id)} }));
       `);
       await navigate(session, BASE_URL);
       await waitFor(session, `document.body.innerText.includes('Chamado') && (document.body.innerText.includes('Enviar resposta') || document.body.innerText.includes('Propriedades'))`, 20000);
@@ -320,7 +320,7 @@ test('gestifique e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, 
 
     await t.test('criacao de chamado abre modal', async () => {
       await evaluate<void>(session, `
-        localStorage.setItem('gestifique.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
+        localStorage.setItem('metabit.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
       `);
       await navigate(session, BASE_URL);
       await waitFor(session, `document.body.innerText.includes('Central de Chamados')`, 15000);
@@ -345,7 +345,7 @@ test('gestifique e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, 
         mobile: true,
       });
       await evaluate<void>(session, `
-        localStorage.setItem('gestifique.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
+        localStorage.setItem('metabit.dashboardState', JSON.stringify({ activeTab: 'tickets', selectedTicketId: null }));
       `);
       await navigate(session, BASE_URL);
       await waitFor(session, `document.body.innerText.includes('Central de Chamados')`, 15000);

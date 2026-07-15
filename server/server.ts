@@ -55,8 +55,8 @@ async function startServer() {
     'http://localhost:3000',
     `http://localhost:${env.PORT}`,
     `http://127.0.0.1:${env.PORT}`,
-    'https://gestifique.com.br',
-    'https://www.gestifique.com.br',
+    'https://portalmeta.com.br',
+    'https://www.portalmeta.com.br',
     'https://cornflowerblue-kingfisher-528919.hostingersite.com',
     ...env.CORS_ORIGINS
   ];
@@ -315,7 +315,7 @@ async function startServer() {
   app.use(errorHandler);
 
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Gestifique Server Instance running on port ${PORT}`);
+    console.log(`🚀 MetaBit Server Instance running on port ${PORT}`);
     console.log(`Environment: ${env.NODE_ENV}`);
     console.log(`Roles: [WEB: ${env.ENABLE_WEB_SERVER}] [EMAIL_LISTENER: ${env.ENABLE_EMAIL_LISTENER}] [JOBS: ${env.ENABLE_TICKET_JOBS}]`);
 

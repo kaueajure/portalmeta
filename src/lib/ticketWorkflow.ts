@@ -23,7 +23,7 @@ export const TICKET_STATUS_SPECIAL_OPTIONS: { value: TicketStatusSpecial; label:
   { value: "encerrado", label: "Encerrado", description: "Fechamento administrativo do ticket, protegido por permissão específica." },
 ];
 
-const STORAGE_KEY_PREFIX = "gestifique.ticketWorkflow";
+const STORAGE_KEY_PREFIX = "metabit.ticketWorkflow";
 
 const getWorkflowKey = (companyId?: number | string | null) =>
   `${STORAGE_KEY_PREFIX}.${companyId || "default"}`;

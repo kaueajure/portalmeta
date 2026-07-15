@@ -14,7 +14,7 @@ jobs:
       DB_PORT: 3306
       DB_USER: ci
       DB_PASSWORD: ci
-      DB_NAME: gestifique_ci
+      DB_NAME: metabit_ci
       ENCRYPTION_KEY: ci_encryption_key_for_build_only_32_chars
 
     steps:

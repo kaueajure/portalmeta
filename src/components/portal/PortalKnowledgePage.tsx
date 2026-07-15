@@ -164,7 +164,7 @@ export const PortalKnowledgePage = ({ onNavigate, initialArticleId }: PortalKnow
           
           <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl text-blue-900">
             <BookOpen className="text-blue-600 mb-2" size={20} />
-            <h3 className="font-semibold text-sm mb-1">Manual do Gestifique</h3>
+            <h3 className="font-semibold text-sm mb-1">Manual do MetaBit</h3>
             <p className="text-xs text-blue-800/70 mb-2">Aprenda a acessar e utilizar todos os recursos da nossa plataforma.</p>
             <button className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors">Acessar Guia →</button>
           </div>

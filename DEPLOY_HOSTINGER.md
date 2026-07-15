@@ -1,6 +1,6 @@
 # Deploy na Hostinger
 
-Este guia descreve como fazer o deploy da Gestifique (Frontend + Backend) em um ambiente Node.js na Hostinger.
+Este guia descreve como fazer o deploy da MetaBit (Frontend + Backend) em um ambiente Node.js na Hostinger.
 
 O projeto foi preparado para gerar a **build de produção** de maneira ideal, onde:
 - O frontend é compilado para HTML/CSS/JS estático.
@@ -12,7 +12,7 @@ O projeto foi preparado para gerar a **build de produção** de maneira ideal, o
 ## 1. Configurando o Banco de Dados (MySQL)
 
 1. No painel da Hostinger, vá em **Bancos de Dados -> Bancos de dados MySQL**.
-2. Crie um novo banco de dados (ex: `u237752053_gestifique`), informando usuário e senha fortes.
+2. Crie um novo banco de dados (ex: `u237752053_metabit`), informando usuário e senha fortes.
 3. Se você for rodar ou acessar localmente para popular dados, certifique-se de liberar o seu IP em **MySQL Remoto**.
 4. Anote:
    - Host (geralmente algo como `srv1883.hstgr.io` ou `localhost` se a aplicação Node.js estiver no mesmo servidor)
@@ -39,11 +39,11 @@ Na opção de adicionar variáveis de ambiente no painel Node.js da Hostinger, a
 | `PORT` | `3000` (ou a porta fornecida pelo painel da Hostinger) |
 | `JWT_SECRET` | `UmaChaveMuitoLongaeSegura123456` |
 | `DB_HOST` | `srv1883.hstgr.io` (Pode ser localhost se BD na mesma conta) |
-| `DB_USER` | `u237752053_gestifique` |
+| `DB_USER` | `u237752053_metabit` |
 | `DB_PASSWORD` | `SuaSenhaDoBanco!` |
-| `DB_NAME` | `u237752053_gestifique` |
+| `DB_NAME` | `u237752053_metabit` |
 | `DB_PORT` | `3306` |
-| `DEV_EMAIL` | `admin@gestifique.com.br` |
+| `DEV_EMAIL` | `admin@metabit.com.br` |
 | `DEV_PASSWORD` | `SenhaForte123@#` |
 | `AUTO_RUN_MIGRATIONS` | `false` |
 

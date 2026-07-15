@@ -1,4 +1,4 @@
-# Gestifique3 - Migrações de Banco de Dados
+# MetaBit3 - Migrações de Banco de Dados
 
 O projeto utiliza um sistema de migrações versionadas para garantir que a estrutura do banco de dados (MySQL) esteja sempre atualizada e consistente entre os ambientes de desenvolvimento e produção.
 

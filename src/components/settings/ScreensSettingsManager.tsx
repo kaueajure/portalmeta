@@ -22,7 +22,7 @@ export const ScreensSettingsManager: React.FC<ScreensSettingsManagerProps> = ({ 
            <Globe size={20} className="text-blue-600" />
            <h3 className="text-xl font-bold text-slate-900 tracking-tight">Telas</h3>
         </div>
-        <p className="text-sm font-medium text-slate-500">Configure conteúdos exibidos nas páginas públicas do Gestifique.</p>
+        <p className="text-sm font-medium text-slate-500">Configure conteúdos exibidos nas páginas públicas do MetaBit.</p>
       </div>
 
       <div className="flex items-center gap-2 p-1 bg-white border border-slate-200 rounded-xl w-fit shadow-sm">

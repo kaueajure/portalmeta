@@ -34,7 +34,6 @@ type AppTab =
   | "dashboard"
   | "tickets"
   | "users"
-  | "companies"
   | "logs"
   | "profile"
   | "settings"
@@ -333,7 +332,7 @@ export const SettingsPage = ({
                               Perfil Corporativo
                             </h4>
                             <p className="text-[11px] text-slate-500 font-medium">
-                              Dados fundamentais da sua instância Gestifique.
+                              Dados fundamentais da sua instância MetaBit.
                             </p>
                           </div>
                         </div>
@@ -772,17 +771,12 @@ export const SettingsPage = ({
 
                         <p className="text-[13px] text-slate-500 leading-relaxed max-w-3xl">
                           Acesso restrito para diagnóstico e manutenção
-                          estrutural do ecossistema Gestifique. Ações aqui
+                          estrutural do ecossistema MetaBit. Ações aqui
                           impactam múltiplos módulos.
                         </p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {[
-                            {
-                              id: "companies" as const,
-                              desc: "Empresas",
-                              icon: <Building className="text-blue-500" />,
-                            },
                             {
                               id: "users" as const,
                               desc: "Usuários",
@@ -872,4 +866,3 @@ export const SettingsPage = ({
     </>
   );
 };
-

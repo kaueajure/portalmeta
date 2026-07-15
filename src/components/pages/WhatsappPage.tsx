@@ -69,7 +69,7 @@ const META_CREDENTIALS = [
     env: "ENABLE_WHATSAPP",
     value: "true",
     where:
-      "Você define. Coloque true para ligar o módulo no Gestifique.",
+      "Você define. Coloque true para ligar o módulo no MetaBit.",
   },
   {
     env: "WHATSAPP_PHONE_NUMBER_ID",
@@ -104,7 +104,7 @@ const META_CREDENTIALS = [
   {
     env: "FRONTEND_URL",
     where:
-      "URL pública HTTPS do Gestifique, ex.: https://gestifique.com.br — usada para montar a callback do webhook.",
+      "URL pública HTTPS do MetaBit, ex.: https://portalmeta.com.br — usada para montar a callback do webhook.",
   },
 ] as const;
 
@@ -323,7 +323,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
     <div className="flex h-full min-h-0 w-full flex-col">
       <PageShell
         title="WhatsApp"
-        subtitle="Inbox de conversas — receba pelo webhook e responda pelo Gestifique."
+        subtitle="Inbox de conversas — receba pelo webhook e responda pelo MetaBit."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowSetup((v) => !v)}>
@@ -681,7 +681,7 @@ function SetupPanel({
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
             Cole no arquivo <code className="rounded bg-white px-1 py-0.5 text-[11px]">.env</code>{" "}
             na raiz do projeto, reinicie o servidor e configure o webhook. Aprovação do app sozinha
-            não mostra mensagens — o Gestifique precisa receber o webhook.
+            não mostra mensagens — o MetaBit precisa receber o webhook.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={onClose}>
@@ -693,7 +693,7 @@ function SetupPanel({
         <section className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-3 flex items-center gap-2">
             <ShieldCheck size={16} className="text-emerald-600" />
-            <h3 className="text-sm font-semibold text-slate-900">Status no Gestifique</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Status no MetaBit</h3>
           </div>
           <dl className="space-y-2 text-sm">
             <StatusRow label="Habilitado" value={status?.enabled ? "Sim" : "Não"} ok={!!status?.enabled} />

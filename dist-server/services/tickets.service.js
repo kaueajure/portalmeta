@@ -799,7 +799,7 @@ class TicketsService {
                 });
             }
             if (authorEmail) {
-                const outboundMessageId = `<ticket-${ticketId}-created@gestifique.com.br>`;
+                const outboundMessageId = `<ticket-${ticketId}-created@metabit.com.br>`;
                 await emailOutboxService.enqueueTicketEmail({
                     to: authorEmail,
                     ticketId,
@@ -1351,7 +1351,7 @@ class TicketsService {
         if (!to || to === 'removido@sistema.com')
             return;
         const emailType = statusSpecial === 'encerrado' ? 'ticket_closed' : 'ticket_resolved';
-        const outboundMessageId = `<ticket-${ticketId}-${emailType}@gestifique.com.br>`;
+        const outboundMessageId = `<ticket-${ticketId}-${emailType}@metabit.com.br>`;
         try {
             await emailOutboxService.enqueueTicketEmail({
                 to,

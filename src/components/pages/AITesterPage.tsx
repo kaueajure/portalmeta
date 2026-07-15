@@ -54,7 +54,7 @@ export const AITesterPage: React.FC<AITesterPageProps> = ({ currentUser }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "model",
-      text: `Olá, ${currentUser.nome}! Eu sou o Tique, seu assistente de Inteligência Artificial no Gestifique.
+      text: `Olá, ${currentUser.nome}! Eu sou o Tique, seu assistente de Inteligência Artificial no MetaBit.
 
 Posso ajudar você a responder clientes, resumir chamados, organizar fluxos de suporte, revisar mensagens ou pensar em automações. Como posso te apoiar hoje?`,
     },
@@ -108,7 +108,7 @@ Posso ajudar você a responder clientes, resumir chamados, organizar fluxos de s
     <div className="flex h-full min-h-0 w-full flex-col">
       <PageShell
         title="Falar com o Tique"
-        subtitle="O seu assistente inteligente integrado do Gestifique"
+        subtitle="O seu assistente inteligente integrado do MetaBit"
         actions={
           <div className="hidden sm:flex items-center gap-2 text-slate-400 text-xs px-2 py-1 bg-slate-50 rounded-lg">
             <HelpCircle size={14} />

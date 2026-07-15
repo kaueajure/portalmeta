@@ -1,4 +1,4 @@
-# Gestifique3 - SaaS de Gestão de Tickets
+# MetaBit3 - SaaS de Gestão de Tickets
 
 Sistema profissional de atendimento ao cliente com suporte Omnichannel, SLA, Portal do Cliente e Base de Conhecimento.
 
@@ -31,12 +31,12 @@ Para o checklist completo de producao, rollback, workers e healthcheck, veja `do
 ### 4. Execução
 Utilize `pm2` ou similar para manter o processo rodando:
 ```bash
-pm2 start dist-server/server.js --name gestifique
+pm2 start dist-server/server.js --name metabit
 ```
 
 ## 🛠️ Modos de Escala (Workload Separation)
 
-O Gestifique3 permite separar a carga de trabalho em diferentes processos (WEB vs WORKER):
+O MetaBit3 permite separar a carga de trabalho em diferentes processos (WEB vs WORKER):
 
 - **Modo Monolítico (Padrão)**: `node dist-server/server.js` (Roda tudo: API + Jobs + Email Listener).
 - **Modo Worker-Only**: `node dist-server/worker.js` (Focado apenas em background processing. Desabilita rotas e frontend para economizar recursos).

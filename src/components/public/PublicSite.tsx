@@ -62,16 +62,16 @@ export const PublicSite = ({ onLogin }: PublicSiteProps) => {
   useEffect(() => {
     // Dynamic document title based on current path
     const titles: Record<string, string> = {
-      '/': 'Gestifique — Gestão de tickets e atendimento',
-      '/funcionalidades': 'Funcionalidades | Gestifique',
-      '/precos': 'Preços | Gestifique',
-      '/contato': 'Contato | Gestifique',
-      '/demonstracao': 'Demonstração | Gestifique',
-      '/preview': 'Demonstração | Gestifique',
-      '/politica-de-privacidade': 'Política de Privacidade | Gestifique',
-      '/termos-de-uso': 'Termos de Uso | Gestifique'
+      '/': 'MetaBit — Gestão de tickets e atendimento',
+      '/funcionalidades': 'Funcionalidades | MetaBit',
+      '/precos': 'Preços | MetaBit',
+      '/contato': 'Contato | MetaBit',
+      '/demonstracao': 'Demonstração | MetaBit',
+      '/preview': 'Demonstração | MetaBit',
+      '/politica-de-privacidade': 'Política de Privacidade | MetaBit',
+      '/termos-de-uso': 'Termos de Uso | MetaBit'
     };
-    document.title = titles[currentPath] || 'Gestifique';
+    document.title = titles[currentPath] || 'MetaBit';
   }, [currentPath]);
 
   return (

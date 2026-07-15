@@ -47,7 +47,7 @@ router.get('/me', async (req, res) => {
         return sendError(res, 'Não autorizado', 401);
     try {
         const [empresaRows] = await pool.query('SELECT nome FROM empresas WHERE id = ?', [context.empresa_id]);
-        const empresaNome = empresaRows[0]?.nome || 'Gestifique';
+        const empresaNome = empresaRows[0]?.nome || 'MetaBit';
         sendSuccess(res, {
             email: context.customer_email,
             empresa_id: context.empresa_id,

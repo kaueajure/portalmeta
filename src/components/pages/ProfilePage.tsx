@@ -33,7 +33,6 @@ type AppTab =
   | "dashboard"
   | "tickets"
   | "users"
-  | "companies"
   | "logs"
   | "profile"
   | "settings"
@@ -58,7 +57,7 @@ export const ProfilePage = ({
   const [photoLoading, setPhotoLoading] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
   const [darkThemeBeta, setDarkThemeBeta] = useState(() => {
-    return window.localStorage.getItem("gestifique-theme") === "dark-beta";
+    return window.localStorage.getItem("metabit-theme") === "dark-beta";
   });
   const [showPwd, setShowPwd] = useState({
     current: false,
@@ -71,7 +70,7 @@ export const ProfilePage = ({
   React.useEffect(() => {
     document.documentElement.classList.toggle("theme-dark-beta", darkThemeBeta);
     window.localStorage.setItem(
-      "gestifique-theme",
+      "metabit-theme",
       darkThemeBeta ? "dark-beta" : "light",
     );
   }, [darkThemeBeta]);
@@ -291,7 +290,7 @@ export const ProfilePage = ({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold leading-tight">
-                  {currentUser.empresa_nome || "Gestifique Central"}
+                  {currentUser.empresa_nome || "MetaBit Central"}
                 </div>
                 <div className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-emerald-600">
                   <span className="block h-1.5 w-1.5 rounded-full bg-emerald-500" />

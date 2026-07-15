@@ -149,7 +149,7 @@ router.post('/companies/:companyId/email-channels/:id/smtp/test', async (req, re
             type: 'agent_reply',
             title: 'Teste de envio do canal',
             customerName: channel.nome || 'Equipe',
-            agentName: 'Gestifique',
+            agentName: 'MetaBit',
             message: 'Este é um e-mail de teste do canal. Se você recebeu, o envio pela identidade da empresa está funcionando.',
             status: 'Teste'
         }, {

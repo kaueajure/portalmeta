@@ -38,7 +38,7 @@ export const PublicLayout = ({ children, onLogin, currentPath, onNavigate }: Pub
             className="flex items-center gap-2 group outline-none"
           >
             <AppLogo size={24} className="group-hover:scale-105 transition-transform" />
-            <span className="text-lg font-bold tracking-tight text-slate-900">Gestifique</span>
+            <span className="text-lg font-bold tracking-tight text-slate-900">MetaBit</span>
           </a>
 
           {/* Desktop Nav */}
@@ -136,7 +136,7 @@ export const PublicLayout = ({ children, onLogin, currentPath, onNavigate }: Pub
           <div className="flex flex-col items-start gap-4">
             <div className="flex items-center gap-2 grayscale-0">
               <AppLogo size={24} />
-              <span className="font-bold text-slate-900 tracking-tight text-lg">Gestifique</span>
+              <span className="font-bold text-slate-900 tracking-tight text-lg">MetaBit</span>
             </div>
             <p className="text-sm font-medium text-slate-500 leading-relaxed max-w-xs">
               Sua operação mais estruturada. A plataforma enxuta para centralizar tickets B2B e SLA.
@@ -155,13 +155,13 @@ export const PublicLayout = ({ children, onLogin, currentPath, onNavigate }: Pub
              <a href="/contato" onClick={(e) => handleNavClick(e, '/contato')} className="text-sm text-slate-500 hover:text-blue-600 transition-colors inline-block w-fit">Agendar Demonstração</a>
              <div className="flex items-center gap-2 text-sm text-slate-500 mt-2">
                 <Mail size={16} className="text-slate-400" />
-                <span>contato@gestifique.com.br</span>
+                <span>contato@metabit.com.br</span>
              </div>
           </div>
         </div>
 
         <div className="max-w-6xl mx-auto pt-6 border-t border-slate-200 text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-[12px] font-semibold text-slate-400">© {new Date().getFullYear()} Gestifique. Todos os direitos reservados.</p>
+          <p className="text-[12px] font-semibold text-slate-400">© {new Date().getFullYear()} MetaBit. Todos os direitos reservados.</p>
           <div className="flex items-center gap-6 text-[12px] font-semibold text-slate-400">
             <a href="/termos-de-uso" onClick={(e) => handleNavClick(e, '/termos-de-uso')} className="hover:text-blue-600 transition-colors">
               Termos de Uso

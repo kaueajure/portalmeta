@@ -186,7 +186,7 @@ export const KnowledgePage = ({ currentUser }: KnowledgeManagerProps) => {
               onChange={setSelectedCompanyId}
               placeholder="Empresa: Central"
               options={[
-                { value: '', label: 'Gestifique Central' },
+                { value: '', label: 'MetaBit Central' },
                 ...companies.map(c => ({ value: String(c.id), label: c.nome }))
               ]}
               buttonClassName="h-8 bg-slate-50 border-slate-200 rounded-md text-xs font-medium min-w-[120px] flex-1 sm:flex-none"

@@ -43,11 +43,6 @@ const UsersPage = lazy(() =>
     default: module.UsersPage,
   })),
 );
-const CompaniesPage = lazy(() =>
-  import("./components/pages/CompaniesPage").then((module) => ({
-    default: module.CompaniesPage,
-  })),
-);
 const LogsPage = lazy(() =>
   import("./components/pages/LogsPage").then((module) => ({
     default: module.LogsPage,
@@ -107,7 +102,6 @@ type ActiveTab =
   | "tickets"
   | "whatsapp"
   | "users"
-  | "companies"
   | "logs"
   | "profile"
   | "settings"
@@ -115,7 +109,7 @@ type ActiveTab =
   | "knowledge"
   | "ai";
 
-const DASHBOARD_STATE_KEY = "gestifique.dashboardState";
+const DASHBOARD_STATE_KEY = "metabit.dashboardState";
 
 const isActiveTab = (value: string | null): value is ActiveTab =>
   !!value &&
@@ -124,7 +118,6 @@ const isActiveTab = (value: string | null): value is ActiveTab =>
     "tickets",
     "whatsapp",
     "users",
-    "companies",
     "logs",
     "profile",
     "settings",
@@ -191,7 +184,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    return window.localStorage.getItem("gestifique-sidebar-collapsed") === "true";
+    return window.localStorage.getItem("metabit-sidebar-collapsed") === "true";
   });
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(
     () => loadDashboardState().selectedTicketId,
@@ -203,7 +196,7 @@ export default function App() {
   const [resetEmail, setResetEmail] = useState("");
 
   useEffect(() => {
-    const savedTheme = window.localStorage.getItem("gestifique-theme");
+    const savedTheme = window.localStorage.getItem("metabit-theme");
     document.documentElement.classList.toggle(
       "theme-dark-beta",
       savedTheme === "dark-beta",
@@ -676,8 +669,6 @@ export default function App() {
           return "WhatsApp";
         case "users":
           return "Gestão de Usuários";
-        case "companies":
-          return "Empresas Ativas";
         case "logs":
           return "Logs do Sistema";
         case "reports":
@@ -691,7 +682,7 @@ export default function App() {
         case "settings":
           return "Preferências";
         default:
-          return "Gestifique";
+          return "MetaBit";
       }
     };
 
@@ -710,7 +701,7 @@ export default function App() {
           onToggleCollapse={() => {
             setIsSidebarCollapsed((current) => {
               const next = !current;
-              window.localStorage.setItem("gestifique-sidebar-collapsed", String(next));
+              window.localStorage.setItem("metabit-sidebar-collapsed", String(next));
               return next;
             });
           }}
@@ -791,13 +782,6 @@ export default function App() {
                   {activeTab === "users" &&
                     (canAccessAppScreen(currentUser, "users") ? (
                       <UsersPage currentUser={currentUser} />
-                    ) : (
-                      <AccessDenied />
-                    ))}
-
-                  {activeTab === "companies" &&
-                    (canAccessAppScreen(currentUser, "companies") ? (
-                      <CompaniesPage currentUser={currentUser} />
                     ) : (
                       <AccessDenied />
                     ))}

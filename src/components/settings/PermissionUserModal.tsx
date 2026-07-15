@@ -311,7 +311,7 @@ export const PermissionUserModal = ({ userId, isOpen, onClose, currentUser }: Pe
                   Matriz de Permissões Efetivas
                 </h3>
                 <span className="text-[10px] font-medium bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">
-                  Gestifique RBAC v3
+                  MetaBit RBAC v3
                 </span>
               </div>
               <p className="text-[12px] text-slate-500 mt-0.5">
