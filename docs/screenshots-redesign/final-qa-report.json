@@ -1,0 +1,29 @@
+{
+  "events": [
+    {
+      "source": "network",
+      "level": "error",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "timestamp": 1783169808823.517,
+      "url": "http://127.0.0.1:3000/api/profile",
+      "networkRequestId": "13636.20"
+    },
+    {
+      "source": "network",
+      "level": "error",
+      "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "timestamp": 1783169820007.836,
+      "url": "http://127.0.0.1:3000/api/attachments/1/download?inline=1",
+      "networkRequestId": "13636.138"
+    },
+    {
+      "source": "network",
+      "level": "error",
+      "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "timestamp": 1783169843272.427,
+      "url": "http://127.0.0.1:3000/api/attachments/1/download?inline=1",
+      "networkRequestId": "13636.399"
+    }
+  ],
+  "screens": 18
+}

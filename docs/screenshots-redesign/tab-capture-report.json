@@ -1,0 +1,11 @@
+{
+  "done": [
+    "reports",
+    "settings",
+    "users",
+    "companies",
+    "knowledge",
+    "ticket-detail-click"
+  ],
+  "errors": []
+}

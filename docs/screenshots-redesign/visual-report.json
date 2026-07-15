@@ -1,0 +1,37 @@
+{
+  "screens": [
+    {
+      "label": "Chamados",
+      "key": "03-tickets-kanban",
+      "ok": true
+    },
+    {
+      "label": "Relat?rios",
+      "key": "07-reports",
+      "ok": false
+    },
+    {
+      "label": "Configura??es",
+      "key": "08-settings",
+      "ok": false
+    },
+    {
+      "label": "Usu?rios",
+      "key": "09-users",
+      "ok": false
+    },
+    {
+      "label": "Clientes e Empresas",
+      "key": "10-companies",
+      "ok": true
+    },
+    {
+      "label": "Base de Conhecimento",
+      "key": "11-knowledge",
+      "ok": true
+    }
+  ],
+  "errors": [
+    "Error: Timeout document.body.innerText.includes(\"Entrar\")\n    at waitFor (file:///C:/Users/kaueajure/Desktop/Gestifique/[eval1]:12:184)\n    at async file:///C:/Users/kaueajure/Desktop/Gestifique/[eval1]:28:137"
+  ]
+}

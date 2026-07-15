@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "title": "QA portal autenticado 2026-07-04T13:48:00",
+  "events": [],
+  "containsMojibake": true,
+  "authMethod": "portal JWT equivalent to token returned by verify-code; request-code/verify-code were validated separately until local rate limit"
+}

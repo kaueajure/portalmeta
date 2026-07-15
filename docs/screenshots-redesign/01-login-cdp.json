@@ -1,0 +1,19 @@
+{
+  "url": "http://localhost:3001/login",
+  "width": 1440,
+  "height": 1000,
+  "overflowX": 0,
+  "text": "Gestifique\nAcesse sua central de atendimento\n\nControle chamados, SLAs, clientes e relatórios em um ambiente seguro e integrado.\n\nCentral de chamados B2B\nControle de SLA e prioridades\nPortal de autoatendimento do cliente\nIndicadores gerenciais de atendimento\nABERTOS\n24\nSLA\n3\nAMBIENTE PROTEGIDO • ACESSO RESTRITO\nGESTIFIQUE CLOUD\nEntrar no Gestifique\n\nAcesse sua central de atendimento.\n\nE-mail Corporativo\nSenha\nEsqueceu a senha?\nEntrar\nAcessar portal do cliente\nVoltar ao site público\nAMBIENTE PROTEGIDO\n•\nACESSO RESTRITO",
+  "h": [
+    "Acesse sua central de atendimento",
+    "Entrar no Gestifique"
+  ],
+  "buttons": [
+    "Esqueceu a senha?",
+    "Mostrar senha",
+    "Entrar",
+    "Acessar portal do cliente",
+    "Voltar ao site público"
+  ],
+  "tables": 0
+}

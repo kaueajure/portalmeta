@@ -1,0 +1,6 @@
+{
+  "name": "Gestifique",
+  "description": "Plataforma premium de gestão de tickets e suporte para empresas modernas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci_jwt_secret_for_build_and_tests_only
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: ci
+      DB_PASSWORD: ci
+      DB_NAME: gestifique_ci
+      ENCRYPTION_KEY: ci_encryption_key_for_build_only_32_chars
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
