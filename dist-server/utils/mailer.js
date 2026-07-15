@@ -309,8 +309,8 @@ export const sendTicketEmail = async (params, options) => {
     }
 };
 export const sendPortalAccessCodeEmail = async (params) => {
-    const { to, code, empresaNome = 'MetaBit', expiresMinutes = 10 } = params;
-    const safeEmpresaNome = escapeHtml(empresaNome);
+    const { to, code, instanceName = 'MetaBit', expiresMinutes = 10 } = params;
+    const safeInstanceName = escapeHtml(instanceName);
     const mailOptions = {
         from: env.SMTP.FROM,
         to,
@@ -321,7 +321,7 @@ export const sendPortalAccessCodeEmail = async (params) => {
           <h2 style="color: white; margin: 0;">Código de Acesso</h2>
         </div>
         <div style="padding: 32px; color: #334155;">
-          <p style="font-size: 16px;">Você solicitou acesso ao Portal do Cliente da <strong>${safeEmpresaNome}</strong>. Use o código abaixo para entrar:</p>
+          <p style="font-size: 16px;">Você solicitou acesso ao Portal do Cliente da <strong>${safeInstanceName}</strong>. Use o código abaixo para entrar:</p>
           <div style="background-color: #f1f5f9; padding: 24px; border-radius: 8px; text-align: center; margin: 24px 0;">
             <span style="font-size: 32px; font-weight: bold; letter-spacing: 12px; color: #0f172a; font-family: monospace;">${code}</span>
           </div>

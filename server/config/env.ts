@@ -155,7 +155,7 @@ export const env = {
   // (Socket.io adapter/emitter e invalidação distribuída de cache).
   REDIS_URL: process.env.REDIS_URL,
 
-  // Envio de e-mail por canal: chave para cifrar credenciais SMTP por empresa/canal.
+  // Envio de e-mail por canal: chave para cifrar credenciais SMTP da instância.
   // Obrigatória quando há SMTP por canal configurado (validada no momento do uso).
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
 

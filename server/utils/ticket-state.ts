@@ -56,9 +56,8 @@ export async function recomputeTicketMessageState(ticketId: number): Promise<voi
   await pool.query(
     `
     UPDATE tickets t
-    LEFT JOIN empresa_ticket_status status_cfg
-      ON status_cfg.empresa_id = t.empresa_id
-     AND status_cfg.valor = t.status
+    LEFT JOIN ticket_statuses status_cfg
+      ON status_cfg.valor = t.status
     SET t.aguardando_resposta_atendente = CASE
       WHEN status_cfg.especial IN ('finalizado', 'encerrado') THEN 0
       WHEN status_cfg.especial = 'aguardando_cliente' THEN 0

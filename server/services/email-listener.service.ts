@@ -347,7 +347,7 @@ export class EmailListenerService {
     try {
       console.log('[IMAP] Tentando conectar à caixa de entrada (IDLE mode)...');
       this.connection = await imaps.connect(config);
-      
+
       await this.connection.openBox('INBOX');
       console.log('[IMAP] Ligação estabelecida e IDLE ativo.');
 
@@ -392,53 +392,53 @@ export class EmailListenerService {
     }, 10000);
   }
 
-  private static async logSystem(empresa_id: number | null, acao: string, descricao: string) {
+  private static async logSystem(acao: string, descricao: string) {
     try {
       await pool.query(
-        'INSERT INTO logs_sistema (empresa_id, acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?, ?)',
-        [empresa_id, acao, descricao, 'SYSTEM_EMAIL_LISTENER', '127.0.0.1']
+        'INSERT INTO logs_sistema (acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?)',
+        [acao, descricao, 'SYSTEM_EMAIL_LISTENER', '127.0.0.1']
       );
     } catch (e) {
       console.error('[Email Listener] Error writing system log:', e);
     }
   }
 
-  private static async trackProcessedConfirmationEmail(messageId: string | undefined, empresaId: number, channelId: number) {
+  private static async trackProcessedConfirmationEmail(messageId: string | undefined, channelId: number) {
     if (!messageId) return;
     try {
       await pool.query(
-        'INSERT IGNORE INTO processed_emails (message_id, empresa_id, ticket_id) VALUES (?, ?, NULL)',
-        [messageId, empresaId]
+        'INSERT IGNORE INTO processed_emails (message_id, ticket_id) VALUES (?, NULL)',
+        [messageId]
       );
     } catch (err) {
       console.error(`[Email Listener] Failed to track forwarding confirmation email for channel ${channelId}:`, err);
     }
   }
 
-  private static async claimEmailForProcessing(messageKey: string, empresaId: number): Promise<boolean> {
+  private static async claimEmailForProcessing(messageKey: string): Promise<boolean> {
     const [result]: any = await pool.query(
-      'INSERT IGNORE INTO processed_emails (message_id, empresa_id, ticket_id) VALUES (?, ?, NULL)',
-      [messageKey, empresaId]
+      'INSERT IGNORE INTO processed_emails (message_id, ticket_id) VALUES (?, NULL)',
+      [messageKey]
     );
 
     return Number(result?.affectedRows || 0) === 1;
   }
 
-  private static async attachProcessedEmailToTicket(messageKey: string | null, ticketId: number, empresaId: number) {
+  private static async attachProcessedEmailToTicket(messageKey: string | null, ticketId: number) {
     if (!messageKey) return;
 
     await pool.query(
-      'UPDATE processed_emails SET ticket_id = ? WHERE message_id = ? AND empresa_id = ?',
-      [ticketId, messageKey, empresaId]
+      'UPDATE processed_emails SET ticket_id = ? WHERE message_id = ?',
+      [ticketId, messageKey]
     );
   }
 
-  private static async findPersistedEmailTicket(messageId: string | undefined, empresaId: number): Promise<number | null> {
+  private static async findPersistedEmailTicket(messageId: string | undefined): Promise<number | null> {
     if (!messageId) return null;
 
     const [ticketRows]: any = await pool.query(
-      'SELECT id FROM tickets WHERE message_id = ? AND empresa_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1',
-      [messageId, empresaId]
+      'SELECT id FROM tickets WHERE message_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1',
+      [messageId]
     );
     if (ticketRows.length > 0) return Number(ticketRows[0].id);
 
@@ -446,23 +446,23 @@ export class EmailListenerService {
       `SELECT m.ticket_id
        FROM ticket_mensagens m
        INNER JOIN tickets t ON t.id = m.ticket_id
-       WHERE m.message_id = ? AND t.empresa_id = ? AND t.deleted_at IS NULL
+       WHERE m.message_id = ? AND t.deleted_at IS NULL
        ORDER BY m.id ASC
        LIMIT 1`,
-      [messageId, empresaId]
+      [messageId]
     );
     if (messageRows.length > 0) return Number(messageRows[0].ticket_id);
 
     return null;
   }
 
-  private static async releasePendingEmailClaim(messageKey: string | null, empresaId: number | null) {
-    if (!messageKey || !empresaId) return;
+  private static async releasePendingEmailClaim(messageKey: string | null) {
+    if (!messageKey) return;
 
     try {
       await pool.query(
-        'DELETE FROM processed_emails WHERE message_id = ? AND empresa_id = ? AND ticket_id IS NULL',
-        [messageKey, empresaId]
+        'DELETE FROM processed_emails WHERE message_id = ? AND ticket_id IS NULL',
+        [messageKey]
       );
     } catch (err) {
       console.error(`[Email Listener] Failed to release pending email claim ${messageKey}:`, err);
@@ -534,11 +534,10 @@ export class EmailListenerService {
     parsed: ParsedMail;
     subject: string;
     senderEmail?: string | null;
-    empresaId: number;
     channelId: number;
     messageId?: string;
   }): Promise<boolean> {
-    const { parsed, subject, senderEmail, empresaId, channelId, messageId } = params;
+    const { parsed, subject, senderEmail, channelId, messageId } = params;
 
     if (!env.AUTO_CONFIRM_EMAIL_FORWARDING) return false;
     if (!looksLikeForwardingConfirmation(subject, parsed, senderEmail)) return false;
@@ -547,13 +546,13 @@ export class EmailListenerService {
     if (urls.length === 0) {
       const msg = `E-mail de confirmacao de encaminhamento recebido para o canal ${channelId}, mas nenhum link permitido foi encontrado.`;
       await pool.query(
-        `UPDATE empresa_email_canais
+        `UPDATE email_channels
          SET ultimo_erro = ?, last_received_at = NOW()
          WHERE id = ?`,
         [msg, channelId]
       );
-      await this.trackProcessedConfirmationEmail(messageId, empresaId, channelId);
-      await this.logSystem(empresaId, 'EMAIL_FORWARDING_CONFIRMATION_NO_LINK', msg);
+      await this.trackProcessedConfirmationEmail(messageId, channelId);
+      await this.logSystem('EMAIL_FORWARDING_CONFIRMATION_NO_LINK', msg);
       return true;
     }
 
@@ -563,14 +562,13 @@ export class EmailListenerService {
 
       if (result.success) {
         await pool.query(
-          `UPDATE empresa_email_canais
+          `UPDATE email_channels
            SET status = ?, verified_at = NOW(), last_received_at = NOW(), ultimo_erro = NULL
            WHERE id = ?`,
           ['verificado', channelId]
         );
-        await this.trackProcessedConfirmationEmail(messageId, empresaId, channelId);
+        await this.trackProcessedConfirmationEmail(messageId, channelId);
         await this.logSystem(
-          empresaId,
           'EMAIL_FORWARDING_AUTO_CONFIRMED',
           `Encaminhamento confirmado automaticamente para o canal ${channelId} (HTTP ${result.status || 'ok'}).`
         );
@@ -583,15 +581,15 @@ export class EmailListenerService {
 
     const failureMessage = `Falha ao confirmar encaminhamento automaticamente para o canal ${channelId}: ${lastError || 'link nao aceito'}`;
     await pool.query(
-      `UPDATE empresa_email_canais
+      `UPDATE email_channels
        SET status = CASE WHEN status IN ('pendente', 'erro') THEN 'erro' ELSE status END,
            ultimo_erro = ?,
            last_received_at = NOW()
        WHERE id = ?`,
       [failureMessage, channelId]
     );
-    await this.trackProcessedConfirmationEmail(messageId, empresaId, channelId);
-    await this.logSystem(empresaId, 'EMAIL_FORWARDING_AUTO_CONFIRM_FAILED', failureMessage);
+    await this.trackProcessedConfirmationEmail(messageId, channelId);
+    await this.logSystem('EMAIL_FORWARDING_AUTO_CONFIRM_FAILED', failureMessage);
     return true;
   }
 
@@ -602,16 +600,16 @@ export class EmailListenerService {
     this.isProcessing = true;
     try {
       console.log('[IMAP] Processando e-mails não lidos...');
-      
+
       const searchCriteria = ['UNSEEN'];
       const fetchOptions = {
         bodies: [''],
-        markSeen: false 
+        markSeen: false
       };
 
       const messages = await this.connection.search(searchCriteria, fetchOptions);
       console.log(`[IMAP] Encontrados ${messages.length} e-mails não lidos (UNSEEN).`);
-      
+
       if (messages.length === 0) {
         return;
       }
@@ -620,7 +618,6 @@ export class EmailListenerService {
         const uid = item.attributes.uid;
         let senderEmailStr = 'unknown';
         let claimedMessageKey: string | null = null;
-        let claimedEmpresaId: number | null = null;
         let claimedMessageHandled = false;
         try {
           const bodyPart: any = item.parts.find((part: any) => part.which === '');
@@ -634,9 +631,8 @@ export class EmailListenerService {
           const senderName = fromObj?.name || senderEmail || 'Sem Nome';
           const subject = parsed.subject || 'Sem Assunto';
 
-          // 1. Identify recipient company/channel before any ticket lookup
+          // 1. Identifica o canal destinatário antes de procurar o chamado.
           let targetTicketId: number | null = null;
-          let targetEmpresaId: number | null = null;
           let matchedChannelId: number | null = null;
 
           console.log(`[Email Listener] [UID:${uid}] Processing message from ${maskEmail(senderEmail)}: "${subject}" (MessageID: ${maskIdentifier(messageId)})`);
@@ -675,72 +671,51 @@ export class EmailListenerService {
 
           if (potentialRecipients.length > 0) {
             const [canaisMatch]: any = await pool.query(
-              'SELECT id, empresa_id, status FROM empresa_email_canais WHERE LOWER(TRIM(inbound_address)) IN (?) OR LOWER(TRIM(email_publico)) IN (?) LIMIT 2',
+              'SELECT id, status FROM email_channels WHERE LOWER(TRIM(inbound_address)) IN (?) OR LOWER(TRIM(email_publico)) IN (?) LIMIT 2',
               [potentialRecipients, potentialRecipients]
             );
 
             if (canaisMatch.length === 1) {
               matchedChannelId = canaisMatch[0].id;
-              targetEmpresaId = canaisMatch[0].empresa_id;
-              console.log(`[Email Listener] [UID:${uid}] Matched channel ID ${matchedChannelId} for company ${targetEmpresaId}`);
+              console.log(`[Email Listener] [UID:${uid}] Matched channel ID ${matchedChannelId}.`);
             } else if (canaisMatch.length > 1) {
               console.warn(`[Email Listener] [UID:${uid}] Ambiguous channel match for recipients: ${maskedRecipients}. Skipping.`);
-              await this.logSystem(null, 'EMAIL_AMBIGUOUS_CHANNEL', `Mais de um canal encontrado para destinatarios: ${maskedRecipients}. E-mail ignorado.`);
+              await this.logSystem('EMAIL_AMBIGUOUS_CHANNEL', `Mais de um canal encontrado para destinatarios: ${maskedRecipients}. E-mail ignorado.`);
               await this.connection.addFlags(uid, '\\Seen');
               continue;
-            } else {
-              const [empresasMatch]: any = await pool.query(
-                'SELECT id FROM empresas WHERE LOWER(TRIM(email)) IN (?) OR LOWER(TRIM(email_suporte)) IN (?) LIMIT 2',
-                [potentialRecipients, potentialRecipients]
-              );
-              if (empresasMatch.length === 1) {
-                targetEmpresaId = empresasMatch[0].id;
-                console.log(`[Email Listener] [UID:${uid}] Matched company ${targetEmpresaId} via legacy support email fallback.`);
-              } else if (empresasMatch.length > 1) {
-                console.warn(`[Email Listener] [UID:${uid}] Ambiguous legacy company match for recipients: ${maskedRecipients}. Skipping.`);
-                await this.logSystem(null, 'EMAIL_AMBIGUOUS_COMPANY', `Mais de uma empresa encontrada para destinatarios: ${maskedRecipients}. E-mail ignorado.`);
-                await this.connection.addFlags(uid, '\\Seen');
-                continue;
-              }
             }
           }
 
-          if (!targetEmpresaId) {
-             console.warn(`[Email Listener] [UID:${uid}] No company found for recipients: ${maskedRecipients}. From: ${maskEmail(senderEmail)}.`);
-             await this.logSystem(null, 'EMAIL_WITHOUT_COMPANY', `Falha ao identificar empresa para email de ${maskEmail(senderEmail)} (Para: ${maskedRecipients}).`);
-             continue;
-          }
-
-          const identifyTicket = async (companyId: number): Promise<{ ticketId: number | null; hadExplicitTicketReference: boolean; invalidTicketId?: number }> => {
-             // A) By X-PortalMeta-Ticket-ID in headers, scoped to the recipient company
+          const identifyTicket = async (): Promise<{ ticketId: number | null; hadExplicitTicketReference: boolean; invalidTicketId?: number }> => {
+             // A) By X-PortalMeta-Ticket-ID in headers
              const headerTicketIdStr = parsed.headers.get('x-portalmeta-ticket-id');
              if (headerTicketIdStr && typeof headerTicketIdStr === 'string' && !isNaN(parseInt(headerTicketIdStr))) {
                 const id = parseInt(headerTicketIdStr);
-                const [rows]: any = await pool.query('SELECT id, empresa_id FROM tickets WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1', [id, companyId]);
+                const [rows]: any = await pool.query('SELECT id FROM tickets WHERE id = ? AND deleted_at IS NULL LIMIT 1', [id]);
                 if (rows.length > 0) {
-                   console.log(`[Email Listener] Identified existing ticket #${id} via X-PortalMeta-Ticket-ID header for company ${companyId}.`);
+                   console.log(`[Email Listener] Identified existing ticket #${id} via X-PortalMeta-Ticket-ID header.`);
                    return { ticketId: id, hadExplicitTicketReference: true };
                 }
 
-                console.warn(`[Email Listener] X-PortalMeta-Ticket-ID header indicated ticket #${id}, but it is not in company ${companyId}.`);
+                console.warn(`[Email Listener] X-PortalMeta-Ticket-ID header indicated missing ticket #${id}.`);
                 return { ticketId: null, hadExplicitTicketReference: true, invalidTicketId: id };
              }
 
-             // B) By [Ticket #ID], Chamado #ID, etc in subject, scoped to the recipient company
+             // B) By [Ticket #ID], Chamado #ID, etc in subject
              const subjectMatch = subject.match(/(?:\[Ticket\s*#(\d+)\]|Chamado\s*#(\d+)|Ticket\s*#(\d+))/i);
              if (subjectMatch) {
                 const id = parseInt(subjectMatch[1] || subjectMatch[2] || subjectMatch[3]);
-                const [rows]: any = await pool.query('SELECT id, empresa_id FROM tickets WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1', [id, companyId]);
+                const [rows]: any = await pool.query('SELECT id FROM tickets WHERE id = ? AND deleted_at IS NULL LIMIT 1', [id]);
                 if (rows.length > 0) {
-                   console.log(`[Email Listener] Identified existing ticket #${id} via Subject for company ${companyId}.`);
+                   console.log(`[Email Listener] Identified existing ticket #${id} via Subject.`);
                    return { ticketId: id, hadExplicitTicketReference: true };
                 }
 
-                console.warn(`[Email Listener] Subject indicated ticket #${id}, but it is not in company ${companyId}.`);
+                console.warn(`[Email Listener] Subject indicated missing ticket #${id}.`);
                 return { ticketId: null, hadExplicitTicketReference: true, invalidTicketId: id };
              }
 
-             // C) Try pattern-based extraction on Message-ID / In-Reply-To / References, scoped to company
+             // C) Try pattern-based extraction on Message-ID / In-Reply-To / References
              const inReplyTo = parsed.inReplyTo;
              const references = Array.isArray(parsed.references) ? parsed.references : (parsed.references ? [parsed.references] : []);
              const candidates = [
@@ -752,32 +727,32 @@ export class EmailListenerService {
              for (const candidate of candidates) {
                const extractedTicketId = extractTicketIdFromPortalMetaMessageId(candidate);
                if (extractedTicketId) {
-                 const [rows]: any = await pool.query('SELECT id, empresa_id FROM tickets WHERE id = ? AND empresa_id = ? AND deleted_at IS NULL LIMIT 1', [extractedTicketId, companyId]);
+                 const [rows]: any = await pool.query('SELECT id FROM tickets WHERE id = ? AND deleted_at IS NULL LIMIT 1', [extractedTicketId]);
                  if (rows.length > 0) {
-                   console.log(`[Email Listener] Identified existing ticket #${extractedTicketId} via Portal Meta Message-ID pattern for company ${companyId}.`);
+                   console.log(`[Email Listener] Identified existing ticket #${extractedTicketId} via Portal Meta Message-ID pattern.`);
                    return { ticketId: extractedTicketId, hadExplicitTicketReference: true };
                  }
 
-                 console.warn(`[Email Listener] Portal Meta Message-ID pattern indicated ticket #${extractedTicketId}, but it is not in company ${companyId}.`);
+                 console.warn(`[Email Listener] Portal Meta Message-ID pattern indicated missing ticket #${extractedTicketId}.`);
                  return { ticketId: null, hadExplicitTicketReference: true, invalidTicketId: extractedTicketId };
                }
              }
 
-             // D) By In-Reply-To or References headers inside processed_emails table, scoped to company
+             // D) By In-Reply-To or References headers inside processed_emails table
              const allRefs = [inReplyTo, ...references].filter((r): r is string => !!r);
              if (allRefs.length > 0) {
                 const [refMatch]: any = await pool.query(
                   `SELECT pe.ticket_id
                    FROM processed_emails pe
-                   INNER JOIN tickets t ON t.id = pe.ticket_id AND t.empresa_id = pe.empresa_id AND t.deleted_at IS NULL
-                   WHERE pe.empresa_id = ? AND pe.message_id IN (?) AND pe.ticket_id IS NOT NULL
+                   INNER JOIN tickets t ON t.id = pe.ticket_id AND t.deleted_at IS NULL
+                   WHERE pe.message_id IN (?) AND pe.ticket_id IS NOT NULL
                    ORDER BY pe.created_at DESC
                    LIMIT 1`,
-                  [companyId, allRefs]
+                  [allRefs]
                 );
                 if (refMatch.length > 0) {
                    const dbTicketId = Number(refMatch[0].ticket_id);
-                   console.log(`[Email Listener] Identified existing ticket #${dbTicketId} via headers (References DB) for company ${companyId}.`);
+                   console.log(`[Email Listener] Identified existing ticket #${dbTicketId} via headers (References DB).`);
                    return { ticketId: dbTicketId, hadExplicitTicketReference: false };
                 }
              }
@@ -785,35 +760,32 @@ export class EmailListenerService {
              return { ticketId: null, hadExplicitTicketReference: false };
           };
 
-          const identificationResult = await identifyTicket(targetEmpresaId);
+          const identificationResult = await identifyTicket();
           targetTicketId = identificationResult.ticketId;
 
           if (identificationResult.hadExplicitTicketReference && !targetTicketId) {
              const invalidId = identificationResult.invalidTicketId || 'Desconhecido';
-             console.warn(`[Email Listener] [UID:${uid}] Email referenced ticket #${invalidId} outside company ${targetEmpresaId}. Skipping.`);
+             console.warn(`[Email Listener] [UID:${uid}] Email referenced missing ticket #${invalidId}. Skipping.`);
              await this.logSystem(
-               targetEmpresaId,
                'EMAIL_TICKET_REFERENCE_NOT_FOUND',
-               `E-mail de ${maskEmail(senderEmail)} com referencia explicita para ticket invalido/fora da empresa #${invalidId}. Ignorado.`
+               `E-mail de ${maskEmail(senderEmail)} com referencia explicita para ticket invalido #${invalidId}. Ignorado.`
              );
              await this.connection.addFlags(uid, '\\Seen');
              continue;
           }
 
           const messageKey = messageId || buildFallbackEmailDedupKey(parsed, subject, senderEmail, potentialRecipients);
-          const claimed = await this.claimEmailForProcessing(messageKey, targetEmpresaId);
+          const claimed = await this.claimEmailForProcessing(messageKey);
           if (!claimed) {
-             console.log(`[Email Listener] [UID:${uid}] Email already claimed/processed for company ${targetEmpresaId} (${maskIdentifier(messageKey)}). Skipping duplicate.`);
+             console.log(`[Email Listener] [UID:${uid}] Email already claimed/processed (${maskIdentifier(messageKey)}). Skipping duplicate.`);
              await this.connection.addFlags(uid, '\\Seen');
              continue;
           }
           claimedMessageKey = messageKey;
-          claimedEmpresaId = targetEmpresaId;
-
-          const persistedEmailTicketId = await this.findPersistedEmailTicket(messageId, targetEmpresaId);
+          const persistedEmailTicketId = await this.findPersistedEmailTicket(messageId);
           if (persistedEmailTicketId) {
-             await this.attachProcessedEmailToTicket(claimedMessageKey, persistedEmailTicketId, targetEmpresaId);
-             console.log(`[Email Listener] [UID:${uid}] Message-ID already persisted in ticket #${persistedEmailTicketId} for company ${targetEmpresaId}. Skipping duplicate.`);
+             await this.attachProcessedEmailToTicket(claimedMessageKey, persistedEmailTicketId);
+             console.log(`[Email Listener] [UID:${uid}] Message-ID already persisted in ticket #${persistedEmailTicketId}. Skipping duplicate.`);
              claimedMessageHandled = true;
              await this.connection.addFlags(uid, '\\Seen');
              continue;
@@ -824,7 +796,6 @@ export class EmailListenerService {
                parsed,
                subject,
                senderEmail,
-               empresaId: targetEmpresaId,
                channelId: matchedChannelId,
                messageId: claimedMessageKey,
              });
@@ -836,11 +807,11 @@ export class EmailListenerService {
              }
 
              await pool.query(
-                'UPDATE empresa_email_canais SET last_received_at = NOW(), ultimo_erro = NULL WHERE id = ?',
+                'UPDATE email_channels SET last_received_at = NOW(), ultimo_erro = NULL WHERE id = ?',
                 [matchedChannelId]
              );
              await pool.query(
-                `UPDATE empresa_email_canais
+                `UPDATE email_channels
                  SET status = ?, verified_at = IF(verified_at IS NULL, NOW(), verified_at)
                  WHERE id = ? AND status IN ('pendente', 'verificado', 'erro')`,
                 ['ativo', matchedChannelId]
@@ -868,7 +839,7 @@ export class EmailListenerService {
 
           if (isSystemSender || isAutoMsg || isSystemHeader) {
              console.warn(`[Email Listener] [UID:${uid}] Anti-Loop triggered for ${maskEmail(senderEmail)} (isSystemSender: ${isSystemSender}, isAuto: ${isAutoMsg}, isSystemHeader: ${isSystemHeader})`);
-             await this.logSystem(targetEmpresaId, 'EMAIL_LOOP_PREVENTED', `Email de ${maskEmail(senderEmail)} ignorado via anti-loop (Precedence: ${precedence}, Auto-Submitted: ${autoSubmitted}, HeaderSistema: ${isSystemHeader}).`);
+             await this.logSystem('EMAIL_LOOP_PREVENTED', `Email de ${maskEmail(senderEmail)} ignorado via anti-loop (Precedence: ${precedence}, Auto-Submitted: ${autoSubmitted}, HeaderSistema: ${isSystemHeader}).`);
              claimedMessageHandled = true;
              await this.connection.addFlags(uid, '\\Seen');
              continue;
@@ -877,14 +848,14 @@ export class EmailListenerService {
           // Thread duplication prevention check for responses that look like Portal Meta thread and have system indicators but no valid DB match
           if (!targetTicketId && looksLikePortalMetaTicketThread(subject, parsed)) {
              console.warn(`[Email Listener] [UID:${uid}] Ignored email from ${maskEmail(senderEmail)} because it looks like a Portal Meta ticket thread fallback replica without active matching ticket.`);
-             await this.logSystem(targetEmpresaId, 'EMAIL_THREAD_REPLICA_IGNORED', `Email de ${maskEmail(senderEmail)} (Assunto: "${subject}") ignorado pois aparenta ser uma réplica antiga/inválida de thread sem ticket correspondente ativo.`);
+             await this.logSystem('EMAIL_THREAD_REPLICA_IGNORED', `Email de ${maskEmail(senderEmail)} (Assunto: "${subject}") ignorado pois aparenta ser uma réplica antiga/inválida de thread sem ticket correspondente ativo.`);
              claimedMessageHandled = true;
              await this.connection.addFlags(uid, '\\Seen');
              continue;
           }
 
           // 5. Resolve Sender Context
-          const { userId } = await this.resolveSenderContext(senderEmail!, targetEmpresaId);
+          const { userId } = await this.resolveSenderContext(senderEmail!);
 
           // 6. Cleanup Message Body
           let text = parsed.text || '';
@@ -895,15 +866,15 @@ export class EmailListenerService {
           text = text.split(/\r?\n\s*-+\s*Mensagem original\s*-+\s*/i)[0]; // "Original Message" separator
           text = text.split(/\r?\n\s*>+/)[0]; // Blockquote entries
           text = text.trim();
-          
+
           if (!text && parsed.text) text = parsed.text.trim(); // Safety fallback
 
           // 7. Handle Create or Update
           if (!targetTicketId) {
              // Smart deduplication fallback (Subject + Sender in 48h) because identifyTicket didn't find matched tickets via header
              const [dupRows]: any = await pool.query(
-               'SELECT id FROM tickets WHERE titulo = ? AND (solicitante_email = ? OR usuario_id = ?) AND empresa_id = ? AND deleted_at IS NULL AND created_at > (NOW() - INTERVAL 2 DAY) AND status != "fechado" ORDER BY created_at DESC LIMIT 1',
-               [subject, senderEmail, userId, targetEmpresaId]
+               'SELECT id FROM tickets WHERE titulo = ? AND (solicitante_email = ? OR usuario_id = ?) AND deleted_at IS NULL AND created_at > (NOW() - INTERVAL 2 DAY) AND status != "fechado" ORDER BY created_at DESC LIMIT 1',
+               [subject, senderEmail, userId]
              );
              if (dupRows.length > 0) {
                 console.log(`[Email Listener] Identified duplicate ticket #${dupRows[0].id} via subject/sender matching.`);
@@ -918,14 +889,13 @@ export class EmailListenerService {
                 usuario_id: userId || null, // Allow system fallback down line if needed
                 mensagem: text,
                 interno: 0,
-                message_id: messageId,
-                empresa_id: targetEmpresaId
+                message_id: messageId
               });
-              await this.attachProcessedEmailToTicket(claimedMessageKey, targetTicketId, targetEmpresaId);
+              await this.attachProcessedEmailToTicket(claimedMessageKey, targetTicketId);
 
-              await this.logSystem(targetEmpresaId, 'EMAIL_MESSAGE_ADDED', `Nova mensagem via e-mail no ticket #${targetTicketId} de ${maskEmail(senderEmail)}.`);
+              await this.logSystem('EMAIL_MESSAGE_ADDED', `Nova mensagem via e-mail no ticket #${targetTicketId} de ${maskEmail(senderEmail)}.`);
 
-              await this.processAttachments(parsed, targetTicketId, msgId, userId, targetEmpresaId);
+              await this.processAttachments(parsed, targetTicketId, msgId, userId);
 
               // MARK AS SEEN ONLY ON SUCCESS
               claimedMessageHandled = true;
@@ -935,7 +905,6 @@ export class EmailListenerService {
 
           if (!targetTicketId) {
             const newTicketId = await ticketsService.create({
-              empresa_id: targetEmpresaId,
               usuario_id: userId || null,
               solicitante_nome: senderName,
               solicitante_email: senderEmail,
@@ -944,20 +913,20 @@ export class EmailListenerService {
               prioridade: 'media',
               categoria: 'suporte',
               origem: 'email',
-              email_channel_id: matchedChannelId, 
+              email_channel_id: matchedChannelId,
               message_id: messageId
             });
 
-            await this.attachProcessedEmailToTicket(claimedMessageKey, newTicketId, targetEmpresaId);
+            await this.attachProcessedEmailToTicket(claimedMessageKey, newTicketId);
 
-            await this.logSystem(targetEmpresaId, 'EMAIL_TICKET_CREATED', `Ticket #${newTicketId} criado via e-mail de ${maskEmail(senderEmail)}.`);
-            
+            await this.logSystem('EMAIL_TICKET_CREATED', `Ticket #${newTicketId} criado via e-mail de ${maskEmail(senderEmail)}.`);
+
             const newTicket = await ticketsService.getById(newTicketId);
             if (newTicket && io) {
                io.to('instance').emit('ticketCreated', newTicket);
             }
-            
-            await this.processAttachments(parsed, newTicketId, null, userId, targetEmpresaId);
+
+            await this.processAttachments(parsed, newTicketId, null, userId);
 
             // MARK AS SEEN ONLY ON SUCCESS
             claimedMessageHandled = true;
@@ -967,10 +936,10 @@ export class EmailListenerService {
 
         } catch (itemError: any) {
           if (!claimedMessageHandled) {
-            await this.releasePendingEmailClaim(claimedMessageKey, claimedEmpresaId);
+            await this.releasePendingEmailClaim(claimedMessageKey);
           }
           console.error(`[Email Listener] [UID:${uid}] Error processing item:`, itemError);
-          await this.logSystem(null, 'EMAIL_PROCESS_ERROR', `Erro ao processar e-mail UID ${uid} de ${maskEmail(senderEmailStr)}: ${itemError.message}`);
+          await this.logSystem('EMAIL_PROCESS_ERROR', `Erro ao processar e-mail UID ${uid} de ${maskEmail(senderEmailStr)}: ${itemError.message}`);
         }
       }
     } catch (e) {
@@ -980,7 +949,7 @@ export class EmailListenerService {
     }
   }
 
-  private static async processAttachments(parsed: ParsedMail, ticketId: number, msgId: number | null, userId: number | null, empresaId: number) {
+  private static async processAttachments(parsed: ParsedMail, ticketId: number, msgId: number | null, userId: number | null) {
     if (!parsed.attachments || parsed.attachments.length === 0) return;
 
     for (const att of parsed.attachments) {
@@ -990,23 +959,23 @@ export class EmailListenerService {
       const contentValidation = validateAttachmentBuffer(att.content, originalName, contentType);
       if (!contentValidation.ok) {
          console.warn(`[Email Listener] Blocked attachment ${originalName}: ${contentValidation.error}`);
-         await this.logSystem(empresaId, 'ATTACHMENT_BLOCKED', `Anexo bloqueado: ${originalName} no Ticket #${ticketId}. Motivo: ${contentValidation.error}`);
+         await this.logSystem('ATTACHMENT_BLOCKED', `Anexo bloqueado: ${originalName} no Ticket #${ticketId}. Motivo: ${contentValidation.error}`);
          continue;
       }
 
       const forbiddenExts = ['.exe', '.bat', '.sh', '.js', '.vbs', '.scr', '.cmd'];
       const ext = path.extname(originalName).toLowerCase();
-      
+
       if (forbiddenExts.includes(ext)) {
          console.warn(`[Email Listener] Blocked dangerous attachment: ${originalName}`);
-         await this.logSystem(empresaId, 'ATTACHMENT_BLOCKED', `Anexo perigoso bloqueado: ${originalName} no Ticket #${ticketId}.`);
+         await this.logSystem('ATTACHMENT_BLOCKED', `Anexo perigoso bloqueado: ${originalName} no Ticket #${ticketId}.`);
          continue;
       }
 
       // Max size check: 10MB
       if (att.size > 10 * 1024 * 1024) {
          console.warn(`[Email Listener] Attachment too large: ${originalName} (${att.size} bytes)`);
-         await this.logSystem(empresaId, 'ATTACHMENT_REJECTED', `Anexo muito grande rejeitado: ${originalName} (${Math.round(att.size / 1024 / 1024)}MB).`);
+         await this.logSystem('ATTACHMENT_REJECTED', `Anexo muito grande rejeitado: ${originalName} (${Math.round(att.size / 1024 / 1024)}MB).`);
          continue;
       }
 
@@ -1015,7 +984,7 @@ export class EmailListenerService {
 
       try {
         const uniqueFilename = `email-${Date.now()}-${Math.round(Math.random() * 1E9)}${ext || '.bin'}`;
-        
+
         // Usar StorageService em vez de fs direto
         const filePath = await storageService.save(att.content, {
           filename: uniqueFilename,
@@ -1026,7 +995,6 @@ export class EmailListenerService {
           ticket_id: ticketId,
           mensagem_id: msgId,
           usuario_id: userId || null,
-          empresa_id: empresaId,
           nome_original: originalName,
           nome_arquivo: uniqueFilename,
           caminho: filePath,
@@ -1034,7 +1002,7 @@ export class EmailListenerService {
           tamanho_bytes: att.size,
           interno: false
         });
-        
+
         console.log(`[Email Listener] Attachment saved: ${originalName}`);
       } catch (err) {
         console.error(`[Email Listener] Error processing attachment ${originalName}:`, err);
@@ -1042,23 +1010,16 @@ export class EmailListenerService {
     }
   }
 
-  static async resolveSenderContext(email: string, targetEmpresaId: number): Promise<{ userId: number | null }> {
-    // 1. Look for verified user in the target company
+  static async resolveSenderContext(email: string): Promise<{ userId: number | null }> {
     const [rows]: any = await pool.query(
-      'SELECT id, empresa_id FROM usuarios WHERE email = ? AND ativo = 1', 
+      'SELECT id FROM usuarios WHERE email = ? AND ativo = 1 LIMIT 1',
       [email]
     );
 
     if (rows.length > 0) {
-      // Find matching company or first one if dev/global admin
-      const match = rows.find((r: any) => r.empresa_id === targetEmpresaId);
-      if (match) return { userId: match.id };
-      
-      // If user exists but in another company
-      await this.logSystem(targetEmpresaId, 'EMAIL_SENDER_CROSS_COMPANY', `Email de ${maskEmail(email)} recebido, mas usuario pertence a empresa ${rows[0].empresa_id}. Tratado como externo.`);
-      return { userId: null };
+      return { userId: rows[0].id };
     }
-    
+
     return { userId: null };
   }
 }

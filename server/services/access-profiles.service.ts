@@ -1,62 +1,25 @@
 import pool from '../db/connection.js';
 import { filterGlobalPermissionsForUser } from './permissions.service.js';
-import { DEFAULT_ROLE_PERMISSIONS } from '../constants/permissions.js';
 
 export type AccessProfileInput = {
-  empresa_id: number;
   nome: string;
   descricao?: string | null;
   base_perfil?: string | null;
   created_by?: number | null;
 };
 
-const DEFAULT_COMPANY_PROFILES = [
-  { perfil: 'gestor', nome: 'Gestor' },
-  { perfil: 'atendente', nome: 'Atendente' },
-  { perfil: 'cliente', nome: 'Cliente' },
-];
-
-export async function seedDefaultProfilesForEmpresa(empresaId: number) {
-  for (const profile of DEFAULT_COMPANY_PROFILES) {
-    await pool.query(
-      `
-        INSERT IGNORE INTO access_profiles (empresa_id, nome, descricao, base_perfil, sistema)
-        VALUES (?, ?, ?, ?, 1)
-      `,
-      [empresaId, profile.nome, `Perfil padrao ${profile.nome}`, profile.perfil]
-    );
-
-    const [profileRows]: any = await pool.query(
-      'SELECT id FROM access_profiles WHERE empresa_id = ? AND nome = ? LIMIT 1',
-      [empresaId, profile.nome]
-    );
-    const accessProfileId = profileRows[0]?.id;
-    if (!accessProfileId) continue;
-
-    for (const key of DEFAULT_ROLE_PERMISSIONS[profile.perfil] || []) {
-      await pool.query(
-        `
-          INSERT IGNORE INTO access_profile_permissions (access_profile_id, permission_key, allowed)
-          VALUES (?, ?, 1)
-        `,
-        [accessProfileId, key]
-      );
-    }
-  }
-}
-
 export const accessProfilesService = {
-  async list(empresaId: number) {
+  async list() {
     const [rows]: any = await pool.query(
       `
         SELECT ap.*,
           (SELECT COUNT(*) FROM usuarios u WHERE u.access_profile_id = ap.id) as usuarios_count,
           (SELECT COUNT(*) FROM access_profile_permissions app WHERE app.access_profile_id = ap.id AND app.allowed = 1) as permissions_count
         FROM access_profiles ap
-        WHERE ap.empresa_id = ? AND ap.ativo = 1
+        WHERE ap.ativo = 1
         ORDER BY ap.sistema DESC, ap.nome ASC
       `,
-      [empresaId]
+      []
     );
     return rows;
   },
@@ -69,11 +32,10 @@ export const accessProfilesService = {
   async create(data: AccessProfileInput) {
     const [result]: any = await pool.query(
       `
-        INSERT INTO access_profiles (empresa_id, nome, descricao, base_perfil, sistema, created_by)
-        VALUES (?, ?, ?, ?, 0, ?)
+        INSERT INTO access_profiles (nome, descricao, base_perfil, sistema, created_by)
+        VALUES (?, ?, ?, 0, ?)
       `,
       [
-        data.empresa_id,
         data.nome.trim(),
         data.descricao || null,
         data.base_perfil || null,

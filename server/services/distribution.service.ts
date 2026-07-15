@@ -3,11 +3,11 @@ import { recordTicketEvent } from './ticket-events.service.js';
 
 export async function distributeTicket(ticket: any) {
   try {
-    const { id: ticket_id, empresa_id, categoria, servico } = ticket;
+    const { id: ticket_id, categoria, servico } = ticket;
     
     // Find matching rule
     const [regras]: any = await pool.query(
-      "SELECT * FROM empresa_distribuicao_regras WHERE empresa_id = ? AND ativo = 1 ORDER BY id ASC", [empresa_id]
+      'SELECT * FROM distribution_rules WHERE ativo = 1 ORDER BY id ASC'
     );
 
     let matchedRule = null;
@@ -38,8 +38,8 @@ export async function distributeTicket(ticket: any) {
        if (ids.length > 0) {
          const placeholders = ids.map(() => '?').join(',');
          const [rows]: any = await pool.query(
-           `SELECT id FROM usuarios WHERE empresa_id = ? AND ativo = 1 AND id IN (${placeholders}) AND (perfil IN ('atendente', 'gestor', 'administrador', 'desenvolvedor') OR administrador = 1)`,
-           [empresa_id, ...ids]
+           `SELECT id FROM usuarios WHERE ativo = 1 AND id IN (${placeholders}) AND (perfil IN ('atendente', 'gestor', 'administrador', 'desenvolvedor') OR administrador = 1)`,
+           ids
          );
          agents = rows;
        }
@@ -47,8 +47,7 @@ export async function distributeTicket(ticket: any) {
     
     if (agents.length === 0) {
        const [rows]: any = await pool.query(
-         `SELECT id FROM usuarios WHERE empresa_id = ? AND ativo = 1 AND (perfil IN ('atendente', 'gestor', 'administrador', 'desenvolvedor') OR administrador = 1)`,
-         [empresa_id]
+         `SELECT id FROM usuarios WHERE ativo = 1 AND (perfil IN ('atendente', 'gestor', 'administrador', 'desenvolvedor') OR administrador = 1)`
        );
        agents = rows;
     }
@@ -63,12 +62,11 @@ export async function distributeTicket(ticket: any) {
          `
            SELECT responsavel_id, COUNT(*) as cnt
            FROM tickets
-           WHERE empresa_id = ?
-             AND responsavel_id IN (?)
+           WHERE responsavel_id IN (?)
              AND status IN ('aberto', 'em_andamento')
            GROUP BY responsavel_id
          `,
-         [empresa_id, agentIds]
+         [agentIds]
        );
        const loads = new Map<number, number>(
          loadRows.map((row: any) => [Number(row.responsavel_id), Number(row.cnt || 0)])
@@ -86,7 +84,7 @@ export async function distributeTicket(ticket: any) {
        // Pick a random for now since state preserving is complex without schema change, 
        // but wait, we can store state in config_json or another table.
        // For a simple robust way, we can check who got the last ticket.
-       const [lastTicketRes]: any = await pool.query("SELECT responsavel_id FROM tickets WHERE responsavel_id IS NOT NULL AND empresa_id = ? ORDER BY id DESC LIMIT 1", [empresa_id]);
+       const [lastTicketRes]: any = await pool.query('SELECT responsavel_id FROM tickets WHERE responsavel_id IS NOT NULL ORDER BY id DESC LIMIT 1');
        
        let lastAgentId = lastTicketRes.length > 0 ? lastTicketRes[0].responsavel_id : null;
        
@@ -104,7 +102,6 @@ export async function distributeTicket(ticket: any) {
        await pool.query('UPDATE tickets SET responsavel_id = ? WHERE id = ?', [assignedAgentId, ticket_id]);
        await recordTicketEvent({
          ticket_id,
-         empresa_id,
          tipo: 'distribuicao_automatica',
          descricao: `Atribuído para usuário ID ${assignedAgentId} via regra ${matchedRule.nome}`
        });

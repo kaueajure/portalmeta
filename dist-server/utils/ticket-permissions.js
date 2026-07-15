@@ -26,9 +26,6 @@ export function canAccessTicketByScope(ticket, user, scope) {
         return false;
     if (isDeveloperUser(user))
         return true;
-    if (Number(ticket.empresa_id) !== Number(user.empresa_id)) {
-        return false;
-    }
     // Clients can strictly only view their own tickets
     if (user.perfil === 'cliente') {
         return Number(ticket.usuario_id) === Number(user.id);

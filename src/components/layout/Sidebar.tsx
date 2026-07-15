@@ -11,6 +11,8 @@ import {
   X,
   BookOpen,
   MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { User } from "../../types";
 import { cn } from "../../lib/utils";
@@ -23,7 +25,9 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   isOpen: boolean;
+  isCollapsed?: boolean;
   onClose: () => void;
+  onToggleCollapse?: () => void;
   onLogout: () => void;
   onNavigate: (link: string) => void;
 }
@@ -33,7 +37,9 @@ export const Sidebar = ({
   activeTab,
   setActiveTab,
   isOpen,
+  isCollapsed = false,
   onClose,
+  onToggleCollapse,
   onLogout,
   onNavigate,
 }: SidebarProps) => {
@@ -46,14 +52,8 @@ export const Sidebar = ({
       }
     };
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
     window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
   const sections = [
@@ -135,52 +135,87 @@ export const Sidebar = ({
 
   return (
     <>
-      <div
-        className={cn(
-          "fixed inset-0 z-40 bg-slate-950/35 backdrop-blur-md transition-opacity duration-300",
-          isOpen
-            ? "pointer-events-auto opacity-100"
-            : "pointer-events-none opacity-0",
-        )}
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      {isOpen && (
+        <div
+          className="absolute inset-0 z-40 bg-slate-950/40 backdrop-blur-[1px] transition-opacity duration-300 lg:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
 
       <aside
         role={isOpen ? "dialog" : "navigation"}
         aria-modal={isOpen ? "true" : undefined}
-        aria-hidden={!isOpen}
         aria-label="Menu principal"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col border-r border-slate-200/80 bg-white shadow-2xl shadow-slate-900/20 transition-transform duration-300 ease-out will-change-transform sm:w-[300px] sm:max-w-none",
-          isOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col border-r border-slate-200/80 bg-white shadow-2xl shadow-slate-900/20 transition-[width,transform] duration-300 ease-out will-change-transform",
+          "lg:relative lg:inset-auto lg:z-20 lg:h-full lg:max-w-none lg:translate-x-0 lg:shadow-none",
+          isCollapsed ? "lg:w-[88px]" : "lg:w-[282px]",
+          isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 px-4">
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+        <div
+          className={cn(
+            "flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 px-4",
+            isCollapsed && "lg:px-3",
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-2 overflow-hidden",
+              isCollapsed && "lg:gap-0",
+            )}
+          >
             <AppLogo size={24} />
-            <span className="max-w-[150px] overflow-hidden whitespace-nowrap text-[14px] font-semibold tracking-tight text-slate-950">
+            <span
+              className={cn(
+                "max-w-[150px] overflow-hidden whitespace-nowrap text-[14px] font-semibold tracking-tight text-slate-950 transition-[max-width,opacity] duration-200 ease-out",
+                isCollapsed && "lg:pointer-events-none lg:max-w-0 lg:opacity-0",
+              )}
+            >
               Portal Meta
             </span>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar menu"
-            className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-          >
-            <X size={16} />
-          </button>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
+              title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+              className="hidden shrink-0 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 lg:inline-flex"
+            >
+              {isCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </button>
+          )}
+          <div className="flex items-center gap-1 lg:hidden">
+            <button
+              onClick={onClose}
+              aria-label="Fechar menu"
+              className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 lg:hidden"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4 custom-scrollbar">
+        <div
+          className={cn(
+            "flex-1 space-y-5 overflow-y-auto px-3 py-4 custom-scrollbar",
+            isCollapsed && "lg:px-2",
+          )}
+        >
           {sections.map((section) => {
             const accessibleItems = section.items.filter((i) => i.access);
             if (accessibleItems.length === 0) return null;
 
             return (
               <div key={section.title} className="space-y-1">
-                <h3 className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <h3
+                  className={cn(
+                    "mb-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 transition-opacity duration-200",
+                    isCollapsed && "lg:pointer-events-none lg:h-2 lg:overflow-hidden lg:px-0 lg:text-[0px] lg:opacity-0",
+                  )}
+                >
                   {section.title}
                 </h3>
                 <div className="space-y-0.5">
@@ -188,9 +223,11 @@ export const Sidebar = ({
                     <button
                       key={item.id}
                       onClick={() => handleNav(item.id)}
+                      title={isCollapsed ? item.label : undefined}
                       aria-label={item.label}
                       className={cn(
                         "group flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-[13px] font-semibold transition-colors duration-150",
+                        isCollapsed && "lg:justify-center lg:gap-0 lg:px-0",
                         activeTab === item.id
                           ? "border border-blue-200 bg-blue-50 text-blue-800 shadow-sm shadow-blue-600/5"
                           : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
@@ -206,7 +243,12 @@ export const Sidebar = ({
                         )}
                         strokeWidth={activeTab === item.id ? 2.5 : 2}
                       />
-                      <span className="max-w-[190px] truncate whitespace-nowrap">
+                      <span
+                        className={cn(
+                          "max-w-[190px] truncate whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out",
+                          isCollapsed && "lg:pointer-events-none lg:max-w-0 lg:opacity-0",
+                        )}
+                      >
                         {item.label}
                       </span>
                     </button>
@@ -217,8 +259,18 @@ export const Sidebar = ({
           })}
         </div>
 
-        <div className="shrink-0 space-y-2 border-t border-slate-200/80 bg-white p-3">
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-2 transition-colors hover:bg-white">
+        <div
+          className={cn(
+            "shrink-0 space-y-2 border-t border-slate-200/80 bg-white p-3",
+            isCollapsed && "lg:px-2",
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-2 transition-colors hover:bg-white",
+              isCollapsed && "lg:flex-col lg:justify-center lg:px-1.5",
+            )}
+          >
             <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-sm">
               {currentUser.foto ? (
                 <img
@@ -230,7 +282,12 @@ export const Sidebar = ({
                 (currentUser.nome || "U").charAt(0).toUpperCase()
               )}
             </div>
-            <div className="min-w-0 flex-1">
+            <div
+              className={cn(
+                "min-w-0 flex-1 transition-[max-width,opacity] duration-200 ease-out",
+                isCollapsed && "lg:pointer-events-none lg:max-w-0 lg:overflow-hidden lg:opacity-0",
+              )}
+            >
               <div className="truncate text-[13px] font-semibold tracking-tight text-slate-900">
                 {currentUser.nome}
               </div>
@@ -247,12 +304,48 @@ export const Sidebar = ({
 
           <button
             onClick={onLogout}
+            title={isCollapsed ? "Sair" : undefined}
             aria-label="Sair"
-            className="flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700"
+            className={cn(
+              "flex h-8 w-full items-center gap-2.5 rounded-md px-2.5 text-[13px] font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700",
+              isCollapsed && "lg:justify-center lg:gap-0 lg:px-0",
+            )}
           >
             <LogOut size={16} />
-            <span>Sair</span>
+            <span
+              className={cn(
+                "max-w-[60px] overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ease-out",
+                isCollapsed && "lg:pointer-events-none lg:max-w-0 lg:opacity-0",
+              )}
+            >
+              Sair
+            </span>
           </button>
+
+          <div
+            className={cn(
+              "flex items-center justify-center gap-3 pt-1 text-[10px] font-semibold text-slate-400",
+              isCollapsed && "lg:hidden",
+            )}
+          >
+            <a
+              href="/politica-de-privacidade"
+              target="_blank"
+              rel="noreferrer"
+              className="transition-colors hover:text-blue-600"
+            >
+              Privacidade
+            </a>
+            <span className="text-slate-300">•</span>
+            <a
+              href="/termos-de-uso"
+              target="_blank"
+              rel="noreferrer"
+              className="transition-colors hover:text-blue-600"
+            >
+              Termos
+            </a>
+          </div>
         </div>
       </aside>
     </>

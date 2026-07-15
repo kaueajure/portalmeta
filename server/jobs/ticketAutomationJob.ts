@@ -29,35 +29,29 @@ const executeTicketAutomations = async () => {
            SELECT * FROM tickets 
            WHERE deleted_at IS NULL
            AND NOT EXISTS (
-             SELECT 1 FROM empresa_ticket_status status_cfg
-             WHERE status_cfg.empresa_id = tickets.empresa_id
-               AND status_cfg.valor = tickets.status
+             SELECT 1 FROM ticket_statuses status_cfg
+             WHERE status_cfg.valor = tickets.status
                AND status_cfg.especial IN ('finalizado', 'encerrado', 'aguardando_cliente')
            )
            AND sla_pausado_em IS NULL
            AND sla_status_operacional != 'pausado'
            AND (sla_resolucao_status != 'violado' OR sla_resolucao_status IS NULL)
            AND prazo_sla < NOW()
-           AND empresa_id = ?
          `;
-         params = [regra.empresa_id];
        } 
        else if (regra.evento === 'sla_primeira_resposta_vencido') {
          query = `
            SELECT * FROM tickets 
            WHERE deleted_at IS NULL
            AND NOT EXISTS (
-             SELECT 1 FROM empresa_ticket_status status_cfg
-             WHERE status_cfg.empresa_id = tickets.empresa_id
-               AND status_cfg.valor = tickets.status
+             SELECT 1 FROM ticket_statuses status_cfg
+             WHERE status_cfg.valor = tickets.status
                AND status_cfg.especial IN ('finalizado', 'encerrado', 'aguardando_cliente')
            )
            AND primeira_resposta_em IS NULL
            AND (sla_primeira_resposta_status = 'aguardando' OR sla_primeira_resposta_status IS NULL)
            AND prazo_primeira_resposta < NOW()
-           AND empresa_id = ?
          `;
-         params = [regra.empresa_id];
        }
        else if (regra.evento === 'aguardando_cliente_por_tempo') {
          // This typically requires at least one condition of "hours_since_update" in the Rule
@@ -66,28 +60,22 @@ const executeTicketAutomations = async () => {
            SELECT * FROM tickets 
            WHERE deleted_at IS NULL
            AND EXISTS (
-             SELECT 1 FROM empresa_ticket_status status_cfg
-             WHERE status_cfg.empresa_id = tickets.empresa_id
-               AND status_cfg.valor = tickets.status
+             SELECT 1 FROM ticket_statuses status_cfg
+             WHERE status_cfg.valor = tickets.status
                AND status_cfg.especial = 'aguardando_cliente'
            )
-           AND empresa_id = ?
          `;
-         params = [regra.empresa_id];
        }
        else if (regra.evento === 'tempo_sem_interacao') {
          query = `
            SELECT * FROM tickets 
            WHERE deleted_at IS NULL
            AND NOT EXISTS (
-             SELECT 1 FROM empresa_ticket_status status_cfg
-             WHERE status_cfg.empresa_id = tickets.empresa_id
-               AND status_cfg.valor = tickets.status
+             SELECT 1 FROM ticket_statuses status_cfg
+             WHERE status_cfg.valor = tickets.status
                AND status_cfg.especial IN ('finalizado', 'encerrado')
            )
-           AND empresa_id = ?
          `;
-         params = [regra.empresa_id];
        }
 
        if (query) {
@@ -122,9 +110,8 @@ const executeTicketAutomations = async () => {
           sla_status_operacional = 'violado',
           updated_at = NOW() 
       WHERE NOT EXISTS (
-        SELECT 1 FROM empresa_ticket_status status_cfg
-        WHERE status_cfg.empresa_id = tickets.empresa_id
-          AND status_cfg.valor = tickets.status
+        SELECT 1 FROM ticket_statuses status_cfg
+        WHERE status_cfg.valor = tickets.status
           AND status_cfg.especial IN ('finalizado', 'encerrado', 'aguardando_cliente')
       )
       AND (sla_resolucao_status != 'violado' OR sla_resolucao_status IS NULL)
@@ -138,9 +125,8 @@ const executeTicketAutomations = async () => {
       SET sla_primeira_resposta_status = 'violado', 
           updated_at = NOW() 
       WHERE NOT EXISTS (
-        SELECT 1 FROM empresa_ticket_status status_cfg
-        WHERE status_cfg.empresa_id = tickets.empresa_id
-          AND status_cfg.valor = tickets.status
+        SELECT 1 FROM ticket_statuses status_cfg
+        WHERE status_cfg.valor = tickets.status
           AND status_cfg.especial IN ('finalizado', 'encerrado', 'aguardando_cliente')
       )
       AND primeira_resposta_em IS NULL
@@ -158,9 +144,8 @@ const executeTicketAutomations = async () => {
         ELSE 'dentro_sla'
       END
       WHERE NOT EXISTS (
-        SELECT 1 FROM empresa_ticket_status status_cfg
-        WHERE status_cfg.empresa_id = tickets.empresa_id
-          AND status_cfg.valor = tickets.status
+        SELECT 1 FROM ticket_statuses status_cfg
+        WHERE status_cfg.valor = tickets.status
           AND status_cfg.especial IN ('finalizado', 'encerrado', 'aguardando_cliente')
       )
       AND sla_pausado_em IS NULL

@@ -38,15 +38,12 @@ function normalizeUserRoleFlags(data: any) {
   }
 }
 
-async function resolveAccessProfileAssignment(empresaId: number | null | undefined, accessProfileId: unknown) {
+async function resolveAccessProfileAssignment(accessProfileId: unknown) {
   const profileId = parsePositiveInt(accessProfileId);
   if (!profileId) return null;
-  if (!empresaId) throw new Error('Empresa obrigatoria para vincular perfil de acesso.');
 
   const profile = await accessProfilesService.getById(profileId);
-  if (!profile || Number(profile.empresa_id) !== Number(empresaId)) {
-    throw new Error('Perfil de acesso invalido para esta empresa.');
-  }
+  if (!profile) throw new Error('Perfil de acesso invalido.');
   if (!profile.ativo) {
     throw new Error('Perfil de acesso inativo.');
   }
@@ -58,32 +55,14 @@ router.get('/team', async (req: AuthRequest, res) => {
         const currentUser = req.user;
         if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
-        if (!currentUser.empresa_id && !currentUser.desenvolvedor) {
-            return sendSuccess(res, []);
-        }
-
-        const empresaId = currentUser.empresa_id; // Devs also will have empresa_id filtering if we want, or just get from own current context
-        let query = `
+        const query = `
           SELECT u.id, u.nome, u.email, u.cargo,
                  (SELECT COUNT(id) FROM tickets t WHERE t.responsavel_id = u.id AND t.deleted_at IS NULL AND t.status NOT IN ('resolvido', 'fechado')) as ticket_count
           FROM usuarios u
-          WHERE u.ativo = 1 AND u.empresa_id = ?
+          WHERE u.ativo = 1
           ORDER BY u.nome ASC
         `;
-        const params: any[] = [empresaId];
-
-        // Dev without company gets empty list or we can pass ?empresa_id= query param
-        if (currentUser.desenvolvedor && !empresaId && !req.query.empresa_id) {
-            return sendSuccess(res, []);
-        }
-
-        if (currentUser.desenvolvedor && req.query.empresa_id) {
-           const queryEmpresaId = parsePositiveInt(req.query.empresa_id);
-           if (!queryEmpresaId) return sendSuccess(res, []);
-           params[0] = queryEmpresaId;
-        }
-
-        const [rows] = await pool.query(query, params);
+        const [rows] = await pool.query(query);
         sendSuccess(res, rows);
     } catch (e: any) {
         sendError(res, e.message);
@@ -96,14 +75,7 @@ router.get('/', requirePermission('usuarios.visualizar'), async (req: AuthReques
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
     const { search, status } = req.query;
-    const empresaId = currentUser.desenvolvedor ? undefined : currentUser.empresa_id;
-    
-    if (!currentUser.desenvolvedor && !empresaId) {
-      return sendSuccess(res, []);
-    }
-
     const users = await usersService.list({ 
-      empresaId, 
       search: search as string, 
       status: status as string
     });
@@ -119,7 +91,7 @@ router.post('/', requirePermission('usuarios.criar'), async (req: AuthRequest, r
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
-    const { nome, email, password, administrador, desenvolvedor, empresa_id, cargo, telefone, perfil, access_profile_id } = req.body;
+    const { nome, email, password, administrador, desenvolvedor, cargo, telefone, perfil, access_profile_id } = req.body;
     
     if (!nome || !email || !password) return sendError(res, 'Nome, email e senha são obrigatórios', 400);
     if (!isValidEmail(email)) return sendError(res, 'Email inválido', 400);
@@ -136,23 +108,13 @@ router.post('/', requirePermission('usuarios.criar'), async (req: AuthRequest, r
       return sendError(res, 'Apenas administradores podem criar usuarios administradores', 403);
     }
 
-    const targetEmpresaId = currentUser.desenvolvedor ? parsePositiveInt(empresa_id) : currentUser.empresa_id;
-    
-    if (!currentUser.desenvolvedor && !targetEmpresaId) {
-      return sendError(res, 'Sua conta não possui uma empresa vinculada para realizar esta ação', 403);
-    }
-
-    if (!wantsDeveloper && !targetEmpresaId) {
-      return sendError(res, 'Empresa e obrigatoria para criar usuarios sem perfil de desenvolvedor', 400);
-    }
-
     let resolvedProfile = null;
     if (!wantsDeveloper && !wantsAdmin) {
-      resolvedProfile = await resolveAccessProfileAssignment(targetEmpresaId, access_profile_id);
-      if (!resolvedProfile && targetEmpresaId) {
+      resolvedProfile = await resolveAccessProfileAssignment(access_profile_id);
+      if (!resolvedProfile) {
         const [defaultRows]: any = await pool.query(
-          'SELECT id, base_perfil FROM access_profiles WHERE empresa_id = ? AND nome = ? AND ativo = 1 LIMIT 1',
-          [targetEmpresaId, 'Atendente']
+          'SELECT id, base_perfil FROM access_profiles WHERE nome = ? AND ativo = 1 LIMIT 1',
+          ['Atendente']
         );
         resolvedProfile = defaultRows[0] || null;
       }
@@ -160,7 +122,6 @@ router.post('/', requirePermission('usuarios.criar'), async (req: AuthRequest, r
 
     const buildData = {
       nome, email, password, cargo, telefone,
-      empresa_id: targetEmpresaId,
       administrador: wantsAdmin,
       desenvolvedor: currentUser.desenvolvedor ? wantsDeveloper : false,
       perfil: wantsDeveloper
@@ -172,7 +133,7 @@ router.post('/', requirePermission('usuarios.criar'), async (req: AuthRequest, r
     };
 
     const newUser = await usersService.create(buildData);
-    await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'USER_CREATE', `Criou novo usuário: ${email}`);
+    await logSystemAction(req, currentUser.id, 'USER_CREATE', `Criou novo usuário: ${email}`);
     
     sendSuccess(res, newUser, 'Usuário criado com sucesso', 201);
   } catch (error: unknown) {
@@ -194,17 +155,13 @@ router.patch('/:id', requirePermission('usuarios.editar'), async (req: AuthReque
         
         // Security checks
         if (!currentUser.desenvolvedor) {
-            if (targetUser.empresa_id !== currentUser.empresa_id) {
-                return sendError(res, 'Acesso proibido', 403);
-            }
             if (targetUser.desenvolvedor) {
                 return sendError(res, 'Você não tem permissão para editar um desenvolvedor', 403);
             }
             if (targetUser.administrador && !currentUser.administrador) {
                 return sendError(res, 'Voce nao tem permissao para editar um administrador', 403);
             }
-            // Admin cannot change empresa_id, administrador (to dev level) or desenvolvedor
-            delete req.body.empresa_id;
+            // Administradores comuns não podem promover usuários a desenvolvedor master.
             delete req.body.desenvolvedor;
             if (!currentUser.administrador) {
                 delete req.body.administrador;
@@ -220,9 +177,8 @@ router.patch('/:id', requirePermission('usuarios.editar'), async (req: AuthReque
         normalizeUserRoleFlags(req.body);
 
         if (!req.user.desenvolvedor && !req.body.desenvolvedor && !req.body.administrador) {
-          const empresaId = req.body.empresa_id ?? targetUser.empresa_id;
           if (req.body.access_profile_id !== undefined) {
-            const profile = await resolveAccessProfileAssignment(empresaId, req.body.access_profile_id);
+            const profile = await resolveAccessProfileAssignment(req.body.access_profile_id);
             if (profile) {
               req.body.access_profile_id = profile.id;
               req.body.perfil = profile.base_perfil || req.body.perfil || targetUser.perfil || 'atendente';
@@ -231,8 +187,8 @@ router.patch('/:id', requirePermission('usuarios.editar'), async (req: AuthReque
             }
           } else if (req.body.perfil && !['desenvolvedor', 'administrador'].includes(req.body.perfil)) {
             const [profileRows]: any = await pool.query(
-              'SELECT id, base_perfil FROM access_profiles WHERE empresa_id = ? AND base_perfil = ? AND ativo = 1 ORDER BY sistema DESC LIMIT 1',
-              [empresaId, req.body.perfil]
+              'SELECT id, base_perfil FROM access_profiles WHERE base_perfil = ? AND ativo = 1 ORDER BY sistema DESC LIMIT 1',
+              [req.body.perfil]
             );
             if (profileRows[0]) {
               req.body.access_profile_id = profileRows[0].id;
@@ -250,7 +206,7 @@ router.patch('/:id', requirePermission('usuarios.editar'), async (req: AuthReque
 
         await usersService.update(id, req.body);
         permissionsService.invalidateCache(id);
-        await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'USER_UPDATE', `Atualizou usuário ID ${id}`);
+        await logSystemAction(req, currentUser.id, 'USER_UPDATE', `Atualizou usuário ID ${id}`);
         
         sendSuccess(res, null, 'Usuário atualizado com sucesso');
     } catch (error: unknown) {
@@ -284,7 +240,7 @@ router.patch('/:id/status', async (req: AuthRequest, res) => {
             return sendError(res, `Acesso proibido: Você não possui a permissão ${requiredPerm}.`, 403);
         }
         
-        if (!currentUser.desenvolvedor && (targetUser.empresa_id !== currentUser.empresa_id || targetUser.desenvolvedor)) {
+        if (!currentUser.desenvolvedor && targetUser.desenvolvedor) {
             return sendError(res, 'Acesso proibido', 403);
         }
 
@@ -304,7 +260,7 @@ router.patch('/:id/status', async (req: AuthRequest, res) => {
             }
         }
         
-        await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'USER_STATUS', `${normalizedAtivo ? 'Ativou' : 'Desativou'} usuário ID ${id}`);
+        await logSystemAction(req, currentUser.id, 'USER_STATUS', `${normalizedAtivo ? 'Ativou' : 'Desativou'} usuário ID ${id}`);
         
         sendSuccess(res, null, `Usuário ${normalizedAtivo ? 'ativado' : 'desativado'} com sucesso`);
     } catch (error: unknown) {
@@ -327,7 +283,7 @@ router.patch('/:id/password', requirePermission('usuarios.resetar_senha'), async
         const targetUser = await usersService.getById(id);
         if (!targetUser) return sendError(res, 'Usuário não encontrado', 404);
         
-        if (!currentUser.desenvolvedor && (targetUser.empresa_id !== currentUser.empresa_id || targetUser.desenvolvedor)) {
+        if (!currentUser.desenvolvedor && targetUser.desenvolvedor) {
             return sendError(res, 'Acesso proibido', 403);
         }
         if (!currentUser.desenvolvedor && targetUser.administrador && !currentUser.administrador) {
@@ -335,7 +291,7 @@ router.patch('/:id/password', requirePermission('usuarios.resetar_senha'), async
         }
 
         await usersService.update(id, { password });
-        await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'USER_PASSWORD', `Alterou senha do usuário ID ${id}`);
+        await logSystemAction(req, currentUser.id, 'USER_PASSWORD', `Alterou senha do usuário ID ${id}`);
         
         sendSuccess(res, null, 'Senha alterada com sucesso');
     } catch (error: unknown) {

@@ -5,7 +5,7 @@ import { encryptSecret } from '../utils/crypto.js';
 import { maskEmail } from '../utils/sanitize.js';
 // Colunas seguras para exposição (NUNCA inclui smtp_pass_enc).
 const PUBLIC_CHANNEL_COLUMNS = `
-  id, empresa_id, nome, email_publico, inbound_address, verification_token, status,
+  id, nome, email_publico, inbound_address, verification_token, status,
   ultimo_erro, last_received_at, verified_at, created_at, updated_at,
   smtp_enabled, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_from_name,
   smtp_status, smtp_last_test_at, smtp_last_error
@@ -14,30 +14,29 @@ function normalizePublicEmail(email) {
     return String(email || '').trim().toLowerCase();
 }
 export class EmailChannelsService {
-    async listByCompany(empresaId) {
-        const [rows] = await pool.query(`SELECT ${PUBLIC_CHANNEL_COLUMNS} FROM empresa_email_canais WHERE empresa_id = ? ORDER BY created_at DESC`, [empresaId]);
+    async list() {
+        const [rows] = await pool.query(`SELECT ${PUBLIC_CHANNEL_COLUMNS} FROM email_channels ORDER BY created_at DESC`);
         return rows;
     }
-    async getByIdAndCompany(channelId, empresaId) {
-        const [rows] = await pool.query('SELECT * FROM empresa_email_canais WHERE id = ? AND empresa_id = ? LIMIT 1', [channelId, empresaId]);
+    async getById(channelId) {
+        const [rows] = await pool.query('SELECT * FROM email_channels WHERE id = ? LIMIT 1', [channelId]);
         return rows.length > 0 ? rows[0] : null;
     }
     async createChannel(data) {
-        const { empresa_id, nome, email_publico } = data;
+        const { nome, email_publico } = data;
         const normalizedEmailPublico = normalizePublicEmail(email_publico);
         if (!normalizedEmailPublico) {
             throw new Error('E-mail publico do canal e obrigatorio.');
         }
-        const [duplicateRows] = await pool.query('SELECT id, empresa_id FROM empresa_email_canais WHERE LOWER(TRIM(email_publico)) = ? LIMIT 1', [normalizedEmailPublico]);
+        const [duplicateRows] = await pool.query('SELECT id FROM email_channels WHERE LOWER(TRIM(email_publico)) = ? LIMIT 1', [normalizedEmailPublico]);
         if (duplicateRows.length > 0) {
             throw new Error('Este e-mail publico ja esta vinculado a outro canal.');
         }
         const randomHex = crypto.randomBytes(4).toString('hex');
-        const inbound_address = `${env.INBOUND_EMAIL_PREFIX}-${empresa_id}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
+        const inbound_address = `${env.INBOUND_EMAIL_PREFIX}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
         const verification_token = crypto.randomBytes(16).toString('hex');
-        const [result] = await pool.query('INSERT INTO empresa_email_canais (empresa_id, nome, email_publico, inbound_address, verification_token, status) VALUES (?, ?, ?, ?, ?, ?)', [empresa_id, nome || null, normalizedEmailPublico, inbound_address, verification_token, 'pendente']);
-        await pool.query('INSERT INTO logs_sistema (empresa_id, acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?, ?)', [
-            empresa_id,
+        const [result] = await pool.query('INSERT INTO email_channels (nome, email_publico, inbound_address, verification_token, status) VALUES (?, ?, ?, ?, ?)', [nome || null, normalizedEmailPublico, inbound_address, verification_token, 'pendente']);
+        await pool.query('INSERT INTO logs_sistema (acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?)', [
             'EMAIL_CHANNEL_CREATED',
             `Canal de e-mail criado: ${maskEmail(inbound_address)} referenciando ${maskEmail(normalizedEmailPublico)}`,
             'SYSTEM',
@@ -46,36 +45,36 @@ export class EmailChannelsService {
         return result.insertId;
     }
     async getByInboundAddress(address) {
-        const [rows] = await pool.query('SELECT * FROM empresa_email_canais WHERE inbound_address = ? LIMIT 1', [address.toLowerCase()]);
+        const [rows] = await pool.query('SELECT * FROM email_channels WHERE inbound_address = ? LIMIT 1', [address.toLowerCase()]);
         return rows.length > 0 ? rows[0] : null;
     }
     async markVerified(channelId) {
-        await pool.query('UPDATE empresa_email_canais SET status = ?, verified_at = NOW() WHERE id = ? AND status = ?', ['ativo', channelId, 'pendente']);
+        await pool.query('UPDATE email_channels SET status = ?, verified_at = NOW() WHERE id = ? AND status = ?', ['ativo', channelId, 'pendente']);
         await pool.query('INSERT INTO logs_sistema (acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?)', ['EMAIL_CHANNEL_VERIFIED', `Canal de e-mail ID ${channelId} verificado/ativado.`, 'SYSTEM_LISTENER', '127.0.0.1']);
     }
     async markError(channelId, errorMsg) {
-        await pool.query('UPDATE empresa_email_canais SET status = ?, ultimo_erro = ? WHERE id = ?', ['erro', errorMsg, channelId]);
+        await pool.query('UPDATE email_channels SET status = ?, ultimo_erro = ? WHERE id = ?', ['erro', errorMsg, channelId]);
         await pool.query('INSERT INTO logs_sistema (acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?)', ['EMAIL_CHANNEL_ERROR', `Erro no canal de e-mail ID ${channelId}: ${errorMsg}`, 'SYSTEM_LISTENER', '127.0.0.1']);
     }
     async touchReceived(channelId) {
-        await pool.query('UPDATE empresa_email_canais SET last_received_at = NOW(), ultimo_erro = NULL WHERE id = ?', [channelId]);
-        await pool.query('UPDATE empresa_email_canais SET status = ?, verified_at = NOW() WHERE id = ? AND (status = ? OR status = ?)', ['ativo', channelId, 'pendente', 'erro']);
+        await pool.query('UPDATE email_channels SET last_received_at = NOW(), ultimo_erro = NULL WHERE id = ?', [channelId]);
+        await pool.query('UPDATE email_channels SET status = ?, verified_at = NOW() WHERE id = ? AND (status = ? OR status = ?)', ['ativo', channelId, 'pendente', 'erro']);
     }
-    async deleteChannel(id, empresaId) {
-        await pool.query('DELETE FROM empresa_email_canais WHERE id = ? AND empresa_id = ?', [id, empresaId]);
+    async deleteChannel(id) {
+        await pool.query('DELETE FROM email_channels WHERE id = ?', [id]);
     }
-    async regenerate(id, empresaId) {
+    async regenerate(id) {
         const randomHex = crypto.randomBytes(4).toString('hex');
-        const inbound_address = `${env.INBOUND_EMAIL_PREFIX}-${empresaId}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
+        const inbound_address = `${env.INBOUND_EMAIL_PREFIX}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
         const verification_token = crypto.randomBytes(16).toString('hex');
-        await pool.query('UPDATE empresa_email_canais SET inbound_address = ?, verification_token = ?, status = ? WHERE id = ? AND empresa_id = ?', [inbound_address, verification_token, 'pendente', id, empresaId]);
+        await pool.query('UPDATE email_channels SET inbound_address = ?, verification_token = ?, status = ? WHERE id = ?', [inbound_address, verification_token, 'pendente', id]);
     }
     /**
      * Atualiza a configuração de SMTP do canal. A senha (quando enviada) é
      * cifrada antes de gravar (smtp_pass_enc). Nunca grava/expõe senha em claro.
      */
-    async updateSmtpConfig(channelId, empresaId, data) {
-        const channel = await this.getByIdAndCompany(channelId, empresaId);
+    async updateSmtpConfig(channelId, data) {
+        const channel = await this.getById(channelId);
         if (!channel) {
             throw new Error('Canal não encontrado.');
         }
@@ -117,15 +116,15 @@ export class EmailChannelsService {
             fields.push('smtp_pass_enc = ?');
             params.push(encryptSecret(data.password));
         }
-        params.push(channelId, empresaId);
-        await pool.query(`UPDATE empresa_email_canais SET ${fields.join(', ')} WHERE id = ? AND empresa_id = ?`, params);
-        return this.getByIdAndCompany(channelId, empresaId);
+        params.push(channelId);
+        await pool.query(`UPDATE email_channels SET ${fields.join(', ')} WHERE id = ?`, params);
+        return this.getById(channelId);
     }
     /**
      * Atualiza apenas o status do SMTP do canal (verified/error) + último teste.
      */
     async setSmtpStatus(channelId, status, error) {
-        await pool.query('UPDATE empresa_email_canais SET smtp_status = ?, smtp_last_error = ?, smtp_last_test_at = NOW() WHERE id = ?', [status, error ? String(error).slice(0, 1000) : null, channelId]);
+        await pool.query('UPDATE email_channels SET smtp_status = ?, smtp_last_error = ?, smtp_last_test_at = NOW() WHERE id = ?', [status, error ? String(error).slice(0, 1000) : null, channelId]);
     }
     /**
      * Indica se o canal tem SMTP próprio habilitado e configurado.

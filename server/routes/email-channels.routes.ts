@@ -8,7 +8,6 @@ import { verifyChannelSmtp, sendTicketEmail } from '../utils/mailer.js';
 
 const router = Router();
 router.use(authMiddleware);
-const INSTANCE_ID = 1;
 
 const canManage = (req: any) => req.user.desenvolvedor || req.user.administrador;
 
@@ -18,7 +17,7 @@ router.get('/email-channels', async (req: any, res) => {
       return sendError(res, 'Permissao negada', 403);
     }
 
-    const canais = await emailChannelsService.listByCompany(INSTANCE_ID);
+    const canais = await emailChannelsService.list();
     return sendSuccess(res, canais);
   } catch (err: any) {
     return sendError(res, err.message, 500);
@@ -37,7 +36,6 @@ router.post('/email-channels', async (req: any, res) => {
     }
 
     const id = await emailChannelsService.createChannel({
-      empresa_id: INSTANCE_ID,
       email_publico,
       nome,
     });
@@ -55,7 +53,7 @@ router.delete('/email-channels/:id', async (req: any, res) => {
     }
 
     const id = parseInt(req.params.id, 10);
-    await emailChannelsService.deleteChannel(id, INSTANCE_ID);
+    await emailChannelsService.deleteChannel(id);
     return sendSuccess(res, null, 'Canal deletado com sucesso');
   } catch (err: any) {
     return sendError(res, err.message, 500);
@@ -69,7 +67,7 @@ router.post('/email-channels/:id/regenerate', async (req: any, res) => {
     }
 
     const id = parseInt(req.params.id, 10);
-    await emailChannelsService.regenerate(id, INSTANCE_ID);
+    await emailChannelsService.regenerate(id);
     return sendSuccess(res, null, 'Canal regenerado com sucesso');
   } catch (err: any) {
     return sendError(res, err.message, 500);
@@ -96,7 +94,7 @@ router.put('/email-channels/:id/smtp', async (req: any, res) => {
       return sendError(res, 'Porta SMTP inválida.', 400);
     }
 
-    const updated = await emailChannelsService.updateSmtpConfig(id, INSTANCE_ID, {
+    const updated = await emailChannelsService.updateSmtpConfig(id, {
       smtp_enabled: !!smtp_enabled,
       smtp_host: smtp_host ? String(smtp_host).trim() : null,
       smtp_port: portNum,
@@ -123,7 +121,7 @@ router.post('/email-channels/:id/smtp/test', async (req: any, res) => {
     }
 
     const id = parseInt(req.params.id, 10);
-    const channel = await emailChannelsService.getByIdAndCompany(id, INSTANCE_ID);
+    const channel = await emailChannelsService.getById(id);
     if (!channel) return sendError(res, 'Canal não encontrado', 404);
     if (!emailChannelsService.isChannelSmtpReady(channel)) {
       return sendError(res, 'Canal sem SMTP configurado/ativo.', 400);

@@ -13,7 +13,6 @@ router.get('/', async (req, res) => {
             return sendError(res, 'Não autenticado', 401);
         const filters = {
             ...req.query,
-            empresa_id: currentUser.empresa_id,
             user_id: currentUser.id,
             is_dev: currentUser.desenvolvedor
         };

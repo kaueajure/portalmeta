@@ -22,15 +22,12 @@ export function isFinalTicketStatusSpecial(special) {
 export function isCustomerWaitingTicketStatusSpecial(special) {
     return special === 'aguardando_cliente';
 }
-export async function getTicketStatusConfigs(empresaId) {
-    if (!empresaId)
-        return [];
+export async function getTicketStatusConfigs() {
     const [rows] = await pool.query(`
-      SELECT id, empresa_id, nome, valor, ativo, kanban_visivel, cor, especial, ordem
-      FROM empresa_ticket_status
-      WHERE empresa_id = ?
+      SELECT id, nome, valor, ativo, kanban_visivel, cor, especial, ordem
+      FROM ticket_statuses
       ORDER BY ordem ASC, id ASC
-    `, [empresaId]);
+    `);
     return rows.map((row) => ({
         ...row,
         ativo: Number(row.ativo) === 1 ? 1 : 0,
@@ -38,16 +35,15 @@ export async function getTicketStatusConfigs(empresaId) {
         especial: normalizeTicketStatusSpecial(row.especial)
     }));
 }
-export async function getTicketStatusConfig(empresaId, status) {
-    if (!empresaId || !isValidTicketStatusValue(status))
+export async function getTicketStatusConfig(status) {
+    if (!isValidTicketStatusValue(status))
         return null;
     const [rows] = await pool.query(`
-      SELECT id, empresa_id, nome, valor, ativo, kanban_visivel, cor, especial, ordem
-      FROM empresa_ticket_status
-      WHERE empresa_id = ?
-        AND valor = ?
+      SELECT id, nome, valor, ativo, kanban_visivel, cor, especial, ordem
+      FROM ticket_statuses
+      WHERE valor = ?
       LIMIT 1
-    `, [empresaId, status]);
+    `, [status]);
     if (!rows[0])
         return null;
     return {
@@ -57,44 +53,44 @@ export async function getTicketStatusConfig(empresaId, status) {
         especial: normalizeTicketStatusSpecial(rows[0].especial)
     };
 }
-export async function isConfiguredActiveTicketStatus(empresaId, status) {
-    const config = await getTicketStatusConfig(empresaId, status);
+export async function isConfiguredActiveTicketStatus(status) {
+    const config = await getTicketStatusConfig(status);
     return !!config && config.ativo === 1;
 }
-export async function getTicketStatusValuesBySpecial(empresaId, specials, fallback = []) {
-    const configs = await getTicketStatusConfigs(empresaId);
+export async function getTicketStatusValuesBySpecial(specials, fallback = []) {
+    const configs = await getTicketStatusConfigs();
     const values = configs
         .filter(status => status.ativo === 1 && specials.includes(status.especial))
         .map(status => status.valor);
     return values.length > 0 ? values : fallback;
 }
-export async function getFinalTicketStatusValues(empresaId) {
-    return getTicketStatusValuesBySpecial(empresaId, ['finalizado', 'encerrado'], DEFAULT_FINAL_STATUSES);
+export async function getFinalTicketStatusValues() {
+    return getTicketStatusValuesBySpecial(['finalizado', 'encerrado'], DEFAULT_FINAL_STATUSES);
 }
-export async function getCustomerWaitingTicketStatusValues(empresaId) {
-    return getTicketStatusValuesBySpecial(empresaId, ['aguardando_cliente'], DEFAULT_CUSTOMER_WAITING_STATUSES);
+export async function getCustomerWaitingTicketStatusValues() {
+    return getTicketStatusValuesBySpecial(['aguardando_cliente'], DEFAULT_CUSTOMER_WAITING_STATUSES);
 }
-export async function getInitialTicketStatusValue(empresaId) {
-    const configs = await getTicketStatusConfigs(empresaId);
+export async function getInitialTicketStatusValue() {
+    const configs = await getTicketStatusConfigs();
     const initial = configs.find(status => status.ativo === 1 && status.especial === 'inicial')
         || configs.find(status => status.ativo === 1 && !isFinalTicketStatusSpecial(status.especial));
     if (!initial) {
-        throw new Error('Nenhum status inicial ativo configurado para esta empresa');
+        throw new Error('Nenhum status inicial ativo configurado');
     }
     return initial.valor;
 }
-export async function getReopenTicketStatusValue(empresaId) {
-    return getInitialTicketStatusValue(empresaId);
+export async function getReopenTicketStatusValue() {
+    return getInitialTicketStatusValue();
 }
-export async function getInProgressTicketStatusValue(empresaId) {
-    const configs = await getTicketStatusConfigs(empresaId);
+export async function getInProgressTicketStatusValue() {
+    const configs = await getTicketStatusConfigs();
     const normal = configs.find(status => status.ativo === 1 && status.especial === 'normal');
     if (normal)
         return normal.valor;
-    return getInitialTicketStatusValue(empresaId);
+    return getInitialTicketStatusValue();
 }
-export async function getClosedTicketStatusValue(empresaId) {
-    const configs = await getTicketStatusConfigs(empresaId);
+export async function getClosedTicketStatusValue() {
+    const configs = await getTicketStatusConfigs();
     return configs.find(status => status.ativo === 1 && status.especial === 'encerrado')?.valor || null;
 }
 export function buildStatusInCondition(column, statuses, negate = false) {

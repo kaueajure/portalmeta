@@ -48,7 +48,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
       path: '/'
     });
 
-    await logSystemAction(req, data.user.id, data.user.empresa_id, 'LOGIN', 'Usuário realizou login com sucesso');
+    await logSystemAction(req, data.user.id, 'LOGIN', 'Usuário realizou login com sucesso');
     
     sendSuccess(res, { user: data.user }, 'Login realizado com sucesso');
   } catch (error: unknown) {

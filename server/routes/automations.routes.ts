@@ -5,7 +5,6 @@ import { requirePermission } from '../middlewares/permissions.middleware.js';
 
 const router = Router();
 router.use(authMiddleware);
-const INSTANCE_ID = 1;
 
 const sendSuccess = (res: any, data: any) => res.json({ success: true, data });
 const sendError = (res: any, error: string, num = 500) => res.status(num).json({ success: false, error });
@@ -14,7 +13,7 @@ router.get('/', requirePermission('automacoes.gerenciar'), async (req: AuthReque
   try {
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
-    const [rows] = await pool.query('SELECT * FROM ticket_automacoes WHERE empresa_id = ? ORDER BY ordem ASC', [INSTANCE_ID]);
+    const [rows] = await pool.query('SELECT * FROM ticket_automacoes ORDER BY ordem ASC');
     sendSuccess(res, rows);
   } catch (error: unknown) {
     sendError(res, 'Erro ao buscar automações');
@@ -27,8 +26,8 @@ router.post('/', requirePermission('automacoes.gerenciar'), async (req: AuthRequ
     const { nome, descricao, evento, condicoes_json, acoes_json, ativo, ordem } = req.body;
     
     const [result]: any = await pool.query(
-      'INSERT INTO ticket_automacoes (empresa_id, nome, descricao, evento, condicoes_json, acoes_json, ativo, ordem, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [INSTANCE_ID, nome, descricao || null, evento, JSON.stringify(condicoes_json || []), JSON.stringify(acoes_json || []), ativo !== undefined ? ativo : 1, ordem || 0, currentUser!.id]
+      'INSERT INTO ticket_automacoes (nome, descricao, evento, condicoes_json, acoes_json, ativo, ordem, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [nome, descricao || null, evento, JSON.stringify(condicoes_json || []), JSON.stringify(acoes_json || []), ativo !== undefined ? ativo : 1, ordem || 0, currentUser!.id]
     );
     sendSuccess(res, { id: result.insertId });
   } catch (error: unknown) {

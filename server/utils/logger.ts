@@ -4,7 +4,6 @@ import  pool from  '../db/connection.js';
 export const logSystemAction = async (
   req: Request | null,
   userId: number | null,
-  empresaId: number | null,
   acao: string,
   descricao: string
 ) => {
@@ -13,8 +12,8 @@ export const logSystemAction = async (
     const userAgent = req ? (req.headers['user-agent'] || 'unknown') : 'system';
     
     await pool.query(
-      "INSERT INTO logs_sistema (usuario_id, empresa_id, acao, descricao, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?)",
-      [userId, empresaId, acao, descricao, Array.isArray(ip) ? ip[0] : ip, userAgent]
+      "INSERT INTO logs_sistema (usuario_id, acao, descricao, ip, user_agent) VALUES (?, ?, ?, ?, ?)",
+      [userId, acao, descricao, Array.isArray(ip) ? ip[0] : ip, userAgent]
     );
   } catch (error) {
     console.error("Log error:", error);

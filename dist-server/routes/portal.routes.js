@@ -23,7 +23,6 @@ function getPortalContext(req) {
     if (req.portalCustomer) {
         return {
             mode: 'external',
-            empresa_id: req.portalCustomer.empresa_id,
             customer_email: req.portalCustomer.customer_email.toLowerCase(),
             usuario_id: req.portalCustomer.usuario_id || null,
             nome: req.portalCustomer.nome || req.portalCustomer.customer_email
@@ -32,7 +31,6 @@ function getPortalContext(req) {
     if (req.user) {
         return {
             mode: 'user',
-            empresa_id: req.user.empresa_id,
             customer_email: req.user.email.toLowerCase(),
             usuario_id: req.user.id,
             nome: req.user.nome
@@ -46,13 +44,12 @@ router.get('/me', async (req, res) => {
     if (!context)
         return sendError(res, 'Não autorizado', 401);
     try {
-        const [empresaRows] = await pool.query('SELECT nome FROM empresas WHERE id = ?', [context.empresa_id]);
-        const empresaNome = empresaRows[0]?.nome || 'MetaBit';
+        const [settingsRows] = await pool.query('SELECT nome FROM application_settings WHERE id = 1');
+        const organizationName = settingsRows[0]?.nome || 'MetaBit';
         sendSuccess(res, {
             email: context.customer_email,
-            empresa_id: context.empresa_id,
             nome: context.nome,
-            empresa_nome: empresaNome
+            organizacao_nome: organizationName
         });
     }
     catch (error) {
@@ -70,22 +67,19 @@ router.get('/tickets', async (req, res) => {
         const [rows] = await pool.query(`
       SELECT id, titulo, status, categoria, servico, prioridade, created_at, updated_at
       FROM tickets
-      WHERE empresa_id = ?
-        AND deleted_at IS NULL
+      WHERE deleted_at IS NULL
         AND (
           LOWER(solicitante_email) = ?
           OR usuario_id IN (
-            SELECT id FROM usuarios WHERE LOWER(email) = ? AND empresa_id = ?
+            SELECT id FROM usuarios WHERE LOWER(email) = ?
           )
           OR (usuario_id = ? AND ? IS NOT NULL)
         )
       ORDER BY updated_at DESC
       LIMIT ?
     `, [
-            context.empresa_id,
             context.customer_email,
             context.customer_email,
-            context.empresa_id,
             context.usuario_id,
             context.usuario_id,
             safeLimit
@@ -105,21 +99,18 @@ router.get('/tickets/:id', async (req, res) => {
         const [rows] = await pool.query(`
       SELECT id, titulo, descricao, status, categoria, servico, prioridade, created_at, updated_at
       FROM tickets
-      WHERE id = ? AND empresa_id = ?
-        AND deleted_at IS NULL
+      WHERE id = ? AND deleted_at IS NULL
         AND (
           LOWER(solicitante_email) = ?
           OR usuario_id IN (
-            SELECT id FROM usuarios WHERE LOWER(email) = ? AND empresa_id = ?
+            SELECT id FROM usuarios WHERE LOWER(email) = ?
           )
           OR (usuario_id = ? AND ? IS NOT NULL)
         )
     `, [
             req.params.id,
-            context.empresa_id,
             context.customer_email,
             context.customer_email,
-            context.empresa_id,
             context.usuario_id,
             context.usuario_id
         ]);
@@ -138,22 +129,19 @@ router.get('/tickets/:id/messages', async (req, res) => {
     try {
         // Verifica se o ticket pertence ao cliente
         const [ticketRows] = await pool.query(`
-      SELECT id FROM tickets 
-      WHERE id = ? AND empresa_id = ?
-        AND deleted_at IS NULL
+      SELECT id FROM tickets
+      WHERE id = ? AND deleted_at IS NULL
         AND (
           LOWER(solicitante_email) = ?
           OR usuario_id IN (
-            SELECT id FROM usuarios WHERE LOWER(email) = ? AND empresa_id = ?
+            SELECT id FROM usuarios WHERE LOWER(email) = ?
           )
           OR (usuario_id = ? AND ? IS NOT NULL)
         )
     `, [
             req.params.id,
-            context.empresa_id,
             context.customer_email,
             context.customer_email,
-            context.empresa_id,
             context.usuario_id,
             context.usuario_id
         ]);
@@ -162,7 +150,7 @@ router.get('/tickets/:id/messages', async (req, res) => {
         const pagination = normalizeMessagePagination(req.query);
         const includeMeta = req.query.include_meta === 'true';
         let messagesQuery = `
-      SELECT m.*, u.nome as usuario_nome 
+      SELECT m.*, u.nome as usuario_nome
       FROM ticket_mensagens m
       LEFT JOIN usuarios u ON m.usuario_id = u.id
       WHERE m.ticket_id = ? AND m.interno = 0
@@ -205,7 +193,6 @@ router.post('/tickets', async (req, res) => {
     }
     try {
         const ticketId = await ticketsService.create({
-            empresa_id: context.empresa_id,
             usuario_id: context.usuario_id,
             solicitante_email: context.customer_email,
             solicitante_nome: context.nome,
@@ -237,22 +224,19 @@ router.post('/tickets/:id/messages', async (req, res) => {
     try {
         // Verifica se o ticket pertence ao cliente
         const [ticketRows] = await pool.query(`
-      SELECT id, empresa_id FROM tickets 
-      WHERE id = ? AND empresa_id = ?
-        AND deleted_at IS NULL
+      SELECT id FROM tickets
+      WHERE id = ? AND deleted_at IS NULL
         AND (
           LOWER(solicitante_email) = ?
           OR usuario_id IN (
-            SELECT id FROM usuarios WHERE LOWER(email) = ? AND empresa_id = ?
+            SELECT id FROM usuarios WHERE LOWER(email) = ?
           )
           OR (usuario_id = ? AND ? IS NOT NULL)
         )
     `, [
             req.params.id,
-            context.empresa_id,
             context.customer_email,
             context.customer_email,
-            context.empresa_id,
             context.usuario_id,
             context.usuario_id
         ]);
@@ -266,7 +250,6 @@ router.post('/tickets/:id/messages', async (req, res) => {
         }, context.mode === 'user' ? req.user : {
             id: context.usuario_id || 0,
             email: context.customer_email,
-            empresa_id: context.empresa_id,
             perfil: 'cliente'
         });
         res.status(201).json({
@@ -289,9 +272,9 @@ router.get('/knowledge', async (req, res) => {
         let query = `
       SELECT id, titulo, conteudo, categoria, created_at
       FROM knowledge_articles
-      WHERE ativo = 1 AND publico = 1 AND empresa_id = ?
+      WHERE ativo = 1 AND publico = 1
     `;
-        const params = [context.empresa_id];
+        const params = [];
         if (category) {
             query += ' AND categoria = ?';
             params.push(category);
@@ -312,9 +295,9 @@ router.get('/knowledge/categories', async (req, res) => {
         const [rows] = await pool.query(`
       SELECT DISTINCT categoria
       FROM knowledge_articles
-      WHERE ativo = 1 AND publico = 1 AND empresa_id = ? AND categoria IS NOT NULL
+      WHERE ativo = 1 AND publico = 1 AND categoria IS NOT NULL
       ORDER BY categoria ASC
-    `, [context.empresa_id]);
+    `);
         sendSuccess(res, rows.map((row) => row.categoria));
     }
     catch (error) {
@@ -329,8 +312,8 @@ router.get('/knowledge/article/:id', async (req, res) => {
         const [rows] = await pool.query(`
       SELECT *
       FROM knowledge_articles
-      WHERE id = ? AND ativo = 1 AND publico = 1 AND empresa_id = ?
-    `, [req.params.id, context.empresa_id]);
+      WHERE id = ? AND ativo = 1 AND publico = 1
+    `, [req.params.id]);
         if (!rows.length)
             return sendError(res, 'Artigo não encontrado', 404);
         sendSuccess(res, rows[0]);
@@ -351,13 +334,13 @@ router.get('/knowledge/search', async (req, res) => {
         const [rows] = await pool.query(`
       SELECT id, titulo, categoria, SUBSTRING(conteudo, 1, 150) as resumo
       FROM knowledge_articles
-      WHERE ativo = 1 AND publico = 1 AND empresa_id = ?
+      WHERE ativo = 1 AND publico = 1
         AND (titulo LIKE ? OR conteudo LIKE ? OR categoria LIKE ?)
-      ORDER BY 
+      ORDER BY
         CASE WHEN titulo LIKE ? THEN 1 ELSE 2 END,
         created_at DESC
       LIMIT 10
-    `, [context.empresa_id, searchTerms, searchTerms, searchTerms, searchTerms]);
+    `, [searchTerms, searchTerms, searchTerms, searchTerms]);
         sendSuccess(res, rows);
     }
     catch (error) {

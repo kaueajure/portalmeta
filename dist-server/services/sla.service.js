@@ -44,7 +44,6 @@ class SlaService {
         await pool.query('UPDATE tickets SET sla_pausado_em = NOW(), sla_status_operacional = "pausado", updated_at = NOW() WHERE id = ? AND deleted_at IS NULL', [ticketId]);
         await recordTicketEvent({
             ticket_id: ticketId,
-            empresa_id: ticket.empresa_id,
             usuario_id: usuarioId,
             tipo: 'sla_pausado',
             descricao: 'SLA pausado enquanto aguarda resposta do cliente'
@@ -56,9 +55,8 @@ class SlaService {
     async resumeSla(ticketId, usuarioId = null) {
         const [rows] = await pool.query(`SELECT t.*, status_cfg.especial as status_especial
        FROM tickets t
-       LEFT JOIN empresa_ticket_status status_cfg
-         ON status_cfg.empresa_id = t.empresa_id
-        AND status_cfg.valor = t.status
+       LEFT JOIN ticket_statuses status_cfg
+         ON status_cfg.valor = t.status
        WHERE t.id = ? AND t.deleted_at IS NULL`, [ticketId]);
         const ticket = rows[0];
         if (!ticket || !ticket.sla_pausado_em)
@@ -84,7 +82,6 @@ class SlaService {
        WHERE id = ? AND deleted_at IS NULL`, [totalPausado, novoPrazoSla, novoStatusOperacional, ticketId]);
         await recordTicketEvent({
             ticket_id: ticketId,
-            empresa_id: ticket.empresa_id,
             usuario_id: usuarioId,
             tipo: 'sla_retomado',
             descricao: `SLA retomado após resposta do cliente (${diffMins} minutos pausados nesta etapa)`
@@ -96,9 +93,8 @@ class SlaService {
     async updateOperationalStatus(ticketId) {
         const [rows] = await pool.query(`SELECT t.*, status_cfg.especial as status_especial
        FROM tickets t
-       LEFT JOIN empresa_ticket_status status_cfg
-         ON status_cfg.empresa_id = t.empresa_id
-        AND status_cfg.valor = t.status
+       LEFT JOIN ticket_statuses status_cfg
+         ON status_cfg.valor = t.status
        WHERE t.id = ? AND t.deleted_at IS NULL`, [ticketId]);
         const ticket = rows[0];
         if (!ticket)

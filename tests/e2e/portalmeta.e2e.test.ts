@@ -285,24 +285,14 @@ test('portalmeta e2e smoke', { skip: !RUN_E2E || !E2E_EMAIL || !E2E_PASSWORD }, 
     });
 
     await t.test('busca global tem estado vazio ou resultados', async () => {
-      const profile = await apiGet<any>(session, '/api/profile');
-      let query = 'portalmeta-sem-resultado-e2e';
-      if (profile?.desenvolvedor) {
-        const companies = await apiGet<any[]>(session, '/api/companies').catch(() => []);
-        query = companies[0]?.nome || query;
-      }
+      const query = 'portalmeta-sem-resultado-e2e';
 
       await setInputValue(session, 'header input[type="search"]', query);
-      await waitFor(session, `document.body.innerText.includes('Nenhum resultado') || document.body.innerText.includes('Clientes e empresas') || document.body.innerText.includes('Chamados')`, 15000);
+      await waitFor(session, `document.body.innerText.includes('Nenhum resultado') || document.body.innerText.includes('Clientes') || document.body.innerText.includes('Chamados')`, 15000);
     });
 
     await t.test('detalhe do chamado abre quando ha massa de dados', async (subtest) => {
-      const profile = await apiGet<any>(session, '/api/profile');
-      let ticketEndpoint = '/api/tickets?limit=1&page=1';
-      if (profile?.desenvolvedor) {
-        const companies = await apiGet<any[]>(session, '/api/companies').catch(() => []);
-        if (companies[0]?.id) ticketEndpoint += `&empresa_id=${companies[0].id}`;
-      }
+      const ticketEndpoint = '/api/tickets?limit=1&page=1';
 
       const ticketsResponse = await apiGet<any>(session, ticketEndpoint).catch(() => null);
       const ticket = Array.isArray(ticketsResponse) ? ticketsResponse[0] : ticketsResponse?.data?.[0];

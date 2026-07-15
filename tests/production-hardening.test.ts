@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { formatDateTimeForMySQL, addMinutesForMySQL } from '../server/utils/date-time.ts';
 import { normalizeOutboxProcessLimit, validateTicketEmailOutboxParams } from '../server/services/email-outbox.service.ts';
 import { normalizeMessagePagination } from '../server/utils/pagination.ts';
+import { migrationKey } from '../server/db/migration-runner.ts';
 
 test('formatDateTimeForMySQL formats local time without UTC ISO conversion', () => {
   const date = new Date(2026, 6, 4, 9, 8, 7);
@@ -17,7 +18,6 @@ test('addMinutesForMySQL adds minutes using local Date semantics', () => {
 
 test('outbox validation rejects invalid recipient and missing dedupe key', () => {
   const base = {
-    empresaId: 1,
     ticketId: 10,
     to: 'cliente@example.com',
     type: 'agent_reply' as const,
@@ -42,7 +42,6 @@ test('outbox validation rejects invalid recipient and missing dedupe key', () =>
 
 test('outbox validation rejects missing core ticket fields', () => {
   const valid = {
-    empresaId: 1,
     ticketId: 10,
     to: 'cliente@example.com',
     type: 'agent_reply' as const,
@@ -50,7 +49,6 @@ test('outbox validation rejects missing core ticket fields', () => {
     dedupeKey: 'ticket:10:reply:1',
   };
 
-  assert.equal(validateTicketEmailOutboxParams({ ...valid, empresaId: 0 }).ok, false);
   assert.equal(validateTicketEmailOutboxParams({ ...valid, ticketId: 0 }).ok, false);
   assert.equal(validateTicketEmailOutboxParams({ ...valid, type: '' as any }).ok, false);
   assert.equal(validateTicketEmailOutboxParams({ ...valid, title: '' }).ok, false);
@@ -58,6 +56,11 @@ test('outbox validation rejects missing core ticket fields', () => {
     ok: true,
     dedupeKey: 'ticket:10:reply:1',
   });
+});
+
+test('migration identity is stable between development and production builds', () => {
+  assert.equal(migrationKey('037_single_company_contract.ts'), '037_single_company_contract');
+  assert.equal(migrationKey('037_single_company_contract.js'), '037_single_company_contract');
 });
 
 test('normalizeOutboxProcessLimit clamps unsafe limits', () => {

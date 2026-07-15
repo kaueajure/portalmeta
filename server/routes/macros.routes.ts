@@ -9,13 +9,12 @@ const router = Router();
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authMiddleware as any);
 
-// Listar macros da empresa
+// Listar macros
 router.get('/', requireAnyPermission(['macros.visualizar', 'macros.gerenciar']), async (req: AuthRequest, res) => {
   try {
     if (!req.user) return sendError(res, 'Não autorizado', 401);
     
-    // Qualquer usuário autenticado com empresa vínculos pode ver macros
-    const macros = await macrosService.list(req.user.empresa_id!);
+    const macros = await macrosService.list();
     sendSuccess(res, macros);
   } catch (error: any) {
     sendError(res, error.message);
@@ -36,7 +35,6 @@ router.post('/', requireAnyPermission(['macros.criar', 'macros.gerenciar']), asy
     if (titulo.length > 120) return sendError(res, 'Título muito longo (máx 120)', 400);
 
     const macroId = await macrosService.create({
-      empresa_id: req.user.empresa_id,
       titulo,
       conteudo,
       categoria,
@@ -59,7 +57,7 @@ router.put('/:id', requireAnyPermission(['macros.editar', 'macros.gerenciar']), 
     const { id } = req.params;
     const { titulo, conteudo, categoria, servico, tags_json, ativo } = req.body;
 
-    await macrosService.update(Number(id), req.user.empresa_id!, {
+    await macrosService.update(Number(id), {
       titulo,
       conteudo,
       categoria,
@@ -81,7 +79,7 @@ router.delete('/:id', requireAnyPermission(['macros.excluir', 'macros.gerenciar'
 
     const { id } = req.params;
 
-    await macrosService.delete(Number(id), req.user.empresa_id!);
+    await macrosService.delete(Number(id));
     sendSuccess(res, null, 'Macro excluída com sucesso');
   } catch (error: any) {
     sendError(res, error.message);
@@ -93,7 +91,7 @@ router.post('/:id/use', requireAnyPermission(['macros.usar', 'macros.gerenciar']
   try {
     if (!req.user) return sendError(res, 'Não autorizado', 401);
     const { id } = req.params;
-    await macrosService.incrementUse(Number(id), req.user.empresa_id!);
+    await macrosService.incrementUse(Number(id));
     sendSuccess(res, { success: true });
   } catch (error: any) {
     sendError(res, error.message);
@@ -109,7 +107,7 @@ router.post('/:id/apply', requireAnyPermission(['macros.usar', 'macros.gerenciar
     
     if (!ticket_id) return sendError(res, 'ticket_id é obrigatório', 400);
 
-    const conteudoFinal = await macrosService.applyMacro(Number(id), req.user.empresa_id!, Number(ticket_id));
+    const conteudoFinal = await macrosService.applyMacro(Number(id), Number(ticket_id));
     sendSuccess(res, { conteudo: conteudoFinal });
   } catch (error: any) {
     sendError(res, error.message);

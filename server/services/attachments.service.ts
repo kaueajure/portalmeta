@@ -7,7 +7,6 @@ export interface AttachmentData {
   ticket_id: number;
   mensagem_id?: number | null;
   usuario_id: number | null;
-  empresa_id: number | null;
   nome_original: string;
   nome_arquivo: string;
   caminho: string;
@@ -33,7 +32,7 @@ class AttachmentsService {
       query += ' AND a.interno = 0';
     }
     query += ' ORDER BY a.created_at DESC';
-    
+
     const [rows]: any = await pool.query(query, [ticketId]);
     return (rows as AttachmentData[]).map(row => ({
       ...row,
@@ -44,7 +43,7 @@ class AttachmentsService {
 
   async getById(id: number): Promise<AttachmentData | null> {
     const [rows]: any = await pool.query(
-      'SELECT a.*, t.empresa_id as ticket_empresa_id FROM ticket_anexos a JOIN tickets t ON a.ticket_id = t.id WHERE a.id = ? AND t.deleted_at IS NULL',
+      'SELECT a.* FROM ticket_anexos a JOIN tickets t ON a.ticket_id = t.id WHERE a.id = ? AND t.deleted_at IS NULL',
       [id]
     );
     const data = rows[0];
@@ -59,7 +58,6 @@ class AttachmentsService {
     ticket_id: number;
     mensagem_id?: number | null;
     usuario_id: number | null;
-    empresa_id: number | null;
     nome_original: string;
     nome_arquivo: string;
     caminho: string;
@@ -67,7 +65,7 @@ class AttachmentsService {
     tamanho_bytes: number;
     interno: boolean;
   }): Promise<number> {
-    const { ticket_id, mensagem_id, usuario_id, empresa_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno } = data;
+    const { ticket_id, mensagem_id, usuario_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno } = data;
 
     const [ticketRows]: any = await pool.query(
       'SELECT * FROM tickets WHERE id = ? AND deleted_at IS NULL LIMIT 1',
@@ -77,15 +75,11 @@ class AttachmentsService {
     if (!ticket) {
       throw new Error('Chamado não encontrado');
     }
-    if (empresa_id !== null && empresa_id !== undefined && Number(ticket.empresa_id) !== Number(empresa_id)) {
-      throw new Error('Chamado não encontrado');
-    }
-    
     const [result]: any = await pool.query(
-      `INSERT INTO ticket_anexos 
-        (ticket_id, mensagem_id, usuario_id, empresa_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [ticket_id, mensagem_id || null, usuario_id, empresa_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno ? 1 : 0]
+      `INSERT INTO ticket_anexos
+        (ticket_id, mensagem_id, usuario_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [ticket_id, mensagem_id || null, usuario_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno ? 1 : 0]
     );
     const attachmentId = result.insertId;
 
@@ -99,7 +93,7 @@ class AttachmentsService {
         }
 
         const recipients = new Set<number>();
-        
+
         // 1. Notificar solicitante se não for ele e não for interno
         if (!interno && ticket.usuario_id && ticket.usuario_id !== usuario_id) {
           recipients.add(ticket.usuario_id);
@@ -110,11 +104,10 @@ class AttachmentsService {
            recipients.add(ticket.responsavel_id);
         }
 
-        // 3. Se for interno, notificar admins/devs da empresa (que não sejam o autor)
-        if (interno && ticket.empresa_id) {
+        // 3. Se for interno, notificar administradores (que não sejam o autor)
+        if (interno) {
             const [admins]: any = await pool.query(
-              'SELECT id FROM usuarios WHERE empresa_id = ? AND administrador = 1',
-              [ticket.empresa_id]
+              'SELECT id FROM usuarios WHERE administrador = 1 AND ativo = 1'
             );
             admins.forEach((a: any) => {
               if (a.id !== usuario_id) recipients.add(a.id);
@@ -124,7 +117,6 @@ class AttachmentsService {
         const recipientIds = Array.from(recipients);
         if (recipientIds.length > 0) {
           await notificationsService.createMany(recipientIds, {
-            empresa_id: ticket.empresa_id,
             tipo: 'TICKET_ATTACHMENT',
             titulo: interno ? 'Anexo interno enviado' : 'Novo anexo no chamado',
             mensagem: `${authorName} enviou o arquivo: ${nome_original}`,
@@ -136,7 +128,7 @@ class AttachmentsService {
     } catch (e) {
       console.error('Erro ao notificar novo anexo:', e);
     }
-    
+
     return attachmentId;
   }
 

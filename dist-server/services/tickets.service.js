@@ -74,9 +74,8 @@ function buildStatusSpecialCondition(ticketAlias, specials, negate = false) {
         .join(', ');
     return `${negate ? 'NOT ' : ''}EXISTS (
     SELECT 1
-    FROM empresa_ticket_status status_cfg
-    WHERE status_cfg.empresa_id = ${ticketAlias}.empresa_id
-      AND status_cfg.valor = ${ticketAlias}.status
+    FROM ticket_statuses status_cfg
+    WHERE status_cfg.valor = ${ticketAlias}.status
       AND status_cfg.especial IN (${safeSpecials})
   )`;
 }
@@ -155,15 +154,15 @@ class TicketsService {
         }
         return { baseWhere, summaryWhere, params };
     }
-    async cleanupSpam(empresaId) {
+    async cleanupSpam() {
         // Quarantine tickets created in the last 12 hours that might be spam (too many from same user/subject).
         const [spamUsers] = await pool.query(`
-      SELECT usuario_id, titulo, COUNT(*) as cnt 
-      FROM tickets 
-      WHERE empresa_id = ? AND deleted_at IS NULL AND created_at > (NOW() - INTERVAL 12 HOUR)
+      SELECT usuario_id, titulo, COUNT(*) as cnt
+      FROM tickets
+      WHERE deleted_at IS NULL AND created_at > (NOW() - INTERVAL 12 HOUR)
       GROUP BY usuario_id, titulo
-      HAVING cnt > 5 
-    `, [empresaId]);
+      HAVING cnt > 5
+    `);
         let quarantinedCount = 0;
         for (const spam of spamUsers) {
             const [result] = await pool.query(`UPDATE tickets
@@ -171,28 +170,23 @@ class TicketsService {
              deleted_by = NULL,
              delete_reason = 'Quarentena automatica por suspeita de spam',
              updated_at = NOW()
-         WHERE empresa_id = ?
-           AND ((usuario_id = ?) OR (usuario_id IS NULL AND ? IS NULL))
+         WHERE ((usuario_id = ?) OR (usuario_id IS NULL AND ? IS NULL))
            AND titulo = ?
            AND deleted_at IS NULL
-           AND created_at > (NOW() - INTERVAL 12 HOUR)`, [empresaId, spam.usuario_id, spam.usuario_id, spam.titulo]);
+           AND created_at > (NOW() - INTERVAL 12 HOUR)`, [spam.usuario_id, spam.usuario_id, spam.titulo]);
             quarantinedCount += result.affectedRows;
         }
-        return { empresaId, deletedCount: quarantinedCount, quarantinedCount };
+        return { deletedCount: quarantinedCount, quarantinedCount };
     }
     async list(filters) {
-        const { empresa_id, usuario_id, is_dev, is_admin, status, prioridade, categoria, servico, search, responsavel_id, fila, page = 1, limit = 20, 
-        // Advanced Filters
-        tag, origem, created_from, created_to, updated_from, updated_to, sla_status, custom_field_search, sort_by, sort_order } = filters;
+        // Filtros avançados são normalizados junto aos filtros básicos.
+        const { usuario_id, is_dev, is_admin, status, prioridade, categoria, servico, search, responsavel_id, fila, page = 1, limit = 20, tag, origem, created_from, created_to, updated_from, updated_to, sla_status, custom_field_search, sort_by, sort_order } = filters;
         const searchTerm = search;
         let baseWhere = filters.include_deleted ? 'WHERE 1=1' : 'WHERE t.deleted_at IS NULL';
         let summaryWhere = filters.include_deleted ? 'WHERE 1=1' : 'WHERE t.deleted_at IS NULL';
         const params = [];
-        // Regra de Negócio: Se não for desenvolvedor, só vê chamados da própria empresa
+        // Mantém os escopos funcionais de visualização por cargo/permissão.
         if (!is_dev) {
-            baseWhere += ' AND t.empresa_id = ?';
-            summaryWhere += ' AND t.empresa_id = ?';
-            params.push(empresa_id);
             // Enforce ticket view scopes
             const [userRows] = await pool.query('SELECT * FROM usuarios WHERE id = ?', [usuario_id]);
             const userObj = userRows[0];
@@ -217,14 +211,6 @@ class TicketsService {
                     baseWhere += ' AND 1=0';
                     summaryWhere += ' AND 1=0';
                 }
-            }
-        }
-        else {
-            const empresaIdFilter = toPositiveInt(filters.empresa_id_filter);
-            if (empresaIdFilter) {
-                baseWhere += ' AND t.empresa_id = ?';
-                summaryWhere += ' AND t.empresa_id = ?';
-                params.push(empresaIdFilter);
             }
         }
         // Smart Queues (Filas Inteligentes)
@@ -304,7 +290,7 @@ class TicketsService {
         const requesterJoinForSummary = searchTerm ? 'LEFT JOIN usuarios u ON t.usuario_id = u.id' : '';
         // Summary calculation
         const [summaryRows] = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN t.status = 'aberto' THEN 1 ELSE 0 END) as aberto,
         SUM(CASE WHEN t.status = 'em_andamento' THEN 1 ELSE 0 END) as em_andamento,
@@ -324,14 +310,12 @@ class TicketsService {
         // Default keeps the operational queue order; explicit UI sorting uses a safe whitelist.
         const orderBy = buildTicketListOrderBy(sort_by, sort_order);
         const [items] = await pool.query(`
-      SELECT t.*, 
-             COALESCE(t.solicitante_nome, u.nome, 'Usuário Removido') as cliente_nome, 
-             COALESCE(t.solicitante_email, u.email, 'Usuário Removido') as cliente_email, 
-             COALESCE(r.nome, 'Não Atribuído') as responsavel_nome, 
-             e.nome as empresa_nome
+      SELECT t.*,
+             COALESCE(t.solicitante_nome, u.nome, 'Usuário Removido') as cliente_nome,
+             COALESCE(t.solicitante_email, u.email, 'Usuário Removido') as cliente_email,
+             COALESCE(r.nome, 'Não Atribuído') as responsavel_nome
       FROM tickets t
       LEFT JOIN usuarios u ON t.usuario_id = u.id
-      LEFT JOIN empresas e ON t.empresa_id = e.id
       LEFT JOIN usuarios r ON t.responsavel_id = r.id
       ${baseWhere}
       ORDER BY ${orderBy}
@@ -367,30 +351,11 @@ class TicketsService {
         };
     }
     async getQueuesCounts(filters) {
-        const { empresa_id, usuario_id, is_dev } = filters;
+        const { usuario_id } = filters;
         let baseWhere = filters.include_deleted ? 'WHERE 1=1' : 'WHERE deleted_at IS NULL';
         const params = [];
-        if (!is_dev) {
-            baseWhere += ' AND empresa_id = ?';
-            params.push(empresa_id);
-        }
-        else {
-            const empresaIdFilter = toPositiveInt(filters.empresa_id_filter);
-            if (empresaIdFilter) {
-                baseWhere += ' AND empresa_id = ?';
-                params.push(empresaIdFilter);
-            }
-            else {
-                // If dev hasn't selected a company, we might want to return 0s or total across all companies
-                // But usually dev selects a company. If not, this might be called without empresa_id.
-                // Let's assume dev needs a company filter for these queues to be meaningful.
-                return {
-                    todos: 0, meus: 0, sem_responsavel: 0, urgentes: 0, sla_vencido: 0, vence_em_breve: 0, aguardando_cliente: 0
-                };
-            }
-        }
         const [rows] = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as todos,
         SUM(CASE WHEN responsavel_id = ? THEN 1 ELSE 0 END) as meus,
         SUM(CASE WHEN responsavel_id IS NULL THEN 1 ELSE 0 END) as sem_responsavel,
@@ -415,19 +380,14 @@ class TicketsService {
         };
     }
     async getKanban(filters) {
-        const { empresa_id, usuario_id, is_dev, is_admin, responsavel_id, search, prioridade, categoria, servico, status, fila, 
-        // Advanced Filters
-        tag, origem, created_from, created_to, updated_from, updated_to, sla_status, custom_field_search } = filters;
+        // O Kanban usa os mesmos filtros avançados da listagem.
+        const { usuario_id, is_dev, is_admin, responsavel_id, search, prioridade, categoria, servico, status, fila, tag, origem, created_from, created_to, updated_from, updated_to, sla_status, custom_field_search } = filters;
         const searchTerm = search;
-        const statusConfigEmpresaId = !is_dev ? toPositiveInt(empresa_id) : toPositiveInt(filters.empresa_id_filter);
         let baseWhere = filters.include_deleted ? 'WHERE 1=1' : 'WHERE t.deleted_at IS NULL';
         let summaryWhere = filters.include_deleted ? 'WHERE 1=1' : 'WHERE t.deleted_at IS NULL';
         const params = [];
-        // Regra de Negócio: Se não for desenvolvedor, só vê chamados da própria empresa
+        // Mantém os escopos funcionais de visualização por cargo/permissão.
         if (!is_dev) {
-            baseWhere += ' AND t.empresa_id = ?';
-            summaryWhere += ' AND t.empresa_id = ?';
-            params.push(empresa_id);
             // Enforce ticket view scopes
             const [userRows] = await pool.query('SELECT * FROM usuarios WHERE id = ?', [usuario_id]);
             const userObj = userRows[0];
@@ -452,14 +412,6 @@ class TicketsService {
                     baseWhere += ' AND 1=0';
                     summaryWhere += ' AND 1=0';
                 }
-            }
-        }
-        else {
-            const empresaIdFilter = toPositiveInt(filters.empresa_id_filter);
-            if (empresaIdFilter) {
-                baseWhere += ' AND t.empresa_id = ?';
-                summaryWhere += ' AND t.empresa_id = ?';
-                params.push(empresaIdFilter);
             }
         }
         // Smart Queues (Filas Inteligentes)
@@ -552,7 +504,7 @@ class TicketsService {
         // 1) Primeiro calculamos summary e contagens REAIS por status (precisamos
         //    saber quais colunas existem e seus totais antes de buscar os cards).
         const [summaryRows] = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN t.status = 'aberto' THEN 1 ELSE 0 END) as aberto,
         SUM(CASE WHEN t.status = 'em_andamento' THEN 1 ELSE 0 END) as em_andamento,
@@ -581,16 +533,14 @@ class TicketsService {
         let tickets = [];
         for (const st of statusesToFetch) {
             const [colRows] = await pool.query(`
-        SELECT t.id, t.titulo, t.status, t.prioridade, t.categoria, t.servico, t.created_at, t.updated_at, t.prazo_sla, t.responsavel_id, t.empresa_id,
+        SELECT t.id, t.titulo, t.status, t.prioridade, t.categoria, t.servico, t.created_at, t.updated_at, t.prazo_sla, t.responsavel_id,
                t.sla_status_operacional, t.sla_pausado_em,
                t.aguardando_resposta_atendente, t.ultima_mensagem_publica_em, t.ultima_mensagem_publica_origem,
-               COALESCE(t.solicitante_nome, u.nome, 'Usuário Removido') as cliente_nome, 
-               COALESCE(t.solicitante_email, u.email, 'Usuário Removido') as cliente_email, 
-               COALESCE(r.nome, 'Não Atribuído') as responsavel_nome, 
-               e.nome as empresa_nome
+               COALESCE(t.solicitante_nome, u.nome, 'Usuário Removido') as cliente_nome,
+               COALESCE(t.solicitante_email, u.email, 'Usuário Removido') as cliente_email,
+               COALESCE(r.nome, 'Não Atribuído') as responsavel_nome
         FROM tickets t
         LEFT JOIN usuarios u ON t.usuario_id = u.id
-        LEFT JOIN empresas e ON t.empresa_id = e.id
         LEFT JOIN usuarios r ON t.responsavel_id = r.id
         ${baseWhere} AND t.status = ?
         ORDER BY ${orderBy_K}
@@ -608,9 +558,7 @@ class TicketsService {
         }
         // Enriquecer com produtividade
         await this.enrichTicketsWithProductivity(tickets, filters.usuario_id);
-        const configuredStatusRows = statusConfigEmpresaId
-            ? await getTicketStatusConfigs(statusConfigEmpresaId)
-            : [];
+        const configuredStatusRows = await getTicketStatusConfigs();
         const configuredStatusMap = new Map(configuredStatusRows.map((row) => [row.valor, row]));
         const configuredStatusOrder = configuredStatusRows
             .filter((row) => row.ativo === 1 && row.kanban_visivel === 1)
@@ -665,11 +613,11 @@ class TicketsService {
         };
     }
     async create(data) {
-        const { empresa_id, usuario_id, solicitante_nome, solicitante_email, titulo, descricao, categoria, servico, origem, email_channel_id, message_id } = data;
+        const { usuario_id, solicitante_nome, solicitante_email, titulo, descricao, categoria, servico, origem, email_channel_id, message_id } = data;
         let prioridade = data.prioridade || 'media';
-        const initialStatus = await getInitialTicketStatusValue(empresa_id);
+        const initialStatus = await getInitialTicketStatusValue();
         if (message_id) {
-            const [existingTicket] = await pool.query('SELECT id FROM tickets WHERE message_id = ? AND empresa_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1', [message_id, empresa_id]);
+            const [existingTicket] = await pool.query('SELECT id FROM tickets WHERE message_id = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1', [message_id]);
             if (existingTicket.length > 0) {
                 console.warn(`[TicketsService] Duplicate ticket message_id ignored: ${maskIdentifier(message_id)}`);
                 return existingTicket[0].id;
@@ -679,7 +627,7 @@ class TicketsService {
         let minutosSla = 24 * 60; // media padrão
         let minutosPrimeiraResposta = 60; // 1 hora padrão
         try {
-            const [politicas] = await pool.query('SELECT * FROM empresa_sla_politicas WHERE empresa_id = ? AND ativo = 1 ORDER BY ordem ASC', [empresa_id]);
+            const [politicas] = await pool.query('SELECT * FROM sla_policies WHERE ativo = 1 ORDER BY ordem ASC');
             let politicaEncontrada = null;
             for (const pol of politicas) {
                 let matches = true;
@@ -721,12 +669,12 @@ class TicketsService {
         const prazoPRFormatado = addMinutesForMySQL(minutosPrimeiraResposta, agora);
         let responsavel_id = data.responsavel_id || null;
         const [result] = await pool.query(`INSERT INTO tickets (
-        empresa_id, usuario_id, solicitante_nome, solicitante_email, 
-        titulo, descricao, prioridade, categoria, servico, 
+        usuario_id, solicitante_nome, solicitante_email,
+        titulo, descricao, prioridade, categoria, servico,
         origem, email_channel_id, message_id, status,
         prazo_sla, prazo_primeira_resposta, sla_primeira_resposta_status, responsavel_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-            empresa_id, usuario_id || null, solicitante_nome || null, solicitante_email || null,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+            usuario_id || null, solicitante_nome || null, solicitante_email || null,
             titulo, descricao, prioridade || 'media', categoria || 'suporte', servico || null,
             origem || 'sistema', email_channel_id || null, message_id || null, initialStatus,
             prazoSlaFormatado, prazoPRFormatado, 'aguardando', responsavel_id
@@ -736,12 +684,12 @@ class TicketsService {
         await slaService.updateOperationalStatus(ticketId);
         // Track processed email to avoid duplicates
         if (message_id) {
-            await pool.query('INSERT IGNORE INTO processed_emails (message_id, empresa_id, ticket_id) VALUES (?, ?, ?)', [message_id, empresa_id, ticketId]);
+            await pool.query('INSERT IGNORE INTO processed_emails (message_id, ticket_id) VALUES (?, ?)', [message_id, ticketId]);
         }
         try {
             if (!responsavel_id) {
                 const { distributeTicket } = await import('./distribution.service.js');
-                const distributedAgentId = await distributeTicket({ id: ticketId, empresa_id, categoria, servico });
+                const distributedAgentId = await distributeTicket({ id: ticketId, categoria, servico });
                 if (distributedAgentId)
                     responsavel_id = distributedAgentId;
             }
@@ -750,7 +698,7 @@ class TicketsService {
         try {
             const { runAutomations } = await import('./automations.service.js');
             // Pass the fully assembled ticket object
-            await runAutomations('ticket_criado', { id: ticketId, empresa_id, status: initialStatus, prioridade: prioridade || 'media', categoria, servico, responsavel_id }, { usuario_id });
+            await runAutomations('ticket_criado', { id: ticketId, status: initialStatus, prioridade: prioridade || 'media', categoria, servico, responsavel_id }, { usuario_id });
         }
         catch (err) {
             console.warn('Erro ao rodar automações', err);
@@ -766,7 +714,6 @@ class TicketsService {
         try {
             await recordTicketEvent({
                 ticket_id: ticketId,
-                empresa_id,
                 usuario_id,
                 tipo: 'ticket_criado',
                 descricao: 'Abertura do chamado'
@@ -775,7 +722,7 @@ class TicketsService {
         catch (e) { }
         // Notificações: Admins
         try {
-            const [admins] = await pool.query('SELECT id FROM usuarios WHERE empresa_id = ? AND administrador = 1', [empresa_id]);
+            const [admins] = await pool.query('SELECT id FROM usuarios WHERE administrador = 1 AND ativo = 1');
             const adminIds = admins
                 .filter((a) => a.id !== usuario_id)
                 .map((a) => a.id);
@@ -790,7 +737,6 @@ class TicketsService {
             }
             if (adminIds.length > 0) {
                 await notificationsService.createMany(adminIds, {
-                    empresa_id,
                     tipo: 'TICKET_CREATED',
                     titulo: 'Novo atendimento criado',
                     mensagem: `${authorName} abriu o chamado #${ticketId}: ${titulo}`,
@@ -803,7 +749,6 @@ class TicketsService {
                 await emailOutboxService.enqueueTicketEmail({
                     to: authorEmail,
                     ticketId,
-                    empresaId: empresa_id,
                     emailChannelId: email_channel_id,
                     type: 'ticket_created',
                     title: titulo,
@@ -824,7 +769,6 @@ class TicketsService {
             console.error('Erro ao notificar criação de ticket:', e);
             await recordTicketEvent({
                 ticket_id: ticketId,
-                empresa_id,
                 usuario_id,
                 tipo: 'email_outbox_erro',
                 descricao: 'O chamado foi criado, mas o e-mail nao pode ser enfileirado.',
@@ -840,8 +784,6 @@ class TicketsService {
         if (!currentUser)
             return { error: 'forbidden' };
         if (!isDeveloperUser(currentUser)) {
-            if (Number(ticket.empresa_id) !== Number(currentUser.empresa_id))
-                return { error: 'forbidden' };
             // Enforce ticket view scopes
             const scope = await getTicketScope(currentUser);
             if (!scope.canViewAll) {
@@ -880,12 +822,10 @@ class TicketsService {
             AND deleted_at IS NULL
         `, [deletedBy || null, String(reason || 'Exclusao manual').slice(0, 255), id]);
             if (result.affectedRows > 0) {
-                const [ticketRows] = await connection.query('SELECT empresa_id FROM tickets WHERE id = ?', [id]);
-                const empresaId = ticketRows[0]?.empresa_id || null;
                 await connection.query(`
-            INSERT INTO ticket_eventos (ticket_id, empresa_id, usuario_id, tipo, descricao)
-            VALUES (?, ?, ?, 'ticket_excluido', ?)
-          `, [id, empresaId, deletedBy || null, String(reason || 'Chamado removido').slice(0, 255)]);
+            INSERT INTO ticket_eventos (ticket_id, usuario_id, tipo, descricao)
+            VALUES (?, ?, 'ticket_excluido', ?)
+          `, [id, deletedBy || null, String(reason || 'Chamado removido').slice(0, 255)]);
             }
             await connection.commit();
             return result.affectedRows > 0;
@@ -899,23 +839,21 @@ class TicketsService {
         }
     }
     async getById(id, currentUserId) {
-        const [rows] = await pool.query(`SELECT 
-        t.id, t.empresa_id, t.usuario_id, t.responsavel_id, t.titulo, t.descricao, 
-        t.status, t.prioridade, t.categoria, t.servico, t.origem, t.email_channel_id, t.message_id, 
+        const [rows] = await pool.query(`SELECT
+        t.id, t.usuario_id, t.responsavel_id, t.titulo, t.descricao,
+        t.status, t.prioridade, t.categoria, t.servico, t.origem, t.email_channel_id, t.message_id,
         t.prazo_sla, t.finalizado_em,
         t.prazo_primeira_resposta, t.primeira_resposta_em, t.sla_primeira_resposta_status, t.sla_resolucao_status,
         t.sla_pausado_em, t.sla_pausado_total_minutos, t.sla_status_operacional,
         t.resolucao_motivo, t.resolucao_observacao, t.reaberto_em, t.reaberto_por,
         t.aguardando_resposta_atendente, t.ultima_mensagem_publica_em, t.ultima_mensagem_publica_origem,
         t.created_at, t.updated_at,
-        COALESCE(t.solicitante_nome, u.nome, 'Usuário Removido') as cliente_nome, 
-        COALESCE(t.solicitante_email, u.email, 'removido@sistema.com') as cliente_email, 
-        COALESCE(r.nome, 'Não Atribuído') as responsavel_nome, 
-        e.nome as empresa_nome
-       FROM tickets t 
-       LEFT JOIN usuarios u ON t.usuario_id = u.id 
-       JOIN empresas e ON t.empresa_id = e.id
-       LEFT JOIN usuarios r ON t.responsavel_id = r.id 
+        COALESCE(t.solicitante_nome, u.nome, 'Usuário Removido') as cliente_nome,
+        COALESCE(t.solicitante_email, u.email, 'removido@sistema.com') as cliente_email,
+        COALESCE(r.nome, 'Não Atribuído') as responsavel_nome
+       FROM tickets t
+       LEFT JOIN usuarios u ON t.usuario_id = u.id
+       LEFT JOIN usuarios r ON t.responsavel_id = r.id
        WHERE t.id = ? AND t.deleted_at IS NULL`, [id]);
         if (!rows[0])
             return null;
@@ -956,10 +894,10 @@ class TicketsService {
         }
         if (oldTicket.status === status)
             return;
-        const oldStatusConfig = await getTicketStatusConfig(oldTicket.empresa_id, oldTicket.status);
-        const newStatusConfig = await getTicketStatusConfig(oldTicket.empresa_id, status);
+        const oldStatusConfig = await getTicketStatusConfig(oldTicket.status);
+        const newStatusConfig = await getTicketStatusConfig(status);
         if (!newStatusConfig || newStatusConfig.ativo !== 1) {
-            throw new Error('Status não existe no fluxo de atendimento desta empresa');
+            throw new Error('Status não existe no fluxo de atendimento');
         }
         const wasFinalStatus = isFinalTicketStatusSpecial(oldStatusConfig?.especial);
         const willBeFinalStatus = isFinalTicketStatusSpecial(newStatusConfig.especial);
@@ -1005,7 +943,7 @@ class TicketsService {
             await slaService.updateOperationalStatus(id);
         }
         if (willBeFinalStatus && !wasFinalStatus) {
-            await this.ensureSatisfactionSurvey(id, oldTicket.empresa_id, changedByUserId);
+            await this.ensureSatisfactionSurvey(id, changedByUserId);
             await this.enqueueFinalStatusEmail({
                 ticket: oldTicket,
                 ticketId: id,
@@ -1016,7 +954,6 @@ class TicketsService {
             try {
                 await recordTicketEvent({
                     ticket_id: id,
-                    empresa_id: oldTicket.empresa_id,
                     usuario_id: changedByUserId,
                     tipo: 'ticket_finalizado',
                     descricao: `Chamado ${status}`
@@ -1028,7 +965,6 @@ class TicketsService {
             try {
                 await recordTicketEvent({
                     ticket_id: id,
-                    empresa_id: oldTicket.empresa_id,
                     usuario_id: changedByUserId,
                     tipo: 'ticket_reaberto',
                     descricao: `Chamado reaberto com status "${status}"`
@@ -1044,7 +980,6 @@ class TicketsService {
             if (oldTicket.usuario_id && oldTicket.usuario_id !== changedByUserId) {
                 await notificationsService.create({
                     usuario_id: oldTicket.usuario_id,
-                    empresa_id: oldTicket.empresa_id,
                     tipo: 'TICKET_STATUS_CHANGED',
                     titulo: 'Status atualizado',
                     mensagem: `O status do seu chamado #${id} mudou para: ${newStatusText}`,
@@ -1056,7 +991,6 @@ class TicketsService {
             if (currentRespId && currentRespId !== oldTicket.usuario_id && currentRespId !== changedByUserId) {
                 await notificationsService.create({
                     usuario_id: Number(currentRespId),
-                    empresa_id: oldTicket.empresa_id,
                     tipo: 'TICKET_STATUS_CHANGED',
                     titulo: 'Status atualizado',
                     mensagem: `O chamado #${id} sob sua responsabilidade mudou para: ${newStatusText}`,
@@ -1070,7 +1004,6 @@ class TicketsService {
         try {
             await recordTicketEvent({
                 ticket_id: id,
-                empresa_id: oldTicket.empresa_id,
                 usuario_id: changedByUserId,
                 tipo: 'status_alterado',
                 descricao: `Status alterado de "${oldTicket.status}" para "${status}"`
@@ -1089,7 +1022,7 @@ class TicketsService {
         catch (stateErr) {
             console.error('[TicketsService] Falha ao recomputar estado materializado (updateStatus):', stateErr);
         }
-        return { oldStatus: oldTicket.status, newStatus: status, empresa_id: oldTicket.empresa_id };
+        return { oldStatus: oldTicket.status, newStatus: status };
     }
     async update(id, data, currentUser) {
         const oldTicket = await this.getById(id);
@@ -1101,10 +1034,10 @@ class TicketsService {
             if (!isValidTicketStatus(data.status)) {
                 throw new Error(`Status inválido: ${data.status}`);
             }
-            oldStatusConfig = await getTicketStatusConfig(oldTicket.empresa_id, oldTicket.status);
-            newStatusConfig = await getTicketStatusConfig(oldTicket.empresa_id, data.status);
+            oldStatusConfig = await getTicketStatusConfig(oldTicket.status);
+            newStatusConfig = await getTicketStatusConfig(data.status);
             if (!newStatusConfig || newStatusConfig.ativo !== 1) {
-                throw new Error('Status não existe no fluxo de atendimento desta empresa');
+                throw new Error('Status não existe no fluxo de atendimento');
             }
         }
         const fields = [];
@@ -1152,7 +1085,6 @@ class TicketsService {
             if (data.responsavel_id && data.responsavel_id !== oldTicket.responsavel_id) {
                 await notificationsService.create({
                     usuario_id: Number(data.responsavel_id),
-                    empresa_id: oldTicket.empresa_id,
                     tipo: 'TICKET_ASSIGNED',
                     titulo: 'Chamado atribuído a você',
                     mensagem: `Você é o novo responsável pelo chamado #${id}: ${oldTicket.titulo}`,
@@ -1165,7 +1097,6 @@ class TicketsService {
                 if (oldTicket.usuario_id) {
                     await notificationsService.create({
                         usuario_id: oldTicket.usuario_id,
-                        empresa_id: oldTicket.empresa_id,
                         tipo: 'TICKET_STATUS_CHANGED',
                         titulo: 'Status atualizado',
                         mensagem: `O status do seu chamado #${id} mudou para: ${newStatusText}`,
@@ -1177,7 +1108,6 @@ class TicketsService {
                 if (currentRespId && currentRespId !== oldTicket.usuario_id) {
                     await notificationsService.create({
                         usuario_id: Number(currentRespId),
-                        empresa_id: oldTicket.empresa_id,
                         tipo: 'TICKET_STATUS_CHANGED',
                         titulo: 'Status atualizado',
                         mensagem: `O chamado #${id} sob sua responsabilidade mudou para: ${newStatusText}`,
@@ -1192,7 +1122,7 @@ class TicketsService {
         // Automations & CSAT
         try {
             if (data.status && isFinalTicketStatusSpecial(newStatusConfig?.especial) && !isFinalTicketStatusSpecial(oldStatusConfig?.especial)) {
-                await this.ensureSatisfactionSurvey(id, oldTicket.empresa_id, currentUser?.id || null);
+                await this.ensureSatisfactionSurvey(id, currentUser?.id || null);
                 await this.enqueueFinalStatusEmail({
                     ticket: oldTicket,
                     ticketId: id,
@@ -1204,7 +1134,6 @@ class TicketsService {
                 });
                 await recordTicketEvent({
                     ticket_id: id,
-                    empresa_id: oldTicket.empresa_id,
                     usuario_id: currentUser?.id || null,
                     tipo: 'ticket_finalizado',
                     descricao: `Chamado ${data.status}`
@@ -1218,7 +1147,6 @@ class TicketsService {
                 try {
                     await recordTicketEvent({
                         ticket_id: id,
-                        empresa_id: oldTicket.empresa_id,
                         usuario_id: currentUser ? currentUser.id : null,
                         tipo: 'categoria_alterada',
                         descricao: `Categoria alterada de "${oldTicket.categoria || 'Nenhuma'}" para "${data.categoria || 'Nenhuma'}"`
@@ -1230,7 +1158,6 @@ class TicketsService {
                 try {
                     await recordTicketEvent({
                         ticket_id: id,
-                        empresa_id: oldTicket.empresa_id,
                         usuario_id: currentUser ? currentUser.id : null,
                         tipo: 'servico_alterado',
                         descricao: `Serviço alterado de "${oldTicket.servico || 'Nenhum'}" para "${data.servico || 'Nenhum'}"`
@@ -1242,7 +1169,6 @@ class TicketsService {
                 try {
                     await recordTicketEvent({
                         ticket_id: id,
-                        empresa_id: oldTicket.empresa_id,
                         usuario_id: currentUser ? currentUser.id : null,
                         tipo: 'origem_alterada',
                         descricao: `Origem alterada de "${oldTicket.origem || 'Não informada'}" para "${data.origem || 'Não informada'}"`
@@ -1254,7 +1180,6 @@ class TicketsService {
                 try {
                     await recordTicketEvent({
                         ticket_id: id,
-                        empresa_id: oldTicket.empresa_id,
                         usuario_id: currentUser ? currentUser.id : null,
                         tipo: 'sla_recalculado',
                         descricao: `Prazo SLA alterado`
@@ -1266,7 +1191,6 @@ class TicketsService {
                 try {
                     await recordTicketEvent({
                         ticket_id: id,
-                        empresa_id: oldTicket.empresa_id,
                         usuario_id: currentUser ? currentUser.id : null,
                         tipo: 'prioridade_alterada',
                         descricao: `Prioridade alterada de "${oldTicket.prioridade}" para "${data.prioridade}"`
@@ -1292,7 +1216,6 @@ class TicketsService {
                     }
                     await recordTicketEvent({
                         ticket_id: id,
-                        empresa_id: oldTicket.empresa_id,
                         usuario_id: currentUser ? currentUser.id : null,
                         tipo: 'responsavel_alterado',
                         descricao: `Responsável alterado de "${oldName}" para "${newName}"`
@@ -1324,7 +1247,7 @@ class TicketsService {
         const offset = Math.max(Number(pagination.offset) || 0, 0);
         let query = `
       SELECT m.id, m.ticket_id, m.usuario_id, m.mensagem, m.interno, m.anexo, m.message_id, m.created_at,
-             COALESCE(u.nome, t.solicitante_nome, 'Cliente') as usuario_nome 
+             COALESCE(u.nome, t.solicitante_nome, 'Cliente') as usuario_nome
       FROM ticket_mensagens m
       LEFT JOIN usuarios u ON m.usuario_id = u.id
       LEFT JOIN tickets t ON m.ticket_id = t.id
@@ -1356,7 +1279,6 @@ class TicketsService {
             await emailOutboxService.enqueueTicketEmail({
                 to,
                 ticketId,
-                empresaId: ticket.empresa_id,
                 emailChannelId: ticket.email_channel_id,
                 type: emailType,
                 title: ticket.titulo,
@@ -1374,7 +1296,6 @@ class TicketsService {
             console.error(`[TicketsService] Falha ao enfileirar e-mail final do chamado #${ticketId}:`, error?.message || error);
             await recordTicketEvent({
                 ticket_id: ticketId,
-                empresa_id: ticket.empresa_id,
                 usuario_id: null,
                 tipo: 'email_outbox_erro',
                 descricao: 'A acao foi registrada, mas o e-mail nao pode ser enfileirado.',
@@ -1383,16 +1304,15 @@ class TicketsService {
             throw error;
         }
     }
-    async ensureSatisfactionSurvey(ticketId, empresaId, usuarioId) {
+    async ensureSatisfactionSurvey(ticketId, usuarioId) {
         try {
             const [existingCsat] = await pool.query('SELECT id FROM ticket_satisfacao WHERE ticket_id = ? LIMIT 1', [ticketId]);
             if (existingCsat.length === 0) {
                 const { randomUUID } = await import('crypto');
                 const token = randomUUID();
-                await pool.query('INSERT INTO ticket_satisfacao (ticket_id, empresa_id, token) VALUES (?, ?, ?)', [ticketId, empresaId, token]);
+                await pool.query('INSERT INTO ticket_satisfacao (ticket_id, token) VALUES (?, ?)', [ticketId, token]);
                 await recordTicketEvent({
                     ticket_id: ticketId,
-                    empresa_id: empresaId,
                     usuario_id: usuarioId,
                     tipo: 'satisfacao_enviada',
                     descricao: 'Pesquisa de satisfação gerada para o atendimento'
@@ -1421,8 +1341,8 @@ class TicketsService {
         const oldTicket = await this.getById(id);
         if (!oldTicket)
             throw new Error('Ticket não encontrado');
-        const oldStatusConfig = await getTicketStatusConfig(oldTicket.empresa_id, oldTicket.status);
-        const newStatusConfig = await getTicketStatusConfig(oldTicket.empresa_id, status);
+        const oldStatusConfig = await getTicketStatusConfig(oldTicket.status);
+        const newStatusConfig = await getTicketStatusConfig(status);
         if (!newStatusConfig || newStatusConfig.ativo !== 1 || !isFinalTicketStatusSpecial(newStatusConfig.especial)) {
             throw new Error('Status inválido para resolução');
         }
@@ -1442,7 +1362,7 @@ class TicketsService {
             await slaService.updateOperationalStatus(id);
         }
         if (!isFinalTicketStatusSpecial(oldStatusConfig?.especial)) {
-            await this.ensureSatisfactionSurvey(id, oldTicket.empresa_id, currentUser?.id || null);
+            await this.ensureSatisfactionSurvey(id, currentUser?.id || null);
             await this.enqueueFinalStatusEmail({
                 ticket: oldTicket,
                 ticketId: id,
@@ -1454,7 +1374,6 @@ class TicketsService {
             });
             await recordTicketEvent({
                 ticket_id: id,
-                empresa_id: oldTicket.empresa_id,
                 usuario_id: currentUser?.id || null,
                 tipo: 'ticket_finalizado',
                 descricao: `Chamado ${status}`
@@ -1473,11 +1392,11 @@ class TicketsService {
         const ticket = await this.getById(id);
         if (!ticket)
             throw new Error('Ticket não encontrado');
-        const currentStatusConfig = await getTicketStatusConfig(ticket.empresa_id, ticket.status);
+        const currentStatusConfig = await getTicketStatusConfig(ticket.status);
         if (!isFinalTicketStatusSpecial(currentStatusConfig?.especial)) {
             throw new Error('Apenas tickets resolvidos ou fechados podem ser reabertos');
         }
-        const reopenStatus = await getReopenTicketStatusValue(ticket.empresa_id);
+        const reopenStatus = await getReopenTicketStatusValue();
         await pool.query('UPDATE tickets SET status = ?, finalizado_em = NULL, reaberto_em = NOW(), reaberto_por = ?, updated_at = NOW() WHERE id = ?', [reopenStatus, currentUser.id, id]);
         // Sprint 2: Sync SLA Status
         if (isCustomerWaitingTicketStatusSpecial(currentStatusConfig?.especial)) {
@@ -1489,7 +1408,6 @@ class TicketsService {
         try {
             await recordTicketEvent({
                 ticket_id: id,
-                empresa_id: ticket.empresa_id,
                 usuario_id: currentUser?.id || null,
                 tipo: 'ticket_reaberto',
                 descricao: 'Chamado reaberto para atendimento'
@@ -1506,16 +1424,16 @@ class TicketsService {
         return { success: true };
     }
     // VIEWS
-    async getViews(usuarioId, empresaId) {
-        const [rows] = await pool.query('SELECT * FROM ticket_views WHERE usuario_id = ? AND empresa_id = ? ORDER BY nome ASC', [usuarioId, empresaId]);
+    async getViews(usuarioId) {
+        const [rows] = await pool.query('SELECT * FROM ticket_views WHERE usuario_id = ? ORDER BY nome ASC', [usuarioId]);
         return rows.map((r) => ({
             ...r,
             filtros_json: typeof r.filtros_json === 'string' ? JSON.parse(r.filtros_json) : r.filtros_json
         }));
     }
     async createView(data) {
-        const { empresa_id, usuario_id, nome, filtros_json } = data;
-        const [result] = await pool.query('INSERT INTO ticket_views (empresa_id, usuario_id, nome, filtros_json) VALUES (?, ?, ?, ?)', [empresa_id, usuario_id, nome, JSON.stringify(filtros_json)]);
+        const { usuario_id, nome, filtros_json } = data;
+        const [result] = await pool.query('INSERT INTO ticket_views (usuario_id, nome, filtros_json) VALUES (?, ?, ?)', [usuario_id, nome, JSON.stringify(filtros_json)]);
         return result.insertId;
     }
     async updateView(id, data, usuarioId) {
@@ -1542,7 +1460,7 @@ class TicketsService {
         });
         // 2. Messages
         let msgQuery = `
-      SELECT m.*, u.nome as usuario_nome 
+      SELECT m.*, u.nome as usuario_nome
       FROM ticket_mensagens m
       LEFT JOIN usuarios u ON m.usuario_id = u.id
       WHERE m.ticket_id = ?
@@ -1571,7 +1489,7 @@ class TicketsService {
         });
         // 3. System Logs (Tracking status, assignment, etc)
         const [logs] = await pool.query(`
-      SELECT l.*, u.nome as usuario_nome 
+      SELECT l.*, u.nome as usuario_nome
       FROM logs_sistema l
       LEFT JOIN usuarios u ON l.usuario_id = u.id
       WHERE (l.descricao LIKE ? OR l.descricao LIKE ?)
@@ -1747,8 +1665,8 @@ class TicketsService {
             return;
         const label = String(field.field_label || key).substring(0, 120);
         const value = String(field.field_value || '').substring(0, 1000);
-        await pool.query(`INSERT INTO ticket_custom_fields (ticket_id, field_key, field_label, field_value) 
-       VALUES (?, ?, ?, ?) 
+        await pool.query(`INSERT INTO ticket_custom_fields (ticket_id, field_key, field_label, field_value)
+       VALUES (?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE field_label = VALUES(field_label), field_value = VALUES(field_value)`, [ticketId, key, label, value]);
     }
     async setCustomFields(ticketId, fields) {
@@ -1782,13 +1700,13 @@ class TicketsService {
     async removeCustomField(ticketId, fieldKey) {
         await pool.query('DELETE FROM ticket_custom_fields WHERE ticket_id = ? AND field_key = ?', [ticketId, fieldKey]);
     }
-    async getStatusTransitionPermissionError(currentUser, empresaId, oldStatus, newStatus) {
+    async getStatusTransitionPermissionError(currentUser, oldStatus, newStatus) {
         const oldValue = String(oldStatus || '');
         const newValue = String(newStatus || '');
         if (!newValue || oldValue === newValue)
             return null;
-        const oldStatusConfig = await getTicketStatusConfig(empresaId, oldValue);
-        const newStatusConfig = await getTicketStatusConfig(empresaId, newValue);
+        const oldStatusConfig = await getTicketStatusConfig(oldValue);
+        const newStatusConfig = await getTicketStatusConfig(newValue);
         const oldIsFinal = isFinalTicketStatusSpecial(oldStatusConfig?.especial);
         const newIsFinal = isFinalTicketStatusSpecial(newStatusConfig?.especial);
         if (oldIsFinal && !newIsFinal) {
@@ -1819,7 +1737,7 @@ class TicketsService {
                 const hasStatusPerm = await permissionsService.hasPermission(currentUser, 'tickets.editar_status');
                 if (!hasStatusPerm)
                     return 'Sem permissao para alterar status (tickets.editar_status).';
-                return this.getStatusTransitionPermissionError(currentUser, ticket.empresa_id, ticket.status, value);
+                return this.getStatusTransitionPermissionError(currentUser, ticket.status, value);
             }
             case 'fechar':
                 return await permissionsService.hasPermission(currentUser, 'tickets.fechar')
@@ -1905,18 +1823,12 @@ class TicketsService {
                         break;
                     case 'responsavel':
                         const responsavelValue = value === undefined || value === '' ? null : value;
-                        // Se value for informado, verificar se o usuário existe e pertence à mesma empresa
+                        // Se value for informado, verificar se o usuário existe e está ativo.
                         if (responsavelValue !== null) {
-                            const [agent] = await pool.query('SELECT id, empresa_id FROM usuarios WHERE id = ? AND ativo = 1', [responsavelValue]);
-                            if (!agent[0] || (!currentUser.desenvolvedor && agent[0].empresa_id !== ticket.empresa_id)) {
+                            const [agent] = await pool.query('SELECT id FROM usuarios WHERE id = ? AND ativo = 1', [responsavelValue]);
+                            if (!agent[0]) {
                                 skipped++;
-                                errors.push(`Ticket #${id}: Responsável inválido para esta empresa.`);
-                                continue;
-                            }
-                            // Verificar se o ticket pertence à empresa do agente (no caso de dev alterando múltiplos)
-                            if (agent[0].empresa_id !== ticket.empresa_id) {
-                                skipped++;
-                                errors.push(`Ticket #${id}: Responsável não pertence à empresa do ticket.`);
+                                errors.push(`Ticket #${id}: Responsável inválido.`);
                                 continue;
                             }
                         }
@@ -1933,10 +1845,10 @@ class TicketsService {
                         }
                         break;
                     case 'fechar':
-                        const closedStatus = await getClosedTicketStatusValue(ticket.empresa_id);
+                        const closedStatus = await getClosedTicketStatusValue();
                         if (!closedStatus) {
                             skipped++;
-                            errors.push(`Ticket #${id}: Nenhum status especial "Encerrado" configurado para esta empresa.`);
+                            errors.push(`Ticket #${id}: Nenhum status especial "Encerrado" configurado para esta instância.`);
                             continue;
                         }
                         await this.updateStatus(id, closedStatus, currentUser.id);
@@ -1954,8 +1866,8 @@ class TicketsService {
         return { updated, skipped, errors };
     }
     async markAsRead(ticketId, usuarioId) {
-        await pool.query(`INSERT INTO ticket_leituras (ticket_id, usuario_id, last_read_at) 
-       VALUES (?, ?, NOW()) 
+        await pool.query(`INSERT INTO ticket_leituras (ticket_id, usuario_id, last_read_at)
+       VALUES (?, ?, NOW())
        ON DUPLICATE KEY UPDATE last_read_at = NOW()`, [ticketId, usuarioId]);
         return true;
     }
@@ -1969,7 +1881,7 @@ class TicketsService {
         //     A antiga subquery correlacionada foi removida daqui.
         // 2. Fetch last overall message for each ticket (for "last message in list")
         const [lastMessages] = await pool.query(`
-      SELECT m.ticket_id, m.id as mensagem_id, m.usuario_id as mensagem_usuario_id, m.created_at as ultima_mensagem_em, 
+      SELECT m.ticket_id, m.id as mensagem_id, m.usuario_id as mensagem_usuario_id, m.created_at as ultima_mensagem_em,
              COALESCE(u.nome, t.solicitante_nome, 'Cliente') as ultima_mensagem_por_nome, m.interno as ultima_mensagem_interna
       FROM ticket_mensagens m
       LEFT JOIN usuarios u ON m.usuario_id = u.id
@@ -1991,25 +1903,22 @@ class TicketsService {
             acc[m.ticket_id] = m;
             return acc;
         }, {});
-        const statusEmpresaIds = Array.from(new Set(tickets
-            .map((ticket) => Number(ticket.empresa_id))
-            .filter((empresaId) => Number.isFinite(empresaId) && empresaId > 0)));
         const statusValues = Array.from(new Set(tickets
             .map((ticket) => String(ticket.status || '').trim())
             .filter(Boolean)));
         const statusSpecialMap = new Map();
-        if (statusEmpresaIds.length > 0 && statusValues.length > 0) {
-            const [statusRows] = await pool.query(`SELECT empresa_id, valor, especial
-         FROM empresa_ticket_status
-         WHERE empresa_id IN (?) AND valor IN (?)`, [statusEmpresaIds, statusValues]);
+        if (statusValues.length > 0) {
+            const [statusRows] = await pool.query(`SELECT valor, especial
+         FROM ticket_statuses
+         WHERE valor IN (?)`, [statusValues]);
             for (const row of statusRows) {
-                statusSpecialMap.set(`${Number(row.empresa_id)}:${row.valor}`, String(row.especial || 'normal'));
+                statusSpecialMap.set(row.valor, String(row.especial || 'normal'));
             }
         }
         tickets.forEach(t => {
             const lmAll = lastMsgMap[t.id];
             const lastRead = readReceiptsMap[t.id];
-            const statusSpecial = statusSpecialMap.get(`${Number(t.empresa_id)}:${t.status}`) || 'normal';
+            const statusSpecial = statusSpecialMap.get(t.status) || 'normal';
             // Calculate estado_atendimento
             let estado = 'sem_resposta';
             if (isFinalTicketStatusSpecial(statusSpecial) || ['resolvido', 'fechado'].includes(t.status)) {

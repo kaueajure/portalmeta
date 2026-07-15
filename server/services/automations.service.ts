@@ -43,7 +43,6 @@ function getTicketField(ticket: any, campo: string) {
     case 'responsavel_id': 
     case 'responsavel': return ticket.responsavel_id;
     case 'usuario_id': return ticket.usuario_id;
-    case 'empresa_id': return ticket.empresa_id;
     case 'created_at': return ticket.created_at;
     case 'updated_at': return ticket.updated_at;
     case 'prazo_sla': return ticket.prazo_sla;
@@ -122,8 +121,8 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
 
   try {
     const [regras]: any = await pool.query(
-      'SELECT * FROM ticket_automacoes WHERE empresa_id = ? AND evento = ? AND ativo = 1 ORDER BY ordem ASC',
-      [ticket.empresa_id, evento]
+      'SELECT * FROM ticket_automacoes WHERE evento = ? AND ativo = 1 ORDER BY ordem ASC',
+      [evento]
     );
 
     // Marca se alguma ação alterou o status, para recomputar o estado
@@ -154,7 +153,7 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
 
         for (const acao of acoes) {
           try {
-            const currentStatusConfig = await getTicketStatusConfig(ticket.empresa_id, String(ticket.status || ''));
+            const currentStatusConfig = await getTicketStatusConfig(String(ticket.status || ''));
             if (isFinalTicketStatusSpecial(currentStatusConfig?.especial) && FINALIZED_TICKET_MUTATION_ACTIONS.has(acao.tipo)) {
               continue;
             }
@@ -163,7 +162,7 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
               const oldStatus = ticket.status;
               const newStatus = String(acao.valor);
               const oldStatusConfig = currentStatusConfig;
-              const newStatusConfig = await getTicketStatusConfig(ticket.empresa_id, newStatus);
+              const newStatusConfig = await getTicketStatusConfig(newStatus);
               if (!newStatusConfig || Number(newStatusConfig.ativo) !== 1) {
                 continue;
               }
@@ -229,7 +228,6 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
                const { default: notificationsService } = await import('./notifications.service.js');
                await notificationsService.create({
                  usuario_id: ticket.responsavel_id,
-                 empresa_id: ticket.empresa_id,
                  tipo: 'SYSTEM_ALERT',
                  titulo: 'Alerta de Automação',
                  mensagem: `Automação "${regra.nome}" executada para o chamado #${ticket.id}`,
@@ -239,8 +237,8 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
             }
             else if (acao.tipo === 'fechar_com_motivo' && acao.valor) {
                const oldStatus = ticket.status;
-               const oldStatusConfig = await getTicketStatusConfig(ticket.empresa_id, String(oldStatus || ''));
-               const closedStatus = await getClosedTicketStatusValue(ticket.empresa_id);
+               const oldStatusConfig = await getTicketStatusConfig(String(oldStatus || ''));
+               const closedStatus = await getClosedTicketStatusValue();
                if (!closedStatus) continue;
                let slaResolucaoStatus = ticket.sla_resolucao_status;
                if (ticket.prazo_sla) {
@@ -270,7 +268,6 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
         if (executedAcoes.length > 0) {
           await recordTicketEvent({
             ticket_id: ticket.id,
-            empresa_id: ticket.empresa_id,
             usuario_id: contexto?.usuario_id || null,
             tipo: 'automacao_executada',
             descricao: `Regra: ${regra.nome}`,
@@ -298,4 +295,3 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
     console.error('Falha ao executar automações:', err);
   }
 }
-

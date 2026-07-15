@@ -3,7 +3,6 @@ import { env } from '../config/env.js';
 import { sendError } from '../utils/response.js';
 
 export interface PortalCustomerIdentity {
-  empresa_id: number;
   customer_email: string;
   usuario_id: number | null;
   nome?: string | null;
@@ -27,12 +26,11 @@ export const portalAuthMiddleware = (req: any, res: any, next: any) => {
       return sendError(res, 'Token invalido para acesso ao portal', 401);
     }
 
-    if (!decoded.empresa_id || !decoded.customer_email) {
+    if (!decoded.customer_email) {
       return sendError(res, 'Token de acesso incompleto', 401);
     }
 
     req.portalCustomer = {
-      empresa_id: decoded.empresa_id,
       customer_email: decoded.customer_email,
       usuario_id: decoded.usuario_id || null,
       nome: decoded.nome || null

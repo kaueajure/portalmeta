@@ -16,7 +16,6 @@ router.get('/', async (req: AuthRequest, res) => {
 
     const filters = {
       ...req.query,
-      empresa_id: currentUser.empresa_id,
       user_id: currentUser.id,
       is_dev: currentUser.desenvolvedor
     };

@@ -24,7 +24,6 @@ function getNextAttemptSql(attempts: number): string {
 
 export function validateTicketEmailOutboxParams(params: EmailOutboxEnqueueParams): { ok: true; dedupeKey: string } | { ok: false; error: string } {
   if (!params || typeof params !== 'object') return { ok: false, error: 'Payload de e-mail ausente.' };
-  if (!Number.isInteger(Number(params.empresaId)) || Number(params.empresaId) <= 0) return { ok: false, error: 'Empresa invalida para e-mail.' };
   if (!Number.isInteger(Number(params.ticketId)) || Number(params.ticketId) <= 0) return { ok: false, error: 'Chamado invalido para e-mail.' };
   if (!params.type) return { ok: false, error: 'Tipo de e-mail ausente.' };
   if (!params.title) return { ok: false, error: 'Assunto/base do e-mail ausente.' };
@@ -56,14 +55,13 @@ class EmailOutboxService {
     const [result]: any = await pool.query(
       `
         INSERT INTO email_outbox (
-          empresa_id, ticket_id, tipo, destinatario, assunto, payload_json, dedupe_key, status, next_attempt_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', NOW())
+          ticket_id, tipo, destinatario, assunto, payload_json, dedupe_key, status, next_attempt_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'pendente', NOW())
         ON DUPLICATE KEY UPDATE
           id = LAST_INSERT_ID(id),
           updated_at = updated_at
       `,
       [
-        params.empresaId,
         params.ticketId,
         params.type,
         params.to,
@@ -163,7 +161,7 @@ class EmailOutboxService {
             );
 
             if (payload.messageId) {
-              await trackTicketEmailMessageIds(payload.empresaId, payload.ticketId, payload.messageId, sendResult);
+              await trackTicketEmailMessageIds(payload.ticketId, payload.messageId, sendResult);
             }
 
             sent++;

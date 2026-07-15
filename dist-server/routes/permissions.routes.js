@@ -11,9 +11,6 @@ function parsePositiveInt(value) {
     return Number.isInteger(n) && n > 0 ? n : null;
 }
 function validateTargetAccess(caller, targetUser) {
-    if (!caller.desenvolvedor && (!caller.empresa_id || Number(caller.empresa_id) !== Number(targetUser.empresa_id))) {
-        return 'Acesso negado: usuario alvo pertence a outra empresa.';
-    }
     if ((targetUser.desenvolvedor || targetUser.perfil === 'desenvolvedor') && !caller.desenvolvedor) {
         return 'Apenas desenvolvedores podem alterar permissoes de outro desenvolvedor.';
     }
@@ -23,7 +20,7 @@ function validateTargetAccess(caller, targetUser) {
     return null;
 }
 async function getTargetUser(targetUserId) {
-    const [targetUserRows] = await pool.query('SELECT id, empresa_id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
+    const [targetUserRows] = await pool.query('SELECT id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
     return targetUserRows[0] || null;
 }
 function accessProfileManagedError(targetUser) {
@@ -49,8 +46,7 @@ router.get('/me', async (req, res) => {
             success: true,
             data: {
                 permissions,
-                isSuperUser,
-                isTenantAdmin: !!req.user?.administrador && !req.user?.desenvolvedor
+                isSuperUser
             }
         });
     }
@@ -114,7 +110,7 @@ router.put('/users/:id/override', requirePermission('usuarios.gerenciar_permisso
         }
         const caller = req.user;
         // Load target user's details
-        const [targetUserRows] = await pool.query('SELECT id, empresa_id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
+        const [targetUserRows] = await pool.query('SELECT id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
         if (targetUserRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário alvo não encontrado.' });
         }
@@ -181,7 +177,7 @@ router.delete('/users/:id/override/:permissionKey', requirePermission('usuarios.
         const { permissionKey } = req.params;
         const caller = req.user;
         // Load target user's details
-        const [targetUserRows] = await pool.query('SELECT id, empresa_id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
+        const [targetUserRows] = await pool.query('SELECT id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
         if (targetUserRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário alvo não encontrado.' });
         }
@@ -228,7 +224,7 @@ router.post('/users/:id/reset', requirePermission('usuarios.gerenciar_permissoes
         }
         const caller = req.user;
         // Load target user's details
-        const [targetUserRows] = await pool.query('SELECT id, empresa_id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
+        const [targetUserRows] = await pool.query('SELECT id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
         if (targetUserRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário alvo não encontrado.' });
         }
@@ -273,7 +269,7 @@ router.post('/users/:id/bulk', requirePermission('usuarios.gerenciar_permissoes'
         }
         const caller = req.user;
         // Load target user's details
-        const [targetUserRows] = await pool.query('SELECT id, empresa_id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
+        const [targetUserRows] = await pool.query('SELECT id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
         if (targetUserRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário alvo não encontrado.' });
         }
@@ -354,7 +350,7 @@ router.post('/users/:id/bulk-reset', requirePermission('usuarios.gerenciar_permi
         }
         const caller = req.user;
         // Load target user's details
-        const [targetUserRows] = await pool.query('SELECT id, empresa_id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
+        const [targetUserRows] = await pool.query('SELECT id, desenvolvedor, administrador, perfil, access_profile_id FROM usuarios WHERE id = ?', [targetUserId]);
         if (targetUserRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuário alvo não encontrado.' });
         }

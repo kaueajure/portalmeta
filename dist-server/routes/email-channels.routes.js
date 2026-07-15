@@ -7,14 +7,13 @@ import { isEncryptionConfigured, decryptSecret } from '../utils/crypto.js';
 import { verifyChannelSmtp, sendTicketEmail } from '../utils/mailer.js';
 const router = Router();
 router.use(authMiddleware);
-const INSTANCE_ID = 1;
 const canManage = (req) => req.user.desenvolvedor || req.user.administrador;
 router.get('/email-channels', async (req, res) => {
     try {
         if (!canManage(req)) {
             return sendError(res, 'Permissao negada', 403);
         }
-        const canais = await emailChannelsService.listByCompany(INSTANCE_ID);
+        const canais = await emailChannelsService.list();
         return sendSuccess(res, canais);
     }
     catch (err) {
@@ -31,7 +30,6 @@ router.post('/email-channels', async (req, res) => {
             return sendError(res, 'E-mail publico invalido', 400);
         }
         const id = await emailChannelsService.createChannel({
-            empresa_id: INSTANCE_ID,
             email_publico,
             nome,
         });
@@ -47,7 +45,7 @@ router.delete('/email-channels/:id', async (req, res) => {
             return sendError(res, 'Permissao negada', 403);
         }
         const id = parseInt(req.params.id, 10);
-        await emailChannelsService.deleteChannel(id, INSTANCE_ID);
+        await emailChannelsService.deleteChannel(id);
         return sendSuccess(res, null, 'Canal deletado com sucesso');
     }
     catch (err) {
@@ -60,7 +58,7 @@ router.post('/email-channels/:id/regenerate', async (req, res) => {
             return sendError(res, 'Permissao negada', 403);
         }
         const id = parseInt(req.params.id, 10);
-        await emailChannelsService.regenerate(id, INSTANCE_ID);
+        await emailChannelsService.regenerate(id);
         return sendSuccess(res, null, 'Canal regenerado com sucesso');
     }
     catch (err) {
@@ -83,7 +81,7 @@ router.put('/email-channels/:id/smtp', async (req, res) => {
         if (smtp_enabled && (!portNum || portNum <= 0 || portNum > 65535)) {
             return sendError(res, 'Porta SMTP inválida.', 400);
         }
-        const updated = await emailChannelsService.updateSmtpConfig(id, INSTANCE_ID, {
+        const updated = await emailChannelsService.updateSmtpConfig(id, {
             smtp_enabled: !!smtp_enabled,
             smtp_host: smtp_host ? String(smtp_host).trim() : null,
             smtp_port: portNum,
@@ -109,7 +107,7 @@ router.post('/email-channels/:id/smtp/test', async (req, res) => {
             return sendError(res, 'Permissao negada', 403);
         }
         const id = parseInt(req.params.id, 10);
-        const channel = await emailChannelsService.getByIdAndCompany(id, INSTANCE_ID);
+        const channel = await emailChannelsService.getById(id);
         if (!channel)
             return sendError(res, 'Canal não encontrado', 404);
         if (!emailChannelsService.isChannelSmtpReady(channel)) {

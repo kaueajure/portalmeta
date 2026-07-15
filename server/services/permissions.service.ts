@@ -13,8 +13,7 @@ const userPermissionsCache = new Map<number, { permissions: string[]; expiresAt:
 export function isGlobalOnlyPermission(permissionKey: string): boolean {
   return (
     permissionKey === '*' ||
-    permissionKey === 'sistema.developer' ||
-    permissionKey.startsWith('telas.')
+    permissionKey === 'sistema.developer'
   );
 }
 
@@ -426,7 +425,7 @@ export const permissionsService = {
 
   async getUserPermissionMatrix(usuarioId: number): Promise<any> {
     const [userRows]: any = await pool.query(
-      `SELECT u.id, u.nome, u.email, u.perfil, u.administrador, u.desenvolvedor, u.empresa_id, u.access_profile_id, ap.nome as access_profile_nome
+      `SELECT u.id, u.nome, u.email, u.perfil, u.administrador, u.desenvolvedor, u.access_profile_id, ap.nome as access_profile_nome
        FROM usuarios u
        LEFT JOIN access_profiles ap ON ap.id = u.access_profile_id
        WHERE u.id = ?`,
@@ -453,7 +452,6 @@ export const permissionsService = {
         perfil: user.perfil,
         administrador: !!user.administrador,
         desenvolvedor: !!user.desenvolvedor,
-        empresa_id: user.empresa_id,
         access_profile_id: accessProfileId,
         access_profile_nome: user.access_profile_nome || null,
       },

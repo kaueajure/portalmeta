@@ -12,25 +12,12 @@ function toPositiveInt(value) {
     const n = Number(Array.isArray(value) ? value[0] : value);
     return Number.isInteger(n) && n > 0 ? n : undefined;
 }
-function applyReportCompanyScope(currentUser, filters, empresaIdValue) {
-    if (currentUser.desenvolvedor) {
-        const empresaId = toPositiveInt(empresaIdValue);
-        if (!empresaId)
-            return 'Selecione uma empresa valida para gerar relatorios.';
-        filters.empresa_id = empresaId;
-        return null;
-    }
-    if (!currentUser.empresa_id)
-        return 'Sua conta nao possui empresa vinculada.';
-    filters.empresa_id = currentUser.empresa_id;
-    return null;
-}
 router.get('/summary', requirePermission('relatorios.visualizar'), async (req, res) => {
     try {
         const currentUser = req.user;
         if (!currentUser)
             return sendError(res, 'Não autenticado', 401);
-        const { start_date, end_date, empresa_id, responsavel_id, status, prioridade } = req.query;
+        const { start_date, end_date, responsavel_id, status, prioridade } = req.query;
         const filters = {
             start_date: start_date,
             end_date: end_date,
@@ -38,9 +25,6 @@ router.get('/summary', requirePermission('relatorios.visualizar'), async (req, r
             status: status,
             prioridade: prioridade
         };
-        const scopeError = applyReportCompanyScope(currentUser, filters, empresa_id);
-        if (scopeError)
-            return sendError(res, scopeError, currentUser.desenvolvedor ? 400 : 403);
         // Resolve reports scoping
         const isSuperUser = !!(currentUser.desenvolvedor || currentUser.administrador);
         if (!isSuperUser) {
@@ -63,7 +47,7 @@ router.post('/generate', requirePermission('relatorios.visualizar'), async (req,
         const currentUser = req.user;
         if (!currentUser)
             return sendError(res, 'Não autenticado', 401);
-        const { start_date, end_date, empresa_id, responsavel_id, status, prioridade } = req.body;
+        const { start_date, end_date, responsavel_id, status, prioridade } = req.body;
         const filters = {
             start_date,
             end_date,
@@ -71,9 +55,6 @@ router.post('/generate', requirePermission('relatorios.visualizar'), async (req,
             status,
             prioridade
         };
-        const scopeError = applyReportCompanyScope(currentUser, filters, empresa_id);
-        if (scopeError)
-            return sendError(res, scopeError, currentUser.desenvolvedor ? 400 : 403);
         // Resolve reports scoping
         const isSuperUser = !!(currentUser.desenvolvedor || currentUser.administrador);
         if (!isSuperUser) {
@@ -96,7 +77,7 @@ router.get('/export', requirePermission('relatorios.exportar'), async (req, res)
         const currentUser = req.user;
         if (!currentUser)
             return sendError(res, 'Não autenticado', 401);
-        const { type, start_date, end_date, empresa_id, responsavel_id, status, prioridade, categoria, servico } = req.query;
+        const { type, start_date, end_date, responsavel_id, status, prioridade, categoria, servico } = req.query;
         const filters = {
             start_date: start_date,
             end_date: end_date,
@@ -106,9 +87,6 @@ router.get('/export', requirePermission('relatorios.exportar'), async (req, res)
             categoria: categoria,
             servico: servico
         };
-        const scopeError = applyReportCompanyScope(currentUser, filters, empresa_id);
-        if (scopeError)
-            return sendError(res, scopeError, currentUser.desenvolvedor ? 400 : 403);
         // Resolve reports scoping
         const isSuperUser = !!(currentUser.desenvolvedor || currentUser.administrador);
         if (!isSuperUser) {

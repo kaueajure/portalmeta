@@ -41,20 +41,6 @@ router.patch('/', requirePermission('configuracoes.identidade'), async (req, res
         if (updates.length === 0)
             return sendSuccess(res, null);
         await pool.query(`UPDATE application_settings SET ${updates.join(', ')} WHERE id = 1`, values);
-        // Mantém a leitura legada coerente apenas até a migration de contrato.
-        const legacyFields = allowed.filter((field) => field !== 'site_url');
-        const legacyUpdates = [];
-        const legacyValues = [];
-        for (const field of legacyFields) {
-            if (req.body[field] === undefined)
-                continue;
-            legacyUpdates.push(`${field} = ?`);
-            legacyValues.push(req.body[field] === '' ? null : req.body[field]);
-        }
-        if (legacyUpdates.length > 0) {
-            legacyValues.push(1);
-            await pool.query(`UPDATE empresas SET ${legacyUpdates.join(', ')} WHERE id = ?`, legacyValues);
-        }
         const [rows] = await pool.query('SELECT * FROM application_settings WHERE id = 1 LIMIT 1');
         return sendSuccess(res, rows[0] || null, 'Identidade institucional atualizada');
     }

@@ -146,20 +146,18 @@ Se uma migration falhar:
 ## Teste Manual Antes de Liberar Clientes
 
 - Login como desenvolvedor.
-- Login como administrador de empresa.
+- Login como administrador.
 - Login como atendente.
 - Login como cliente no portal.
-- Admin da empresa A nao acessa ticket da empresa B.
-- Admin da empresa A nao lista empresas de outros tenants.
 - Listagem de tickets com filtros combinados, busca, ordenacao e paginacao.
 - Abertura de ticket com muitas mensagens e anexos.
 - Mensagem interna nao aparece no portal.
 - Anexo interno nao aparece no portal.
-- Inbound de e-mail nao responde ticket de outra empresa via `[Ticket #ID]`.
-- Mesmo `Message-ID` chegando em empresas diferentes nao deduplica globalmente.
-- Acoes em massa respeitam empresa e permissoes.
+- Inbound de e-mail ignora referência a um ticket inexistente via `[Ticket #ID]`.
+- Mesmo `Message-ID` não é processado duas vezes.
+- Acoes em massa respeitam cargos e permissoes.
 - Kanban bloqueia movimentos sem permissao.
-- Dashboard mostra apenas dados da empresa.
+- Dashboard respeita os filtros e níveis de acesso.
 - Worker processa automacoes sem duplicar execucao.
 - `/health` retorna 200.
 - `/ready` retorna 200 com banco disponivel.

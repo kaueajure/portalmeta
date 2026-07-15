@@ -92,7 +92,6 @@ router.get('/', async (req: AuthRequest, res) => {
       ...profile,
       permissions,
       isSuperUser,
-      isTenantAdmin: !!profile.administrador && !profile.desenvolvedor
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao buscar perfil';
@@ -115,7 +114,7 @@ router.patch('/', async (req: AuthRequest, res) => {
     }
 
     await usersService.update(currentUser.id, safeData);
-    await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'PROFILE_UPDATE', 'Usuario atualizou o proprio perfil');
+    await logSystemAction(req, currentUser.id, 'PROFILE_UPDATE', 'Usuario atualizou o proprio perfil');
 
     sendSuccess(res, null, 'Perfil atualizado com sucesso');
   } catch (error: unknown) {
@@ -163,7 +162,7 @@ router.post('/photo', profilePhotoUpload.single('foto'), async (req: AuthRequest
     }
 
     await usersService.update(currentUser.id, { foto });
-    await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'PROFILE_UPDATE', 'Usuario atualizou a foto do perfil');
+    await logSystemAction(req, currentUser.id, 'PROFILE_UPDATE', 'Usuario atualizou a foto do perfil');
 
     sendSuccess(res, { foto }, 'Foto de perfil atualizada com sucesso');
   } catch (error: unknown) {
@@ -192,7 +191,7 @@ router.patch('/password', async (req: AuthRequest, res) => {
     }
 
     await usersService.updatePassword(currentUser.id, currentPassword, newPassword);
-    await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'PASSWORD_CHANGE', 'Usuario alterou a senha');
+    await logSystemAction(req, currentUser.id, 'PASSWORD_CHANGE', 'Usuario alterou a senha');
 
     sendSuccess(res, null, 'Senha alterada com sucesso');
   } catch (error: unknown) {

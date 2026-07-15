@@ -14,7 +14,7 @@ class TicketMessagesService {
      * Handles status updates, SLA, notifications, events and real-time updates.
      */
     async addMessage(data, currentUser) {
-        const { ticket_id, usuario_id, mensagem, interno, message_id, empresa_id, tipo = 'texto' } = data;
+        const { ticket_id, usuario_id, mensagem, interno, message_id, tipo = 'texto' } = data;
         const suppressEmailNotification = !!data.suppressEmailNotification;
         if (!mensagem || mensagem.trim() === '') {
             throw new Error('A mensagem não pode estar vazia');
@@ -30,19 +30,12 @@ class TicketMessagesService {
         if (!ticket) {
             throw new Error('Chamado não encontrado');
         }
-        if (empresa_id !== undefined && empresa_id !== null && Number(empresa_id) !== Number(ticket.empresa_id)) {
-            throw new Error('Acesso negado: este chamado pertence a outra empresa');
-        }
         const isDev = !!currentUser?.desenvolvedor;
         const isAdmin = !!currentUser?.administrador;
         const isManager = currentUser?.perfil === 'gestor';
         const isStaff = currentUser?.perfil === 'atendente';
         const isAgent = isDev || isAdmin || isManager || isStaff;
         if (currentUser) {
-            // Data isolation check
-            if (!isDev && Number(currentUser.empresa_id) !== Number(ticket.empresa_id)) {
-                throw new Error('Acesso negado: este chamado pertence a outra empresa');
-            }
             // Customer specific check
             const currentUserId = Number(currentUser?.id || 0);
             const currentUserEmail = typeof currentUser?.email === 'string'
@@ -67,8 +60,8 @@ class TicketMessagesService {
             const [existingMessage] = await pool.query(`SELECT m.id
          FROM ticket_mensagens m
          INNER JOIN tickets t ON t.id = m.ticket_id
-         WHERE m.message_id = ? AND t.empresa_id = ? AND t.deleted_at IS NULL
-         LIMIT 1`, [message_id, ticket.empresa_id]);
+         WHERE m.message_id = ? AND t.deleted_at IS NULL
+         LIMIT 1`, [message_id]);
             if (existingMessage.length > 0) {
                 console.warn(`[TicketMessagesService] Duplicate message_id ignored: ${maskIdentifier(message_id)}`);
                 return existingMessage[0].id;
@@ -111,7 +104,7 @@ class TicketMessagesService {
         const messageId = result.insertId;
         // 3. Track processed email to avoid duplicates
         if (message_id) {
-            await pool.query('INSERT IGNORE INTO processed_emails (message_id, empresa_id, ticket_id) VALUES (?, ?, ?)', [message_id, ticket.empresa_id, ticket_id]);
+            await pool.query('INSERT IGNORE INTO processed_emails (message_id, ticket_id) VALUES (?, ?)', [message_id, ticket_id]);
         }
         // 4. Update ticket: updated_at
         await pool.query('UPDATE tickets SET updated_at = NOW() WHERE id = ? AND deleted_at IS NULL', [ticket_id]);
@@ -126,23 +119,22 @@ class TicketMessagesService {
                 (usuario_id === null && (isExternalEmail || isPortalCustomer || !currentUser)));
             // A response from agent is public, not from the client, and written by an agent user.
             const isAgentResponse = !finalInterno && !isClient && isAgent;
-            let ticketStatusConfig = await getTicketStatusConfig(ticket.empresa_id, ticket.status);
+            let ticketStatusConfig = await getTicketStatusConfig(ticket.status);
             let ticketIsFinal = isFinalTicketStatusSpecial(ticketStatusConfig?.especial) || ['resolvido', 'fechado'].includes(ticket.status);
             let ticketIsCustomerWaiting = isCustomerWaitingTicketStatusSpecial(ticketStatusConfig?.especial) || ticket.status === 'aguardando_cliente';
             if (isClient && ticketIsFinal) {
                 const reopenedByUserId = messageUserId && messageUserId > 0 ? messageUserId : null;
-                const reopenedStatus = await getInitialTicketStatusValue(ticket.empresa_id);
+                const reopenedStatus = await getInitialTicketStatusValue();
                 await pool.query('UPDATE tickets SET status = ?, finalizado_em = NULL, reaberto_em = NOW(), reaberto_por = ?, updated_at = NOW() WHERE id = ?', [reopenedStatus, reopenedByUserId, ticket_id]);
                 await recordTicketEvent({
                     ticket_id,
-                    empresa_id: ticket.empresa_id,
                     usuario_id: reopenedByUserId,
                     tipo: 'ticket_reaberto',
                     descricao: 'Chamado reaberto automaticamente por resposta do cliente'
                 });
                 ticket.status = reopenedStatus;
                 ticket.finalizado_em = null;
-                ticketStatusConfig = await getTicketStatusConfig(ticket.empresa_id, ticket.status);
+                ticketStatusConfig = await getTicketStatusConfig(ticket.status);
                 ticketIsFinal = isFinalTicketStatusSpecial(ticketStatusConfig?.especial) || ['resolvido', 'fechado'].includes(ticket.status);
                 ticketIsCustomerWaiting = isCustomerWaitingTicketStatusSpecial(ticketStatusConfig?.especial) || ticket.status === 'aguardando_cliente';
             }
@@ -160,7 +152,6 @@ class TicketMessagesService {
                     await pool.query('UPDATE tickets SET primeira_resposta_em = ?, sla_primeira_resposta_status = ? WHERE id = ?', [agoraFormatado, prStatus, ticket_id]);
                     await recordTicketEvent({
                         ticket_id,
-                        empresa_id: ticket.empresa_id,
                         usuario_id,
                         tipo: 'primeira_resposta_registrada',
                         descricao: `Primeira resposta registrada em ${agoraFormatado} (${prStatus === 'cumprido' ? 'Dentro do prazo' : 'Fora do prazo'})`
@@ -169,12 +160,11 @@ class TicketMessagesService {
                 // B) Status Transitions
                 if (isAgentResponse) {
                     if (ticketStatusConfig?.especial === 'inicial' || ticket.status === 'aberto') {
-                        const nextStatus = await getInProgressTicketStatusValue(ticket.empresa_id);
+                        const nextStatus = await getInProgressTicketStatusValue();
                         await pool.query('UPDATE tickets SET status = ? WHERE id = ?', [nextStatus, ticket_id]);
                         await slaService.updateOperationalStatus(ticket_id);
                         await recordTicketEvent({
                             ticket_id,
-                            empresa_id: ticket.empresa_id,
                             usuario_id,
                             tipo: 'status_alterado',
                             descricao: 'Status alterado pela resposta pública do atendente'
@@ -184,12 +174,11 @@ class TicketMessagesService {
                 }
                 else if (isClient) {
                     if (ticketIsCustomerWaiting) {
-                        const nextStatus = await getInProgressTicketStatusValue(ticket.empresa_id);
+                        const nextStatus = await getInProgressTicketStatusValue();
                         await pool.query('UPDATE tickets SET status = ? WHERE id = ?', [nextStatus, ticket_id]);
                         await slaService.resumeSla(ticket_id, usuario_id);
                         await recordTicketEvent({
                             ticket_id,
-                            empresa_id: ticket.empresa_id,
                             usuario_id,
                             tipo: 'status_alterado',
                             descricao: 'Status alterado pela resposta do cliente'
@@ -221,7 +210,6 @@ class TicketMessagesService {
                         await emailOutboxService.enqueueTicketEmail({
                             to: ticket.cliente_email,
                             ticketId: ticket_id,
-                            empresaId: ticket.empresa_id,
                             emailChannelId: ticket.email_channel_id,
                             type: 'agent_reply',
                             title: ticket.titulo,
@@ -239,7 +227,6 @@ class TicketMessagesService {
                         console.error('[Notification Error] Falha ao enfileirar e-mail:', err);
                         await recordTicketEvent({
                             ticket_id,
-                            empresa_id: ticket.empresa_id,
                             usuario_id,
                             tipo: 'email_outbox_erro',
                             descricao: 'A resposta foi registrada, mas o e-mail nao pode ser enfileirado.',
@@ -254,7 +241,7 @@ class TicketMessagesService {
             }
             // 3. Notify Admins if it's an internal note or a new client message
             if (finalInterno || isClient) {
-                const [admins] = await pool.query('SELECT id FROM usuarios WHERE empresa_id = ? AND administrador = 1', [ticket.empresa_id]);
+                const [admins] = await pool.query('SELECT id FROM usuarios WHERE administrador = 1 AND ativo = 1');
                 admins.forEach((a) => {
                     if (Number(a.id) !== Number(usuario_id))
                         recipients.add(Number(a.id));
@@ -263,7 +250,6 @@ class TicketMessagesService {
             const recipientIds = Array.from(recipients);
             if (recipientIds.length > 0) {
                 await notificationsService.createMany(recipientIds, {
-                    empresa_id: ticket.empresa_id,
                     tipo: 'TICKET_MESSAGE',
                     titulo: finalInterno ? 'Nota interna no chamado' : 'Nova resposta no chamado',
                     mensagem: `${authorName}: ${mensagem.substring(0, 100)}${mensagem.length > 100 ? '...' : ''}`,
@@ -294,18 +280,15 @@ class TicketMessagesService {
                 const [updatedRows] = await pool.query(`SELECT t.*, 
                   COALESCE(t.solicitante_nome, u.nome, 'Cliente') as cliente_nome, 
                   COALESCE(t.solicitante_email, u.email, 'Usuário Removido') as cliente_email, 
-                  COALESCE(r.nome, 'Não Atribuído') as responsavel_nome, 
-                  e.nome as empresa_nome
+                  COALESCE(r.nome, 'Não Atribuído') as responsavel_nome
            FROM tickets t
            LEFT JOIN usuarios u ON t.usuario_id = u.id
-           LEFT JOIN empresas e ON t.empresa_id = e.id
            LEFT JOIN usuarios r ON t.responsavel_id = r.id
            WHERE t.id = ? AND t.deleted_at IS NULL`, [ticket_id]);
                 if (updatedRows[0]) {
                     io.to('instance').emit('ticketUpdated', updatedRows[0]);
                     io.to('instance').emit('ticketMessagesChanged', {
                         ticketId: ticket_id,
-                        empresaId: ticket.empresa_id,
                         messageId
                     });
                 }

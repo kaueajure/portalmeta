@@ -1,9 +1,8 @@
 import pool from '../db/connection.js';
 class NotificationsService {
     async create(data) {
-        const [result] = await pool.query('INSERT INTO notificacoes (usuario_id, empresa_id, tipo, titulo, mensagem, link, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+        const [result] = await pool.query('INSERT INTO notificacoes (usuario_id, tipo, titulo, mensagem, link, metadata) VALUES (?, ?, ?, ?, ?, ?)', [
             data.usuario_id,
-            data.empresa_id || null,
             data.tipo,
             data.titulo,
             data.mensagem || null,
@@ -17,14 +16,13 @@ class NotificationsService {
             return;
         const values = userIds.map(userId => [
             userId,
-            data.empresa_id || null,
             data.tipo,
             data.titulo,
             data.mensagem || null,
             data.link || null,
             data.metadata ? JSON.stringify(data.metadata) : null
         ]);
-        await pool.query('INSERT INTO notificacoes (usuario_id, empresa_id, tipo, titulo, mensagem, link, metadata) VALUES ?', [values]);
+        await pool.query('INSERT INTO notificacoes (usuario_id, tipo, titulo, mensagem, link, metadata) VALUES ?', [values]);
     }
     async listForUser(userId, filters) {
         let query = 'SELECT * FROM notificacoes WHERE usuario_id = ?';

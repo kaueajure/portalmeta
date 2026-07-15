@@ -15,27 +15,15 @@ function parsePositiveInt(value: unknown): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-function resolveEmpresaId(req: AuthRequest): number | null {
-  if (req.user?.desenvolvedor && req.query.empresa_id) {
-    return parsePositiveInt(req.query.empresa_id);
-  }
-  return req.user?.empresa_id ? Number(req.user.empresa_id) : null;
-}
-
 async function ensureProfileAccess(req: AuthRequest, profileId: number) {
   const profile = await accessProfilesService.getById(profileId);
   if (!profile) return { profile: null, error: 'Perfil de acesso nao encontrado.', status: 404 };
-  if (!req.user?.desenvolvedor && Number(profile.empresa_id) !== Number(req.user?.empresa_id)) {
-    return { profile: null, error: 'Acesso proibido ao perfil de outra empresa.', status: 403 };
-  }
   return { profile, error: null, status: 200 };
 }
 
 router.get('/', requirePermission('usuarios.ver_permissoes'), async (req: AuthRequest, res) => {
   try {
-    const empresaId = resolveEmpresaId(req);
-    if (!empresaId) return sendSuccess(res, []);
-    const profiles = await accessProfilesService.list(empresaId);
+    const profiles = await accessProfilesService.list();
     sendSuccess(res, profiles);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao listar perfis de acesso';
@@ -45,16 +33,10 @@ router.get('/', requirePermission('usuarios.ver_permissoes'), async (req: AuthRe
 
 router.post('/', requirePermission('usuarios.gerenciar_permissoes'), async (req: AuthRequest, res) => {
   try {
-    const empresaId = req.user?.desenvolvedor
-      ? parsePositiveInt(req.body.empresa_id)
-      : req.user?.empresa_id;
-    if (!empresaId) return sendError(res, 'Empresa obrigatoria para criar perfil de acesso.', 400);
-
     const nome = String(req.body.nome || '').trim();
     if (!nome) return sendError(res, 'Nome do perfil e obrigatorio.', 400);
 
     const profile = await accessProfilesService.create({
-      empresa_id: Number(empresaId),
       nome,
       descricao: req.body.descricao || null,
       base_perfil: req.body.base_perfil || null,
@@ -65,7 +47,7 @@ router.post('/', requirePermission('usuarios.gerenciar_permissoes'), async (req:
       await accessProfilesService.setPermissions(profile.id, req.body.permissions, req.user);
     }
 
-    await logSystemAction(req, req.user!.id, Number(empresaId), 'ACCESS_PROFILE_CREATE', `Criou perfil de acesso: ${nome}`);
+    await logSystemAction(req, req.user!.id, 'ACCESS_PROFILE_CREATE', `Criou perfil de acesso: ${nome}`);
     sendSuccess(res, await accessProfilesService.getById(profile.id), 'Perfil de acesso criado com sucesso', 201);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao criar perfil de acesso';
@@ -106,7 +88,7 @@ router.patch('/:id', requirePermission('usuarios.gerenciar_permissoes'), async (
       users.forEach((user: any) => permissionsService.invalidateCache(user.id));
     }
 
-    await logSystemAction(req, req.user!.id, access.profile.empresa_id, 'ACCESS_PROFILE_UPDATE', `Atualizou perfil de acesso ID ${id}`);
+    await logSystemAction(req, req.user!.id, 'ACCESS_PROFILE_UPDATE', `Atualizou perfil de acesso ID ${id}`);
     sendSuccess(res, profile, 'Perfil de acesso atualizado com sucesso');
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao atualizar perfil de acesso';
@@ -127,7 +109,7 @@ router.delete('/:id', requirePermission('usuarios.gerenciar_permissoes'), async 
     }
 
     await accessProfilesService.archive(id);
-    await logSystemAction(req, req.user!.id, access.profile.empresa_id, 'ACCESS_PROFILE_DELETE', `Arquivou perfil de acesso ID ${id}`);
+    await logSystemAction(req, req.user!.id, 'ACCESS_PROFILE_DELETE', `Arquivou perfil de acesso ID ${id}`);
     sendSuccess(res, null, 'Perfil de acesso removido com sucesso');
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao remover perfil de acesso';

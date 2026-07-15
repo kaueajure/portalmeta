@@ -1,18 +1,18 @@
 import pool from '../db/connection.js';
 class MacrosService {
-    async list(empresaId, onlyActive = true) {
-        let query = 'SELECT * FROM ticket_macros WHERE empresa_id = ?';
+    async list(onlyActive = true) {
+        let query = 'SELECT * FROM ticket_macros WHERE 1 = 1';
         if (onlyActive)
             query += ' AND ativo = 1';
         query += ' ORDER BY titulo ASC';
-        const [rows] = await pool.query(query, [empresaId]);
+        const [rows] = await pool.query(query);
         return rows.map((r) => ({
             ...r,
             ativo: Number(r.ativo) === 1
         }));
     }
-    async getById(id, empresaId) {
-        const [rows] = await pool.query('SELECT * FROM ticket_macros WHERE id = ? AND empresa_id = ?', [id, empresaId]);
+    async getById(id) {
+        const [rows] = await pool.query('SELECT * FROM ticket_macros WHERE id = ?', [id]);
         if (!rows[0])
             return null;
         return {
@@ -21,11 +21,11 @@ class MacrosService {
         };
     }
     async create(data) {
-        const { empresa_id, titulo, conteudo, categoria, servico, tags_json, created_by } = data;
-        const [result] = await pool.query('INSERT INTO ticket_macros (empresa_id, titulo, conteudo, categoria, servico, tags_json, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)', [empresa_id, titulo, conteudo, categoria || null, servico || null, tags_json ? JSON.stringify(tags_json) : null, created_by]);
+        const { titulo, conteudo, categoria, servico, tags_json, created_by } = data;
+        const [result] = await pool.query('INSERT INTO ticket_macros (titulo, conteudo, categoria, servico, tags_json, created_by) VALUES (?, ?, ?, ?, ?, ?)', [titulo, conteudo, categoria || null, servico || null, tags_json ? JSON.stringify(tags_json) : null, created_by]);
         return result.insertId;
     }
-    async update(id, empresaId, data) {
+    async update(id, data) {
         const fields = [];
         const params = [];
         if (data.titulo !== undefined) {
@@ -54,26 +54,25 @@ class MacrosService {
         }
         if (fields.length === 0)
             return true;
-        params.push(id, empresaId);
-        await pool.query(`UPDATE ticket_macros SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND empresa_id = ?`, params);
+        params.push(id);
+        await pool.query(`UPDATE ticket_macros SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, params);
         return true;
     }
-    async incrementUse(id, empresaId) {
-        await pool.query('UPDATE ticket_macros SET uso_count = COALESCE(uso_count, 0) + 1 WHERE id = ? AND empresa_id = ?', [id, empresaId]);
+    async incrementUse(id) {
+        await pool.query('UPDATE ticket_macros SET uso_count = COALESCE(uso_count, 0) + 1 WHERE id = ?', [id]);
     }
-    async applyMacro(id, empresaId, ticketId) {
-        const macro = await this.getById(id, empresaId);
+    async applyMacro(id, ticketId) {
+        const macro = await this.getById(id);
         if (!macro)
             throw new Error('Macro não encontrada');
         const [tickets] = await pool.query(`
       SELECT t.*, u.nome as cliente_nome, u.email as cliente_email, 
-             r.nome as responsavel_nome, e.nome as empresa_nome
+             r.nome as responsavel_nome
       FROM tickets t
       LEFT JOIN usuarios u ON t.usuario_id = u.id
       LEFT JOIN usuarios r ON t.responsavel_id = r.id
-      LEFT JOIN empresas e ON t.empresa_id = e.id
-      WHERE t.id = ? AND t.empresa_id = ?
-    `, [ticketId, empresaId]);
+      WHERE t.id = ?
+    `, [ticketId]);
         const ticket = tickets[0];
         if (!ticket)
             throw new Error('Ticket não encontrado');
@@ -82,20 +81,18 @@ class MacrosService {
         conteudo = conteudo.replace(/{{cliente_email}}/g, ticket.cliente_email || '');
         conteudo = conteudo.replace(/{{ticket_id}}/g, String(ticket.id));
         conteudo = conteudo.replace(/{{ticket_titulo}}/g, ticket.titulo || '');
-        conteudo = conteudo.replace(/{{empresa_nome}}/g, ticket.empresa_nome || '');
         conteudo = conteudo.replace(/{{responsavel_nome}}/g, ticket.responsavel_nome || '');
         conteudo = conteudo.replace(/{{categoria}}/g, ticket.categoria || '');
         conteudo = conteudo.replace(/{{servico}}/g, ticket.servico || '');
         conteudo = conteudo.replace(/{{status}}/g, ticket.status || '');
         conteudo = conteudo.replace(/{{prioridade}}/g, ticket.prioridade || '');
         // Increment usage
-        await this.incrementUse(id, empresaId);
+        await this.incrementUse(id);
         // Try to record event, but if it fails don't break the macro apply
         try {
             const { recordTicketEvent } = await import('./ticket-events.service.js');
             await recordTicketEvent({
                 ticket_id: ticket.id,
-                empresa_id: empresaId,
                 tipo: 'macro_usada',
                 descricao: `Macro utilizada: ${macro.titulo}`
             });
@@ -105,12 +102,12 @@ class MacrosService {
         }
         return conteudo;
     }
-    async delete(id, empresaId, softDelete = true) {
+    async delete(id, softDelete = true) {
         if (softDelete) {
-            await pool.query('UPDATE ticket_macros SET ativo = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND empresa_id = ?', [id, empresaId]);
+            await pool.query('UPDATE ticket_macros SET ativo = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id]);
         }
         else {
-            await pool.query('DELETE FROM ticket_macros WHERE id = ? AND empresa_id = ?', [id, empresaId]);
+            await pool.query('DELETE FROM ticket_macros WHERE id = ?', [id]);
         }
         return true;
     }

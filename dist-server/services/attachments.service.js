@@ -22,7 +22,7 @@ class AttachmentsService {
         }));
     }
     async getById(id) {
-        const [rows] = await pool.query('SELECT a.*, t.empresa_id as ticket_empresa_id FROM ticket_anexos a JOIN tickets t ON a.ticket_id = t.id WHERE a.id = ? AND t.deleted_at IS NULL', [id]);
+        const [rows] = await pool.query('SELECT a.* FROM ticket_anexos a JOIN tickets t ON a.ticket_id = t.id WHERE a.id = ? AND t.deleted_at IS NULL', [id]);
         const data = rows[0];
         if (!data)
             return null;
@@ -32,18 +32,15 @@ class AttachmentsService {
         };
     }
     async create(data) {
-        const { ticket_id, mensagem_id, usuario_id, empresa_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno } = data;
+        const { ticket_id, mensagem_id, usuario_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno } = data;
         const [ticketRows] = await pool.query('SELECT * FROM tickets WHERE id = ? AND deleted_at IS NULL LIMIT 1', [ticket_id]);
         const ticket = ticketRows[0];
         if (!ticket) {
             throw new Error('Chamado não encontrado');
         }
-        if (empresa_id !== null && empresa_id !== undefined && Number(ticket.empresa_id) !== Number(empresa_id)) {
-            throw new Error('Chamado não encontrado');
-        }
-        const [result] = await pool.query(`INSERT INTO ticket_anexos 
-        (ticket_id, mensagem_id, usuario_id, empresa_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [ticket_id, mensagem_id || null, usuario_id, empresa_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno ? 1 : 0]);
+        const [result] = await pool.query(`INSERT INTO ticket_anexos
+        (ticket_id, mensagem_id, usuario_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [ticket_id, mensagem_id || null, usuario_id, nome_original, nome_arquivo, caminho, mime_type, tamanho_bytes, interno ? 1 : 0]);
         const attachmentId = result.insertId;
         // Notificações
         try {
@@ -62,9 +59,9 @@ class AttachmentsService {
                 if (ticket.responsavel_id && ticket.responsavel_id !== usuario_id) {
                     recipients.add(ticket.responsavel_id);
                 }
-                // 3. Se for interno, notificar admins/devs da empresa (que não sejam o autor)
-                if (interno && ticket.empresa_id) {
-                    const [admins] = await pool.query('SELECT id FROM usuarios WHERE empresa_id = ? AND administrador = 1', [ticket.empresa_id]);
+                // 3. Se for interno, notificar administradores (que não sejam o autor)
+                if (interno) {
+                    const [admins] = await pool.query('SELECT id FROM usuarios WHERE administrador = 1 AND ativo = 1');
                     admins.forEach((a) => {
                         if (a.id !== usuario_id)
                             recipients.add(a.id);
@@ -73,7 +70,6 @@ class AttachmentsService {
                 const recipientIds = Array.from(recipients);
                 if (recipientIds.length > 0) {
                     await notificationsService.createMany(recipientIds, {
-                        empresa_id: ticket.empresa_id,
                         tipo: 'TICKET_ATTACHMENT',
                         titulo: interno ? 'Anexo interno enviado' : 'Novo anexo no chamado',
                         mensagem: `${authorName} enviou o arquivo: ${nome_original}`,

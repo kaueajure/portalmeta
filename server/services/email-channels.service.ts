@@ -6,7 +6,7 @@ import { maskEmail } from '../utils/sanitize.js';
 
 // Colunas seguras para exposição (NUNCA inclui smtp_pass_enc).
 const PUBLIC_CHANNEL_COLUMNS = `
-  id, empresa_id, nome, email_publico, inbound_address, verification_token, status,
+  id, nome, email_publico, inbound_address, verification_token, status,
   ultimo_erro, last_received_at, verified_at, created_at, updated_at,
   smtp_enabled, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_from_name,
   smtp_status, smtp_last_test_at, smtp_last_error
@@ -17,24 +17,23 @@ function normalizePublicEmail(email: string): string {
 }
 
 export class EmailChannelsService {
-  async listByCompany(empresaId: number) {
+  async list() {
     const [rows]: any = await pool.query(
-      `SELECT ${PUBLIC_CHANNEL_COLUMNS} FROM empresa_email_canais WHERE empresa_id = ? ORDER BY created_at DESC`,
-      [empresaId]
+      `SELECT ${PUBLIC_CHANNEL_COLUMNS} FROM email_channels ORDER BY created_at DESC`
     );
     return rows;
   }
 
-  async getByIdAndCompany(channelId: number, empresaId: number) {
+  async getById(channelId: number) {
     const [rows]: any = await pool.query(
-      'SELECT * FROM empresa_email_canais WHERE id = ? AND empresa_id = ? LIMIT 1',
-      [channelId, empresaId]
+      'SELECT * FROM email_channels WHERE id = ? LIMIT 1',
+      [channelId]
     );
     return rows.length > 0 ? rows[0] : null;
   }
 
-  async createChannel(data: { empresa_id: number; nome?: string; email_publico: string }) {
-    const { empresa_id, nome, email_publico } = data;
+  async createChannel(data: { nome?: string; email_publico: string }) {
+    const { nome, email_publico } = data;
     const normalizedEmailPublico = normalizePublicEmail(email_publico);
 
     if (!normalizedEmailPublico) {
@@ -42,7 +41,7 @@ export class EmailChannelsService {
     }
 
     const [duplicateRows]: any = await pool.query(
-      'SELECT id, empresa_id FROM empresa_email_canais WHERE LOWER(TRIM(email_publico)) = ? LIMIT 1',
+      'SELECT id FROM email_channels WHERE LOWER(TRIM(email_publico)) = ? LIMIT 1',
       [normalizedEmailPublico]
     );
     if (duplicateRows.length > 0) {
@@ -51,18 +50,17 @@ export class EmailChannelsService {
 
     const randomHex = crypto.randomBytes(4).toString('hex');
     const inbound_address =
-      `${env.INBOUND_EMAIL_PREFIX}-${empresa_id}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
+      `${env.INBOUND_EMAIL_PREFIX}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
     const verification_token = crypto.randomBytes(16).toString('hex');
 
     const [result]: any = await pool.query(
-      'INSERT INTO empresa_email_canais (empresa_id, nome, email_publico, inbound_address, verification_token, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [empresa_id, nome || null, normalizedEmailPublico, inbound_address, verification_token, 'pendente']
+      'INSERT INTO email_channels (nome, email_publico, inbound_address, verification_token, status) VALUES (?, ?, ?, ?, ?)',
+      [nome || null, normalizedEmailPublico, inbound_address, verification_token, 'pendente']
     );
 
     await pool.query(
-      'INSERT INTO logs_sistema (empresa_id, acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO logs_sistema (acao, descricao, user_agent, ip) VALUES (?, ?, ?, ?)',
       [
-        empresa_id,
         'EMAIL_CHANNEL_CREATED',
         `Canal de e-mail criado: ${maskEmail(inbound_address)} referenciando ${maskEmail(normalizedEmailPublico)}`,
         'SYSTEM',
@@ -75,7 +73,7 @@ export class EmailChannelsService {
 
   async getByInboundAddress(address: string) {
     const [rows]: any = await pool.query(
-      'SELECT * FROM empresa_email_canais WHERE inbound_address = ? LIMIT 1',
+      'SELECT * FROM email_channels WHERE inbound_address = ? LIMIT 1',
       [address.toLowerCase()]
     );
     return rows.length > 0 ? rows[0] : null;
@@ -83,7 +81,7 @@ export class EmailChannelsService {
 
   async markVerified(channelId: number) {
     await pool.query(
-      'UPDATE empresa_email_canais SET status = ?, verified_at = NOW() WHERE id = ? AND status = ?',
+      'UPDATE email_channels SET status = ?, verified_at = NOW() WHERE id = ? AND status = ?',
       ['ativo', channelId, 'pendente']
     );
 
@@ -95,7 +93,7 @@ export class EmailChannelsService {
 
   async markError(channelId: number, errorMsg: string) {
     await pool.query(
-      'UPDATE empresa_email_canais SET status = ?, ultimo_erro = ? WHERE id = ?',
+      'UPDATE email_channels SET status = ?, ultimo_erro = ? WHERE id = ?',
       ['erro', errorMsg, channelId]
     );
 
@@ -107,29 +105,29 @@ export class EmailChannelsService {
 
   async touchReceived(channelId: number) {
     await pool.query(
-      'UPDATE empresa_email_canais SET last_received_at = NOW(), ultimo_erro = NULL WHERE id = ?',
+      'UPDATE email_channels SET last_received_at = NOW(), ultimo_erro = NULL WHERE id = ?',
       [channelId]
     );
 
     await pool.query(
-      'UPDATE empresa_email_canais SET status = ?, verified_at = NOW() WHERE id = ? AND (status = ? OR status = ?)',
+      'UPDATE email_channels SET status = ?, verified_at = NOW() WHERE id = ? AND (status = ? OR status = ?)',
       ['ativo', channelId, 'pendente', 'erro']
     );
   }
 
-  async deleteChannel(id: number, empresaId: number) {
-    await pool.query('DELETE FROM empresa_email_canais WHERE id = ? AND empresa_id = ?', [id, empresaId]);
+  async deleteChannel(id: number) {
+    await pool.query('DELETE FROM email_channels WHERE id = ?', [id]);
   }
 
-  async regenerate(id: number, empresaId: number) {
+  async regenerate(id: number) {
     const randomHex = crypto.randomBytes(4).toString('hex');
     const inbound_address =
-      `${env.INBOUND_EMAIL_PREFIX}-${empresaId}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
+      `${env.INBOUND_EMAIL_PREFIX}-${randomHex}@${env.INBOUND_EMAIL_DOMAIN}`.toLowerCase();
     const verification_token = crypto.randomBytes(16).toString('hex');
 
     await pool.query(
-      'UPDATE empresa_email_canais SET inbound_address = ?, verification_token = ?, status = ? WHERE id = ? AND empresa_id = ?',
-      [inbound_address, verification_token, 'pendente', id, empresaId]
+      'UPDATE email_channels SET inbound_address = ?, verification_token = ?, status = ? WHERE id = ?',
+      [inbound_address, verification_token, 'pendente', id]
     );
   }
 
@@ -139,7 +137,6 @@ export class EmailChannelsService {
    */
   async updateSmtpConfig(
     channelId: number,
-    empresaId: number,
     data: {
       smtp_enabled?: boolean;
       smtp_host?: string | null;
@@ -150,7 +147,7 @@ export class EmailChannelsService {
       password?: string | null; // senha em claro recebida (opcional)
     }
   ) {
-    const channel = await this.getByIdAndCompany(channelId, empresaId);
+    const channel = await this.getById(channelId);
     if (!channel) {
       throw new Error('Canal não encontrado.');
     }
@@ -193,14 +190,14 @@ export class EmailChannelsService {
       params.push(encryptSecret(data.password as string));
     }
 
-    params.push(channelId, empresaId);
+    params.push(channelId);
 
     await pool.query(
-      `UPDATE empresa_email_canais SET ${fields.join(', ')} WHERE id = ? AND empresa_id = ?`,
+      `UPDATE email_channels SET ${fields.join(', ')} WHERE id = ?`,
       params
     );
 
-    return this.getByIdAndCompany(channelId, empresaId);
+    return this.getById(channelId);
   }
 
   /**
@@ -208,7 +205,7 @@ export class EmailChannelsService {
    */
   async setSmtpStatus(channelId: number, status: 'configured' | 'verified' | 'error', error?: string | null) {
     await pool.query(
-      'UPDATE empresa_email_canais SET smtp_status = ?, smtp_last_error = ?, smtp_last_test_at = NOW() WHERE id = ?',
+      'UPDATE email_channels SET smtp_status = ?, smtp_last_error = ?, smtp_last_test_at = NOW() WHERE id = ?',
       [status, error ? String(error).slice(0, 1000) : null, channelId]
     );
   }

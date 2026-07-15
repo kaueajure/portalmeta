@@ -41,13 +41,13 @@ function isTicketStatusValidationError(message: string): boolean {
     || message.includes('Nenhum status ativo disponível');
 }
 
-async function ensureStatusTransitionPermission(res: any, currentUser: any, empresaId: number, oldStatus: unknown, newStatus: unknown) {
+async function ensureStatusTransitionPermission(res: any, currentUser: any, oldStatus: unknown, newStatus: unknown) {
   const oldValue = String(oldStatus || '');
   const newValue = String(newStatus || '');
   if (!newValue || oldValue === newValue) return null;
 
-  const oldStatusConfig = await getTicketStatusConfig(empresaId, oldValue);
-  const newStatusConfig = await getTicketStatusConfig(empresaId, newValue);
+  const oldStatusConfig = await getTicketStatusConfig(oldValue);
+  const newStatusConfig = await getTicketStatusConfig(newValue);
   const oldIsFinal = isFinalTicketStatusSpecial(oldStatusConfig?.especial);
   const newIsFinal = isFinalTicketStatusSpecial(newStatusConfig?.especial);
 
@@ -148,7 +148,6 @@ async function sendPublicAttachmentEmail(params: {
         m.mensagem,
         m.interno,
         t.id AS ticket_id,
-        t.empresa_id,
         t.usuario_id AS ticket_usuario_id,
         t.titulo,
         t.status,
@@ -186,7 +185,6 @@ async function sendPublicAttachmentEmail(params: {
   await emailOutboxService.enqueueTicketEmail({
     to: row.cliente_email,
     ticketId,
-    empresaId: row.empresa_id,
     emailChannelId: row.email_channel_id,
     type: 'agent_reply',
     title: row.titulo,
@@ -213,25 +211,14 @@ router.get('/options', requirePermission('tickets.visualizar'), async (req: Auth
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Nao autenticado', 401);
 
-    const empresaId = currentUser.desenvolvedor
-      ? toPositiveInt(req.query.empresa_id) || currentUser.empresa_id
-      : currentUser.empresa_id;
-
-    if (!empresaId) {
-      return sendSuccess(res, { empresa_id: null, categories: [], services: [] });
-    }
-
     const [categories]: any = await pool.query(
-      'SELECT id, nome, sigla, valor, ativo, ordem FROM empresa_ticket_categorias WHERE empresa_id = ? ORDER BY ordem ASC, id ASC',
-      [empresaId]
+      'SELECT id, nome, sigla, valor, ativo, ordem FROM ticket_categories ORDER BY ordem ASC, id ASC'
     );
     const [services]: any = await pool.query(
-      'SELECT id, nome, valor, ativo, ordem FROM empresa_ticket_servicos WHERE empresa_id = ? ORDER BY ordem ASC, id ASC',
-      [empresaId]
+      'SELECT id, nome, valor, ativo, ordem FROM ticket_services ORDER BY ordem ASC, id ASC'
     );
 
     sendSuccess(res, {
-      empresa_id: empresaId,
       categories,
       services
     });
@@ -268,16 +255,12 @@ router.delete('/cleanup-spam', requirePermission('sistema.executar_manutencao'),
       return sendError(res, 'Acesso proibido: manutencao critica e exclusiva para desenvolvedores.', 403);
     }
 
-    const empresaId = toPositiveInt(req.query.empresa_id ?? req.body?.empresa_id);
-    if (!empresaId) return sendError(res, 'empresa_id e obrigatorio para limpeza de spam.', 400);
-
-    const result = await ticketsService.cleanupSpam(empresaId);
+    const result = await ticketsService.cleanupSpam();
     await logSystemAction(
       req,
       currentUser.id,
-      empresaId,
       'TICKET_CLEANUP_SPAM',
-      `Executou limpeza de spam na empresa ID ${empresaId}: ${result.deletedCount} chamados removidos`
+      `Executou limpeza de spam: ${result.deletedCount} chamados removidos`
     );
     sendSuccess(res, result, 'Limpeza concluída');
   } catch (error: unknown) {
@@ -291,30 +274,15 @@ router.get('/', requirePermission('tickets.visualizar'), async (req: AuthRequest
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
-    const empresaIdFilter = currentUser.desenvolvedor 
-      ? toPositiveInt(req.query.empresa_id) 
-      : undefined;
-
-    if (currentUser.desenvolvedor && !empresaIdFilter) {
-      return sendSuccess(res, {
-        data: [],
-        meta: { page: 1, limit: 15, total: 0, totalPages: 1 },
-        summary: { total: 0, aberto: 0, em_andamento: 0, aguardando_cliente: 0, resolvido: 0, fechado: 0 },
-        queues: { todos: 0, meus: 0, sem_responsavel: 0, urgentes: 0, sla_vencido: 0, vence_em_breve: 0, aguardando_cliente: 0 }
-      });
-    }
-      
     const responsavelId = toPositiveInt(req.query.responsavel_id);
 
     const fila = parseTicketQueue(req.query.fila);
 
     const filters = {
-      empresa_id: currentUser.empresa_id,
       usuario_id: currentUser.id,
       is_dev: currentUser.desenvolvedor,
       is_admin: currentUser.administrador,
       responsavel_id: responsavelId,
-      empresa_id_filter: empresaIdFilter,
       fila,
       status: typeof req.query.status === 'string' && req.query.status !== 'todos' ? req.query.status : undefined,
       prioridade: typeof req.query.prioridade === 'string' && req.query.prioridade !== 'todas' ? req.query.prioridade : undefined,
@@ -349,25 +317,6 @@ router.get('/kanban', requirePermission('tickets.visualizar'), async (req: AuthR
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     
-    // Explicit validation for query parameters
-    const empresaIdFilter = currentUser.desenvolvedor
-      ? toPositiveInt(req.query.empresa_id)
-      : undefined;
-
-    if (currentUser.desenvolvedor && !empresaIdFilter) {
-      return sendSuccess(res, {
-        columns: [
-          { id: 'aberto', title: 'Aberto', count: 0, tickets: [] },
-          { id: 'em_andamento', title: 'Em andamento', count: 0, tickets: [] },
-          { id: 'aguardando_cliente', title: 'Aguardando resposta', count: 0, tickets: [] },
-          { id: 'resolvido', title: 'Finalizado', count: 0, tickets: [] },
-          { id: 'fechado', title: 'Fechado', count: 0, tickets: [] }
-        ],
-        totals: { total: 0, aberto: 0, em_andamento: 0, aguardando_cliente: 0, resolvido: 0, fechado: 0 },
-        queues: { todos: 0, meus: 0, sem_responsavel: 0, urgentes: 0, sla_vencido: 0, vence_em_breve: 0, aguardando_cliente: 0 }
-      });
-    }
-
     const responsavelId = toPositiveInt(req.query.responsavel_id);
 
     const validPriorities = ['baixa', 'media', 'alta', 'urgente', 'todas'];
@@ -391,12 +340,10 @@ router.get('/kanban', requirePermission('tickets.visualizar'), async (req: AuthR
     const fila = parseTicketQueue(req.query.fila);
 
     const filters = {
-      empresa_id: currentUser.empresa_id,
       usuario_id: currentUser.id,
       is_dev: currentUser.desenvolvedor,
       is_admin: currentUser.administrador,
       responsavel_id: responsavelId,
-      empresa_id_filter: empresaIdFilter,
       search: typeof req.query.search === 'string' ? req.query.search.trim() : undefined,
       status,
       prioridade,
@@ -464,7 +411,6 @@ router.patch('/bulk', async (req: AuthRequest, res) => {
     await logSystemAction(
       req, 
       currentUser.id, 
-      currentUser.empresa_id, 
       'TICKET_BULK_ACTION', 
       `Ação em massa (${action}) processada para ${result.updated} chamados (${result.skipped} ignorados)`
     );
@@ -482,15 +428,7 @@ router.get('/views', requirePermission('tickets.visualizar'), async (req: AuthRe
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
     
-    let targetEmpresaId = currentUser.empresa_id || 0;
-    
-    if (currentUser.desenvolvedor) {
-      const queryEmpresaId = toPositiveInt(req.query.empresa_id);
-      if (!queryEmpresaId) return sendSuccess(res, []);
-      targetEmpresaId = queryEmpresaId;
-    }
-    
-    const views = await ticketsService.getViews(currentUser.id, targetEmpresaId);
+    const views = await ticketsService.getViews(currentUser.id);
     sendSuccess(res, views);
   } catch (error: unknown) {
     sendError(res, 'Erro ao carregar views salvas');
@@ -507,23 +445,7 @@ router.post('/views', requirePermission('tickets.visualizar'), async (req: AuthR
     if (nome.length > 100) return sendError(res, 'Nome da view muito longo (máx 100 caracteres)', 400);
     if (!filtros_json || typeof filtros_json !== 'object') return sendError(res, 'Filtros inválidos', 400);
 
-    let targetEmpresaId = currentUser.empresa_id;
-    
-    if (currentUser.desenvolvedor) {
-      const bodyEmpresaId = toPositiveInt(req.body.empresa_id);
-      if (!bodyEmpresaId) return sendError(res, 'Selecione uma empresa antes de salvar uma view.', 400);
-      targetEmpresaId = bodyEmpresaId;
-    } else {
-      // For non-devs, always use their own company
-      if (req.body.empresa_id && Number(req.body.empresa_id) !== currentUser.empresa_id) {
-        return sendError(res, 'Você só pode salvar views para sua própria empresa', 403);
-      }
-    }
-
-    if (!targetEmpresaId) return sendError(res, 'Empresa inválida', 400);
-
     const viewId = await ticketsService.createView({
-      empresa_id: targetEmpresaId,
       usuario_id: currentUser.id,
       nome,
       filtros_json
@@ -572,7 +494,7 @@ router.patch('/:id/resolve', async (req: AuthRequest, res) => {
     if (!ticket) return sendError(res, 'Chamado não encontrado', 404);
     if (ticket.error === 'forbidden') return sendError(res, 'Permissão negada', 403);
 
-    const targetStatusConfig = await getTicketStatusConfig(ticket.empresa_id, status);
+    const targetStatusConfig = await getTicketStatusConfig(status);
     if (!targetStatusConfig || targetStatusConfig.ativo !== 1 || !isFinalTicketStatusSpecial(targetStatusConfig.especial)) {
       return sendError(res, 'Status inválido para resolução', 400);
     }
@@ -584,7 +506,7 @@ router.patch('/:id/resolve', async (req: AuthRequest, res) => {
     }
 
     await ticketsService.resolveTicket(id, req.body, currentUser);
-    await logSystemAction(req, currentUser.id, ticket.empresa_id, 'TICKET_COMPLETE', `Chamado #${id} marcado como ${req.body.status} (Motivo: ${req.body.resolucao_motivo})`);
+    await logSystemAction(req, currentUser.id, 'TICKET_COMPLETE', `Chamado #${id} marcado como ${req.body.status} (Motivo: ${req.body.resolucao_motivo})`);
     
     sendSuccess(res, null, `Chamado ${targetStatusConfig.nome} com sucesso`);
   } catch (error: unknown) {
@@ -609,7 +531,7 @@ router.patch('/:id/reopen', async (req: AuthRequest, res) => {
     if (ticket.error === 'forbidden') return sendError(res, 'Permissão negada', 403);
 
     await ticketsService.reopenTicket(id, currentUser);
-    await logSystemAction(req, currentUser.id, ticket.empresa_id, 'TICKET_REOPEN', `Chamado #${id} reaberto para suporte`);
+    await logSystemAction(req, currentUser.id, 'TICKET_REOPEN', `Chamado #${id} reaberto para suporte`);
     
     sendSuccess(res, null, 'Chamado reaberto com sucesso');
   } catch (error: unknown) {
@@ -654,27 +576,12 @@ router.post('/', requirePermission('tickets.criar'), async (req: AuthRequest, re
     if (!prioridade) prioridade = 'media';
     if (!categoria) categoria = 'suporte_tecnico';
 
-    const targetEmpresaId = req.body.empresa_id && currentUser.desenvolvedor
-      ? Number(req.body.empresa_id)
-      : currentUser.empresa_id;
-
-    if (!targetEmpresaId) {
-       return sendError(res, 'Sua conta não possui empresa vinculada para abrir chamado.', 400);
-    }
-
-    // Check if empresa exists and is active
-    const [empresaRows]: any = await pool.query('SELECT ativo FROM empresas WHERE id = ?', [targetEmpresaId]);
-    if (empresaRows.length === 0 || Number(empresaRows[0].ativo) !== 1) {
-       return sendError(res, 'Empresa inválida ou inativa.', 400);
-    }
-
     const ticketId = await ticketsService.create({
-      empresa_id: targetEmpresaId,
       usuario_id: currentUser.id,
       titulo, descricao, prioridade, categoria, servico
     });
 
-    await logSystemAction(req, currentUser.id, targetEmpresaId, 'TICKET_CREATE', `Novo chamado criado: #${ticketId}`);
+    await logSystemAction(req, currentUser.id, 'TICKET_CREATE', `Novo chamado criado: #${ticketId}`);
     
     try {
       const fullTicket = await ticketsService.getByIdForUser(ticketId, currentUser);
@@ -713,12 +620,12 @@ router.patch('/:id/status', async (req: AuthRequest, res) => {
         return sendError(res, 'Voce nao tem permissao para alterar status.', 403);
     }
 
-    const transitionDenied = await ensureStatusTransitionPermission(res, currentUser, ticket.empresa_id, ticket.status, status);
+    const transitionDenied = await ensureStatusTransitionPermission(res, currentUser, ticket.status, status);
     if (transitionDenied) return transitionDenied;
 
     const updateResult = await ticketsService.updateStatus(id, status, currentUser.id, req);
     if (updateResult && updateResult.oldStatus !== updateResult.newStatus) {
-       await logSystemAction(req, currentUser.id, updateResult.empresa_id, 'TICKET_STATUS_CHANGE', `Status do chamado #${id} alterado de ${updateResult.oldStatus} para ${updateResult.newStatus}`);
+       await logSystemAction(req, currentUser.id, 'TICKET_STATUS_CHANGE', `Status do chamado #${id} alterado de ${updateResult.oldStatus} para ${updateResult.newStatus}`);
        
        try {
          const fullTicket = await ticketsService.getByIdForUser(id, currentUser);
@@ -785,7 +692,7 @@ router.patch('/:id', async (req: AuthRequest, res) => {
       );
       if (denied) return denied;
 
-      const transitionDenied = await ensureStatusTransitionPermission(res, currentUser, ticket.empresa_id, ticket.status, req.body.status);
+      const transitionDenied = await ensureStatusTransitionPermission(res, currentUser, ticket.status, req.body.status);
       if (transitionDenied) return transitionDenied;
     }
 
@@ -877,22 +784,15 @@ router.patch('/:id', async (req: AuthRequest, res) => {
       
       const newRespId = toPositiveInt(req.body.responsavel_id);
       if (newRespId) {
-        const [respUser]: any = await pool.query('SELECT empresa_id FROM usuarios WHERE id = ?', [newRespId]);
+        const [respUser]: any = await pool.query('SELECT id FROM usuarios WHERE id = ? AND ativo = 1', [newRespId]);
         if (!respUser[0]) return sendError(res, 'Usuário responsável não encontrado', 404);
-        if (respUser[0].empresa_id !== ticket.empresa_id && !currentUser.desenvolvedor) {
-           return sendError(res, 'O responsável deve pertencer à mesma empresa do chamado', 400);
-        }
-        if (respUser[0].empresa_id !== ticket.empresa_id && currentUser.desenvolvedor) {
-           // Even devs shouldn't cross-assign
-           return sendError(res, 'O responsável deve pertencer à mesma empresa do chamado, mesmo sendo desenvolvedor', 400);
-        }
       }
     }
 
     if (req.body.status && req.body.status !== ticket.status) {
        const updateResult = await ticketsService.updateStatus(id, req.body.status, currentUser.id, req);
        if (updateResult && updateResult.oldStatus !== updateResult.newStatus) {
-         await logSystemAction(req, currentUser.id, ticket.empresa_id, 'TICKET_STATUS_CHANGE', `Status do chamado #${id} alterado de ${updateResult.oldStatus} para ${updateResult.newStatus}`);
+         await logSystemAction(req, currentUser.id, 'TICKET_STATUS_CHANGE', `Status do chamado #${id} alterado de ${updateResult.oldStatus} para ${updateResult.newStatus}`);
        }
     }
     
@@ -912,10 +812,10 @@ router.patch('/:id', async (req: AuthRequest, res) => {
     // Since status logs itself, we only log here if other fields materially changed
     if (descriptions.length > 0) {
       const logMsg = `Atualizou chamado #${id}: ${descriptions.join(', ')}`;
-      await logSystemAction(req, currentUser.id, ticket.empresa_id, 'TICKET_UPDATE', logMsg);
+      await logSystemAction(req, currentUser.id, 'TICKET_UPDATE', logMsg);
     } else if (Object.keys(req.body).length > 0 && !Object.keys(req.body).every(k => k === 'status')) {
       const logMsg = `Atualizou detalhes do chamado #${id}`;
-      await logSystemAction(req, currentUser.id, ticket.empresa_id, 'TICKET_UPDATE', logMsg);
+      await logSystemAction(req, currentUser.id, 'TICKET_UPDATE', logMsg);
     }
     
     try {
@@ -1064,9 +964,7 @@ router.post('/:id/messages', async (req: AuthRequest, res) => {
       suppressEmailNotification
     }, currentUser);
 
-    const empresaId = ticketResult.empresa_id || currentUser.empresa_id;
-
-    await logSystemAction(req, currentUser.id, empresaId, 'MESSAGE_SEND', `Nova mensagem no chamado #${id}`);
+    await logSystemAction(req, currentUser.id, 'MESSAGE_SEND', `Nova mensagem no chamado #${id}`);
     
     sendSuccess(res, { id: messageId }, 'Mensagem enviada');
   } catch (error: unknown) {
@@ -1172,7 +1070,6 @@ router.post('/:id/attachments', ticketUpload.array('files', 5), async (req: Auth
         ticket_id: id,
         mensagem_id: mensagem_id ? parseInt(mensagem_id) : null,
         usuario_id: currentUser.id,
-        empresa_id: ticket.empresa_id,
         nome_original: file.originalname,
         nome_arquivo: file.filename,
         caminho: file.path,
@@ -1190,7 +1087,7 @@ router.post('/:id/attachments', ticketUpload.array('files', 5), async (req: Auth
       };
     }));
 
-    await logSystemAction(req, currentUser.id, ticket.empresa_id, 'ATTACHMENT_UPLOAD', `Anexo(s) enviado(s) para o chamado #${id}`);
+    await logSystemAction(req, currentUser.id, 'ATTACHMENT_UPLOAD', `Anexo(s) enviado(s) para o chamado #${id}`);
 
     if (!isInternal && mensagem_id) {
       try {
@@ -1204,7 +1101,6 @@ router.post('/:id/attachments', ticketUpload.array('files', 5), async (req: Auth
         console.error('[TicketsRoutes] Falha ao enviar anexos por e-mail:', mailErr);
         await recordTicketEvent({
           ticket_id: id,
-          empresa_id: ticket.empresa_id,
           usuario_id: currentUser.id,
           tipo: 'email_outbox_erro',
           descricao: 'O anexo foi registrado, mas o e-mail nao pode ser enfileirado.',
@@ -1217,8 +1113,7 @@ router.post('/:id/attachments', ticketUpload.array('files', 5), async (req: Auth
     const io = req.app.get('io');
     if (io) {
       io.to('instance').emit('ticketMessagesChanged', {
-        ticketId: id,
-        empresaId: ticket.empresa_id
+        ticketId: id
       });
     }
 
@@ -1251,7 +1146,6 @@ router.delete('/:id', requirePermission('tickets.excluir'), async (req: AuthRequ
     await logSystemAction(
       req,
       currentUser.id,
-      ticketResult.empresa_id,
       'TICKET_DELETE',
       `Chamado #${id} excluído: ${ticketResult.titulo || 'Sem título'}`
     );
@@ -1259,8 +1153,7 @@ router.delete('/:id', requirePermission('tickets.excluir'), async (req: AuthRequ
     const io = req.app.get('io');
     if (io) {
       io.to('instance').emit('ticketDeleted', {
-        ticketId: id,
-        empresaId: ticketResult.empresa_id
+        ticketId: id
       });
     }
 
@@ -1304,7 +1197,7 @@ router.post('/:id/tags', requirePermission('tickets.gerenciar_tags'), async (req
     if (result.error === 'forbidden') return sendError(res, 'Permissão negada', 403);
 
     await ticketsService.addTag(id, tag);
-    await logSystemAction(req, currentUser.id, result.empresa_id, 'TICKET_TAG_ADD', `Tag "${tag}" adicionada ao chamado #${id}`);
+    await logSystemAction(req, currentUser.id, 'TICKET_TAG_ADD', `Tag "${tag}" adicionada ao chamado #${id}`);
     sendSuccess(res, null, 'Tag adicionada');
   } catch (error: unknown) {
     sendError(res, 'Erro ao adicionar tag');
@@ -1325,7 +1218,7 @@ router.put('/:id/tags', requirePermission('tickets.gerenciar_tags'), async (req:
     if (result.error === 'forbidden') return sendError(res, 'Permissão negada', 403);
 
     await ticketsService.setTags(id, tags);
-    await logSystemAction(req, currentUser.id, result.empresa_id, 'TICKET_TAGS_UPDATE', `Tags do chamado #${id} atualizadas: ${tags.join(', ')}`);
+    await logSystemAction(req, currentUser.id, 'TICKET_TAGS_UPDATE', `Tags do chamado #${id} atualizadas: ${tags.join(', ')}`);
     sendSuccess(res, null, 'Tags atualizadas');
   } catch (error: unknown) {
     sendError(res, 'Erro ao atualizar tags');
@@ -1345,7 +1238,7 @@ router.delete('/:id/tags/:tag', requirePermission('tickets.gerenciar_tags'), asy
     if (result.error === 'forbidden') return sendError(res, 'Permissão negada', 403);
 
     await ticketsService.removeTag(id, tag);
-    await logSystemAction(req, currentUser.id, result.empresa_id, 'TICKET_TAG_REMOVE', `Tag "${tag}" removida do chamado #${id}`);
+    await logSystemAction(req, currentUser.id, 'TICKET_TAG_REMOVE', `Tag "${tag}" removida do chamado #${id}`);
     sendSuccess(res, null, 'Tag removida');
   } catch (error: unknown) {
     sendError(res, 'Erro ao remover tag');
@@ -1384,7 +1277,7 @@ router.put('/:id/custom-fields', requirePermission('tickets.editar'), async (req
     if (result.error === 'forbidden') return sendError(res, 'Permissão negada', 403);
 
     await ticketsService.setCustomFields(id, fields);
-    await logSystemAction(req, currentUser.id, result.empresa_id, 'TICKET_CUSTOM_FIELDS_UPDATE', `Campos personalizados do chamado #${id} atualizados`);
+    await logSystemAction(req, currentUser.id, 'TICKET_CUSTOM_FIELDS_UPDATE', `Campos personalizados do chamado #${id} atualizados`);
     sendSuccess(res, null, 'Campos personalizados atualizados');
   } catch (error: unknown) {
     sendError(res, 'Erro ao atualizar campos personalizados');

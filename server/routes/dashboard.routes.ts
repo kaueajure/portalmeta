@@ -84,28 +84,13 @@ router.get('/summary', requirePermission('dashboard.visualizar'), async (req: Au
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
-    const isDev = Boolean(currentUser.desenvolvedor);
-    const empresaId = currentUser.empresa_id;
-    const queryEmpresaId = toPositiveInt(req.query.empresa_id);
     const responsavelId = toPositiveInt(req.query.responsavel_id);
     const { period, start, end } = resolvePeriod(req.query);
     const startSql = toSqlDateTime(start);
     const endSql = toSqlDateTime(end);
 
-    let targetEmpresaId: number | null = null;
-
-    if (isDev) {
-      targetEmpresaId = queryEmpresaId || null;
-    } else {
-      if (!empresaId) return sendError(res, 'Empresa inválida para o usuário atual.', 403);
-      if (queryEmpresaId && Number(queryEmpresaId) !== Number(empresaId)) {
-        return sendError(res, 'Você não pode visualizar métricas de outra empresa.', 403);
-      }
-      targetEmpresaId = Number(empresaId);
-    }
-
     const canFilterAllResponsaveis =
-      isDev ||
+      Boolean(currentUser.desenvolvedor) ||
       Boolean(currentUser.administrador) ||
       await permissionsService.hasPermission(currentUser, 'relatorios.ver_todos_usuarios');
 
@@ -114,16 +99,9 @@ router.get('/summary', requirePermission('dashboard.visualizar'), async (req: Au
     }
 
     if (responsavelId) {
-      const responsibleParams: unknown[] = [responsavelId];
-      let responsibleWhere = 'id = ? AND ativo = 1';
-      if (targetEmpresaId) {
-        responsibleWhere += ' AND empresa_id = ?';
-        responsibleParams.push(targetEmpresaId);
-      }
-
       const [responsibleRows]: any = await pool.query(
-        `SELECT id FROM usuarios WHERE ${responsibleWhere} LIMIT 1`,
-        responsibleParams,
+        'SELECT id FROM usuarios WHERE id = ? AND ativo = 1 LIMIT 1',
+        [responsavelId],
       );
 
       if (responsibleRows.length === 0) {
@@ -135,11 +113,6 @@ router.get('/summary', requirePermission('dashboard.visualizar'), async (req: Au
     const ticketScopeParams: unknown[] = [];
 
     ticketScope.push('t.deleted_at IS NULL');
-
-    if (targetEmpresaId) {
-      ticketScope.push('t.empresa_id = ?');
-      ticketScopeParams.push(targetEmpresaId);
-    }
 
     if (responsavelId) {
       ticketScope.push('t.responsavel_id = ?');
@@ -177,21 +150,8 @@ router.get('/summary', requirePermission('dashboard.visualizar'), async (req: Au
       ]
     );
 
-    let totalEmpresas = 0;
-    if (isDev) {
-      const [empresasResult]: any = targetEmpresaId
-        ? await pool.query('SELECT COUNT(*) as count FROM empresas WHERE ativo = 1 AND id = ?', [targetEmpresaId])
-        : await pool.query('SELECT COUNT(*) as count FROM empresas WHERE ativo = 1');
-      totalEmpresas = Number(empresasResult[0]?.count || 0);
-    }
-
-    const usuarioScopeParams: unknown[] = [];
-    const usuarioCompanyFilter = targetEmpresaId ? 'AND empresa_id = ?' : '';
-    if (targetEmpresaId) usuarioScopeParams.push(targetEmpresaId);
-
     const [usuariosResult]: any = await pool.query(
-      `SELECT COUNT(*) as count FROM usuarios WHERE ativo = 1 ${usuarioCompanyFilter}`,
-      usuarioScopeParams
+      'SELECT COUNT(*) as count FROM usuarios WHERE ativo = 1'
     );
 
     const [recentTickets]: any = await pool.query(
@@ -211,12 +171,10 @@ router.get('/summary', requirePermission('dashboard.visualizar'), async (req: Au
           t.sla_primeira_resposta_status,
           t.responsavel_id,
           u.nome as cliente_nome,
-          r.nome as responsavel_nome,
-          e.nome as empresa_nome
+          r.nome as responsavel_nome
         FROM tickets t
         LEFT JOIN usuarios u ON t.usuario_id = u.id
         LEFT JOIN usuarios r ON t.responsavel_id = r.id
-        LEFT JOIN empresas e ON t.empresa_id = e.id
         WHERE 1=1 ${ticketScopeWhere}
           AND ${periodCondition}
         ORDER BY t.created_at DESC, t.id DESC
@@ -288,7 +246,6 @@ router.get('/summary', requirePermission('dashboard.visualizar'), async (req: Au
     sendSuccess(res, {
       chamadosAtivos: Number(ticketMetrics.chamadosAtivos || 0),
       resolvidosMes: Number(ticketMetrics.resolvidosMes || 0),
-      totalEmpresas,
       totalUsuarios: Number(usuariosResult[0]?.count || 0),
       slaAtrasados: Number(ticketMetrics.slaAtrasados || 0),
       vencendoHoje: Number(ticketMetrics.vencendoHoje || 0),
@@ -307,7 +264,6 @@ router.get('/summary', requirePermission('dashboard.visualizar'), async (req: Au
         period,
         from: toDateInputValue(start),
         to: toDateInputValue(end),
-        empresa_id: targetEmpresaId,
         responsavel_id: responsavelId || null,
       },
     });

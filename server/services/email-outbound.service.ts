@@ -5,7 +5,6 @@ import { decryptSecret } from '../utils/crypto.js';
 import { env } from '../config/env.js';
 
 export interface TicketOutboundParams extends TicketEmailParams {
-  empresaId: number;
   emailChannelId?: number | null;
 }
 
@@ -22,33 +21,27 @@ function sanitizeFromName(name: string): string {
   return String(name || '').replace(/[\r\n"<>]/g, ' ').trim().slice(0, 120) || 'Atendimento';
 }
 
-async function getCompanyTicketEmailIdentity(empresaId: number): Promise<{
+async function getTicketEmailIdentity(): Promise<{
   companyName?: string;
   emailSignature?: string;
 }> {
   try {
     const [rows]: any = await pool.query(
-      'SELECT nome, email_assinatura FROM empresas WHERE id = ?',
-      [empresaId]
+      'SELECT nome, email_assinatura FROM application_settings WHERE id = 1'
     );
-    const company = rows[0];
+    const settings = rows[0];
     return {
-      companyName: company?.nome,
-      emailSignature: company?.email_assinatura,
+      companyName: settings?.nome,
+      emailSignature: settings?.email_assinatura,
     };
   } catch (err: any) {
     if (err?.code !== 'ER_BAD_FIELD_ERROR') throw err;
-
-    const [rows]: any = await pool.query(
-      'SELECT nome FROM empresas WHERE id = ?',
-      [empresaId]
-    );
+    const [rows]: any = await pool.query('SELECT nome FROM application_settings WHERE id = 1');
     return { companyName: rows[0]?.nome };
   }
 }
 
 export async function trackTicketEmailMessageIds(
-  empresaId: number,
   ticketId: number,
   outboundMessageId: string,
   result: TicketEmailSendResult
@@ -64,8 +57,8 @@ export async function trackTicketEmailMessageIds(
   for (const idToTrack of new Set(idsToTrack)) {
     try {
       await pool.query(
-        'INSERT IGNORE INTO processed_emails (message_id, empresa_id, ticket_id) VALUES (?, ?, ?)',
-        [idToTrack.trim(), empresaId, ticketId]
+        'INSERT IGNORE INTO processed_emails (message_id, ticket_id) VALUES (?, ?)',
+        [idToTrack.trim(), ticketId]
       );
     } catch (dbErr: any) {
       console.error('[EmailOutbound] Error storing tracked message ID:', dbErr);
@@ -76,7 +69,7 @@ export async function trackTicketEmailMessageIds(
 class EmailOutboundService {
   async sendTicketEmail(params: TicketOutboundParams): Promise<TicketEmailSendResult> {
     const msgId = params.messageId || `<ticket-${params.ticketId}-${Date.now()}@portalmeta.com.br>`;
-    const emailIdentity = await getCompanyTicketEmailIdentity(params.empresaId);
+    const emailIdentity = await getTicketEmailIdentity();
     const ticketEmailParams: TicketOutboundParams = {
       ...params,
       companyName: params.companyName || emailIdentity.companyName,
@@ -85,13 +78,10 @@ class EmailOutboundService {
 
     let channel: any = null;
     if (params.emailChannelId) {
-      channel = await emailChannelsService.getByIdAndCompany(
-        params.emailChannelId,
-        params.empresaId
-      );
+      channel = await emailChannelsService.getById(params.emailChannelId);
     }
 
-    // CAMINHO PRINCIPAL: SMTP do canal (identidade da empresa).
+    // CAMINHO PRINCIPAL: SMTP do canal (identidade da instância).
     if (channel && emailChannelsService.isChannelSmtpReady(channel)) {
       try {
         const pass = decryptSecret(channel.smtp_pass_enc);
@@ -136,7 +126,7 @@ class EmailOutboundService {
       // Canal sem SMTP configurado: NÃO enviar como Portal Meta para o cliente final.
       return {
         success: false,
-        error: 'Canal de envio não configurado: configure o SMTP do canal para responder ao cliente por e-mail com a identidade da empresa.'
+        error: 'Canal de envio não configurado: configure o SMTP do canal para responder ao cliente por e-mail com a identidade da instância.'
       };
     }
 

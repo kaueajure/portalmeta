@@ -79,7 +79,6 @@ router.get('/', async (req, res) => {
             ...profile,
             permissions,
             isSuperUser,
-            isTenantAdmin: !!profile.administrador && !profile.desenvolvedor
         });
     }
     catch (error) {
@@ -103,7 +102,7 @@ router.patch('/', async (req, res) => {
             return sendError(res, 'Nenhum dado valido para atualizacao');
         }
         await usersService.update(currentUser.id, safeData);
-        await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'PROFILE_UPDATE', 'Usuario atualizou o proprio perfil');
+        await logSystemAction(req, currentUser.id, 'PROFILE_UPDATE', 'Usuario atualizou o proprio perfil');
         sendSuccess(res, null, 'Perfil atualizado com sucesso');
     }
     catch (error) {
@@ -147,7 +146,7 @@ router.post('/photo', profilePhotoUpload.single('foto'), async (req, res) => {
             }
         }
         await usersService.update(currentUser.id, { foto });
-        await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'PROFILE_UPDATE', 'Usuario atualizou a foto do perfil');
+        await logSystemAction(req, currentUser.id, 'PROFILE_UPDATE', 'Usuario atualizou a foto do perfil');
         sendSuccess(res, { foto }, 'Foto de perfil atualizada com sucesso');
     }
     catch (error) {
@@ -171,7 +170,7 @@ router.patch('/password', async (req, res) => {
             return sendError(res, 'A confirmacao de senha nao confere');
         }
         await usersService.updatePassword(currentUser.id, currentPassword, newPassword);
-        await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'PASSWORD_CHANGE', 'Usuario alterou a senha');
+        await logSystemAction(req, currentUser.id, 'PASSWORD_CHANGE', 'Usuario alterou a senha');
         sendSuccess(res, null, 'Senha alterada com sucesso');
     }
     catch (error) {

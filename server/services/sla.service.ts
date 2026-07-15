@@ -67,7 +67,6 @@ class SlaService {
 
     await recordTicketEvent({
       ticket_id: ticketId,
-      empresa_id: ticket.empresa_id,
       usuario_id: usuarioId,
       tipo: 'sla_pausado',
       descricao: 'SLA pausado enquanto aguarda resposta do cliente'
@@ -81,9 +80,8 @@ class SlaService {
     const [rows]: any = await pool.query(
       `SELECT t.*, status_cfg.especial as status_especial
        FROM tickets t
-       LEFT JOIN empresa_ticket_status status_cfg
-         ON status_cfg.empresa_id = t.empresa_id
-        AND status_cfg.valor = t.status
+       LEFT JOIN ticket_statuses status_cfg
+         ON status_cfg.valor = t.status
        WHERE t.id = ? AND t.deleted_at IS NULL`,
       [ticketId]
     );
@@ -120,7 +118,6 @@ class SlaService {
 
     await recordTicketEvent({
       ticket_id: ticketId,
-      empresa_id: ticket.empresa_id,
       usuario_id: usuarioId,
       tipo: 'sla_retomado',
       descricao: `SLA retomado após resposta do cliente (${diffMins} minutos pausados nesta etapa)`
@@ -134,9 +131,8 @@ class SlaService {
     const [rows]: any = await pool.query(
       `SELECT t.*, status_cfg.especial as status_especial
        FROM tickets t
-       LEFT JOIN empresa_ticket_status status_cfg
-         ON status_cfg.empresa_id = t.empresa_id
-        AND status_cfg.valor = t.status
+       LEFT JOIN ticket_statuses status_cfg
+         ON status_cfg.valor = t.status
        WHERE t.id = ? AND t.deleted_at IS NULL`,
       [ticketId]
     );

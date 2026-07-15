@@ -40,7 +40,7 @@ router.post('/login', authLimiter, async (req, res, next) => {
             maxAge: 8 * 60 * 60 * 1000, // 8 hours (shorter, more secure)
             path: '/'
         });
-        await logSystemAction(req, data.user.id, data.user.empresa_id, 'LOGIN', 'Usuário realizou login com sucesso');
+        await logSystemAction(req, data.user.id, 'LOGIN', 'Usuário realizou login com sucesso');
         sendSuccess(res, { user: data.user }, 'Login realizado com sucesso');
     }
     catch (error) {

@@ -10,45 +10,7 @@ const SECRET = env.JWT_SECRET;
 
 class AuthService {
   async login(email: string, password: string) {
-    let rows: any[] = [];
-    try {
-      const [result]: any = await pool.query(
-        `SELECT u.*, 
-              e.nome as empresa_nome,
-              e.email as empresa_email,
-              e.telefone as empresa_telefone,
-              e.cnpj as empresa_cnpj,
-              e.logo as empresa_logo,
-              e.cor_principal as empresa_cor_principal,
-              e.endereco as empresa_endereco,
-              e.email_assinatura as empresa_email_assinatura,
-              e.ativo as empresa_ativa 
-       FROM usuarios u 
-       LEFT JOIN empresas e ON u.empresa_id = e.id 
-       WHERE u.email = ?`,
-        [email]
-      );
-      rows = result;
-    } catch (err: any) {
-      if (err?.code !== 'ER_BAD_FIELD_ERROR') throw err;
-
-      const [result]: any = await pool.query(
-        `SELECT u.*, 
-              e.nome as empresa_nome,
-              e.email as empresa_email,
-              e.telefone as empresa_telefone,
-              e.cnpj as empresa_cnpj,
-              e.logo as empresa_logo,
-              e.cor_principal as empresa_cor_principal,
-              e.endereco as empresa_endereco,
-              e.ativo as empresa_ativa 
-       FROM usuarios u 
-       LEFT JOIN empresas e ON u.empresa_id = e.id 
-       WHERE u.email = ?`,
-        [email]
-      );
-      rows = result;
-    }
+    const [rows]: any = await pool.query('SELECT * FROM usuarios WHERE email = ?', [email]);
 
     if (rows.length === 0) {
       throw new Error('E-mail ou senha incorretos');
@@ -65,15 +27,10 @@ class AuthService {
       throw new Error('Sua conta foi desativada. Entre em contato com o administrador.');
     }
 
-    if (user.empresa_id && !user.empresa_ativa) {
-      throw new Error('Acesso bloqueado: Sua empresa está inativa no sistema.');
-    }
-
     await pool.query('UPDATE usuarios SET ultimo_login = NOW() WHERE id = ?', [user.id]);
 
     const payload = {
       id: user.id,
-      empresa_id: user.empresa_id,
       nome: user.nome,
       email: user.email,
       administrador: !!user.administrador,

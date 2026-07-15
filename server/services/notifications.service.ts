@@ -3,7 +3,6 @@ import pool from '../db/connection.js';
 
 export interface CreateNotificationData {
   usuario_id: number;
-  empresa_id?: number | null;
   tipo: string;
   titulo: string;
   mensagem?: string | null;
@@ -14,7 +13,6 @@ export interface CreateNotificationData {
 interface NotificationRow extends RowDataPacket {
   id: number;
   usuario_id: number;
-  empresa_id: number | null;
   tipo: string;
   titulo: string;
   mensagem: string | null;
@@ -28,10 +26,9 @@ interface NotificationRow extends RowDataPacket {
 class NotificationsService {
   async create(data: CreateNotificationData) {
     const [result] = await pool.query<ResultSetHeader>(
-      'INSERT INTO notificacoes (usuario_id, empresa_id, tipo, titulo, mensagem, link, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO notificacoes (usuario_id, tipo, titulo, mensagem, link, metadata) VALUES (?, ?, ?, ?, ?, ?)',
       [
         data.usuario_id, 
-        data.empresa_id || null, 
         data.tipo, 
         data.titulo, 
         data.mensagem || null, 
@@ -47,7 +44,6 @@ class NotificationsService {
 
     const values = userIds.map(userId => [
       userId,
-      data.empresa_id || null,
       data.tipo,
       data.titulo,
       data.mensagem || null,
@@ -56,7 +52,7 @@ class NotificationsService {
     ]);
 
     await pool.query<ResultSetHeader>(
-      'INSERT INTO notificacoes (usuario_id, empresa_id, tipo, titulo, mensagem, link, metadata) VALUES ?',
+      'INSERT INTO notificacoes (usuario_id, tipo, titulo, mensagem, link, metadata) VALUES ?',
       [values]
     );
   }

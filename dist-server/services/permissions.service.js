@@ -4,8 +4,7 @@ import { isDeveloperUser } from '../utils/user-scope.js';
 const userPermissionsCache = new Map();
 export function isGlobalOnlyPermission(permissionKey) {
     return (permissionKey === '*' ||
-        permissionKey === 'sistema.developer' ||
-        permissionKey.startsWith('telas.'));
+        permissionKey === 'sistema.developer');
 }
 export function filterGlobalPermissionsForUser(user, permissionKeys) {
     if (isDeveloperUser(user))
@@ -327,7 +326,7 @@ export const permissionsService = {
         }
     },
     async getUserPermissionMatrix(usuarioId) {
-        const [userRows] = await pool.query(`SELECT u.id, u.nome, u.email, u.perfil, u.administrador, u.desenvolvedor, u.empresa_id, u.access_profile_id, ap.nome as access_profile_nome
+        const [userRows] = await pool.query(`SELECT u.id, u.nome, u.email, u.perfil, u.administrador, u.desenvolvedor, u.access_profile_id, ap.nome as access_profile_nome
        FROM usuarios u
        LEFT JOIN access_profiles ap ON ap.id = u.access_profile_id
        WHERE u.id = ?`, [usuarioId]);
@@ -350,7 +349,6 @@ export const permissionsService = {
                 perfil: user.perfil,
                 administrador: !!user.administrador,
                 desenvolvedor: !!user.desenvolvedor,
-                empresa_id: user.empresa_id,
                 access_profile_id: accessProfileId,
                 access_profile_nome: user.access_profile_nome || null,
             },

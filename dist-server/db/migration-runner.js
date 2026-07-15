@@ -4,6 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const LOCK_TIMEOUT_MINUTES = 15;
+export function migrationKey(name) {
+    return name.replace(/\.(?:ts|js)$/i, '');
+}
 export async function ensureMigrationTable(connection) {
     await connection.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -26,7 +30,10 @@ export async function ensureMigrationTable(connection) {
     }
 }
 async function acquireLock(connection) {
-    const [result] = await connection.query('UPDATE migration_lock SET is_locked = 1, locked_at = NOW() WHERE id = 1 AND is_locked = 0');
+    const [result] = await connection.query(`UPDATE migration_lock
+     SET is_locked = 1, locked_at = NOW()
+     WHERE id = 1
+       AND (is_locked = 0 OR locked_at < DATE_SUB(NOW(), INTERVAL ? MINUTE))`, [LOCK_TIMEOUT_MINUTES]);
     return result.affectedRows > 0;
 }
 async function releaseLock(connection) {
@@ -50,9 +57,11 @@ export async function runMigrations() {
                 .filter(f => f.endsWith('.ts') || f.endsWith('.js'))
                 .sort();
             const [executed] = await connection.query('SELECT name FROM schema_migrations');
-            const executedNames = new Set(executed.map((m) => m.name));
+            // Development executes .ts files while the production build executes .js files.
+            // Their logical identity must be the same or production reruns the full history.
+            const executedMigrations = new Set(executed.map((m) => migrationKey(m.name)));
             for (const file of files) {
-                if (!executedNames.has(file)) {
+                if (!executedMigrations.has(migrationKey(file))) {
                     console.log(`[MIGRATE] 🚀 Rodando migração: ${file}`);
                     const migrationPath = path.join(migrationsDir, file);
                     // Standard dynamic import for ESM/TS
@@ -63,6 +72,7 @@ export async function runMigrations() {
                             await migration.up(connection);
                             await connection.query('INSERT INTO schema_migrations (name) VALUES (?)', [file]);
                             await connection.commit();
+                            executedMigrations.add(migrationKey(file));
                             console.log(`[MIGRATE] ✅ Migração ${file} concluída.`);
                         }
                         catch (error) {

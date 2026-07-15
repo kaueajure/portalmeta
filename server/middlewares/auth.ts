@@ -9,7 +9,6 @@ export interface UserPayload {
   id: number;
   nome: string;
   email: string;
-  empresa_id: number | null;
   administrador: boolean;
   desenvolvedor: boolean;
   ativo: boolean;
@@ -38,7 +37,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
     // Strict validation: check database
     const [rows]: any = await pool.query(
-      'SELECT id, nome, email, empresa_id, administrador, desenvolvedor, ativo, perfil, access_profile_id FROM usuarios WHERE id = ?',
+      'SELECT id, nome, email, administrador, desenvolvedor, ativo, perfil, access_profile_id FROM usuarios WHERE id = ?',
       [decoded.id]
     );
     
@@ -55,7 +54,6 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
       id: rows[0].id,
       nome: rows[0].nome,
       email: rows[0].email,
-      empresa_id: rows[0].empresa_id,
       administrador: Boolean(rows[0].administrador),
       desenvolvedor: Boolean(rows[0].desenvolvedor),
       ativo: Boolean(rows[0].ativo),

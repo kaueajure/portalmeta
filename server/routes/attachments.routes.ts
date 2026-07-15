@@ -29,10 +29,6 @@ router.get('/:id/download', async (req: AuthRequest, res: Response) => {
 
     const ticket = ticketResult;
 
-    if (!currentUser.desenvolvedor && ticket.empresa_id !== currentUser.empresa_id) {
-      return sendError(res, 'Acesso negado ao anexo (outra empresa)', 403);
-    }
-
     const isAdminOrDev = currentUser.administrador || currentUser.desenvolvedor;
     const canViewInternal = isAdminOrDev || await permissionsService.hasPermission(currentUser, 'ticket_mensagens.ver_internos');
 
@@ -98,18 +94,13 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
        return sendError(res, 'Permissao negada para excluir anexo', 403);
     }
 
-    if (!currentUser.desenvolvedor && attachment.empresa_id !== currentUser.empresa_id) {
-       return sendError(res, 'Acesso negado', 403);
-    }
-
     await attachmentsService.delete(id);
-    await logSystemAction(req, currentUser.id, currentUser.empresa_id, 'ATTACHMENT_DELETE', `Anexo excluido: ${attachment.nome_original} (ID: ${id})`);
+    await logSystemAction(req, currentUser.id, 'ATTACHMENT_DELETE', `Anexo excluido: ${attachment.nome_original} (ID: ${id})`);
 
     const io = req.app.get('io');
     if (io) {
       io.to('instance').emit('ticketMessagesChanged', {
-        ticketId: attachment.ticket_id,
-        empresaId: attachment.empresa_id
+        ticketId: attachment.ticket_id
       });
     }
 

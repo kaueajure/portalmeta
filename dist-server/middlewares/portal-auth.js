@@ -15,11 +15,10 @@ export const portalAuthMiddleware = (req, res, next) => {
         if (decoded.type !== 'portal_customer') {
             return sendError(res, 'Token invalido para acesso ao portal', 401);
         }
-        if (!decoded.empresa_id || !decoded.customer_email) {
+        if (!decoded.customer_email) {
             return sendError(res, 'Token de acesso incompleto', 401);
         }
         req.portalCustomer = {
-            empresa_id: decoded.empresa_id,
             customer_email: decoded.customer_email,
             usuario_id: decoded.usuario_id || null,
             nome: decoded.nome || null

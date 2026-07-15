@@ -11,7 +11,7 @@ router.get('/:token', async (req, res) => {
         return res.status(404).json({ error: 'Pesquisa nao encontrada ou invalida.' });
     }
     try {
-        const [rows] = await pool.query(`SELECT s.id, s.ticket_id, s.empresa_id, s.nota, s.comentario, s.respondido_em, s.created_at,
+        const [rows] = await pool.query(`SELECT s.id, s.ticket_id, s.nota, s.comentario, s.respondido_em, s.created_at,
               t.titulo
        FROM ticket_satisfacao s
        INNER JOIN tickets t ON t.id = s.ticket_id
@@ -53,13 +53,12 @@ router.post('/:token', async (req, res) => {
             const { recordTicketEvent } = await import('../services/ticket-events.service.js');
             await recordTicketEvent({
                 ticket_id: csat.ticket_id,
-                empresa_id: csat.empresa_id,
                 tipo: 'satisfacao_respondida',
                 descricao: `Cliente respondeu CSAT com nota ${nota}`
             });
         }
         catch (e) {
-            await pool.query('INSERT INTO ticket_eventos (ticket_id, empresa_id, tipo, descricao) VALUES (?, ?, ?, ?)', [csat.ticket_id, csat.empresa_id, 'satisfacao_respondida', `Cliente respondeu CSAT com nota ${nota}`]);
+            await pool.query('INSERT INTO ticket_eventos (ticket_id, tipo, descricao) VALUES (?, ?, ?)', [csat.ticket_id, 'satisfacao_respondida', `Cliente respondeu CSAT com nota ${nota}`]);
         }
         res.json({ success: true, message: 'Avaliacao registrada com sucesso.' });
     }

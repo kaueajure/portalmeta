@@ -11,10 +11,6 @@ class ReportsService {
         const endDate = filters.end_date || formatDateForMySQL();
         clauses.push(`${prefix}created_at >= ? AND ${prefix}created_at <= ?`);
         params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
-        if (filters.empresa_id) {
-            clauses.push(`${prefix}empresa_id = ?`);
-            params.push(filters.empresa_id);
-        }
         if (filters.responsavel_id) {
             clauses.push(`${prefix}responsavel_id = ?`);
             params.push(filters.responsavel_id);
@@ -144,10 +140,6 @@ class ReportsService {
         const endDate = filters.end_date || formatDateForMySQL();
         let resClausesList = ['deleted_at IS NULL', 'finalizado_em >= ?', 'finalizado_em <= ?'];
         let resParamsList = [`${startDate} 00:00:00`, `${endDate} 23:59:59`];
-        if (filters.empresa_id) {
-            resClausesList.push('empresa_id = ?');
-            resParamsList.push(filters.empresa_id);
-        }
         if (filters.responsavel_id) {
             resClausesList.push('responsavel_id = ?');
             resParamsList.push(filters.responsavel_id);
@@ -268,9 +260,8 @@ class ReportsService {
         const [tickets] = await pool.query(`
       SELECT 
         t.id, t.titulo, t.status, t.prioridade, t.categoria, t.created_at,
-        e.nome as empresa_nome, u.nome as cliente_nome, r.nome as responsavel_nome
+        u.nome as cliente_nome, r.nome as responsavel_nome
       FROM tickets t
-      LEFT JOIN empresas e ON t.empresa_id = e.id
       LEFT JOIN usuarios u ON t.usuario_id = u.id
       LEFT JOIN usuarios r ON t.responsavel_id = r.id
       ${whereString}
@@ -285,7 +276,7 @@ class ReportsService {
         if (type === 'tickets') {
             query = `
         SELECT t.id, t.titulo, t.status, t.prioridade, t.categoria, t.servico, t.origem,
-               r.nome as responsavel, t.solicitante_nome as cliente, e.nome as empresa,
+               r.nome as responsavel, t.solicitante_nome as cliente,
                DATE_FORMAT(t.created_at, '%Y-%m-%d %H:%i:%s') as criado_em,
                DATE_FORMAT(t.primeira_resposta_em, '%Y-%m-%d %H:%i:%s') as primeira_resposta_em,
                DATE_FORMAT(t.finalizado_em, '%Y-%m-%d %H:%i:%s') as finalizado_em,
@@ -294,7 +285,6 @@ class ReportsService {
                s.nota as csat_nota
         FROM tickets t
         LEFT JOIN usuarios r ON t.responsavel_id = r.id
-        LEFT JOIN empresas e ON t.empresa_id = e.id
         LEFT JOIN ticket_satisfacao s ON s.ticket_id = t.id
         ${whereString}
         ORDER BY t.created_at DESC
@@ -350,13 +340,11 @@ class ReportsService {
     async getDashboardStats(user) {
         const isDev = !!user.desenvolvedor;
         const userId = user.id;
-        const empresaId = user.empresa_id;
         let whereClause = '';
         let params = [];
         if (!isDev) {
-            if (user.administrador && empresaId) {
-                whereClause = 'WHERE deleted_at IS NULL AND empresa_id = ?';
-                params.push(empresaId);
+            if (user.administrador) {
+                whereClause = 'WHERE deleted_at IS NULL';
             }
             else {
                 whereClause = 'WHERE deleted_at IS NULL AND usuario_id = ?';
@@ -397,16 +385,15 @@ class ReportsService {
       SELECT t.id, t.titulo, t.status, t.prioridade, t.created_at, u.nome as cliente_nome
       FROM tickets t
       LEFT JOIN usuarios u ON t.usuario_id = u.id
-      ${whereClause.replace(/empresa_id/g, 't.empresa_id').replace(/usuario_id/g, 't.usuario_id')}
+      ${whereClause.replace(/usuario_id/g, 't.usuario_id')}
       ORDER BY t.created_at DESC
       LIMIT 5
     `, params);
         let logWhere = 'WHERE 1=1';
         let logParams = [];
         if (!isDev) {
-            if (user.administrador && empresaId) {
-                logWhere += ' AND l.empresa_id = ?';
-                logParams.push(empresaId);
+            if (user.administrador) {
+                // Administradores visualizam todas as atividades da instância.
             }
             else {
                 logWhere += ' AND l.usuario_id = ?';

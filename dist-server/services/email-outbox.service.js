@@ -16,8 +16,6 @@ function getNextAttemptSql(attempts) {
 export function validateTicketEmailOutboxParams(params) {
     if (!params || typeof params !== 'object')
         return { ok: false, error: 'Payload de e-mail ausente.' };
-    if (!Number.isInteger(Number(params.empresaId)) || Number(params.empresaId) <= 0)
-        return { ok: false, error: 'Empresa invalida para e-mail.' };
     if (!Number.isInteger(Number(params.ticketId)) || Number(params.ticketId) <= 0)
         return { ok: false, error: 'Chamado invalido para e-mail.' };
     if (!params.type)
@@ -37,15 +35,6 @@ export function normalizeOutboxProcessLimit(value, fallback = 20) {
         return fallback;
     return Math.min(parsed, 50);
 }
-export function buildEmailOutboxScopeCondition(scope, alias = 'email_outbox') {
-    if (scope?.isDev)
-        return { sql: '', params: [] };
-    const empresaId = Number(scope?.empresaId);
-    if (!Number.isInteger(empresaId) || empresaId <= 0) {
-        return { sql: ' AND 1 = 0', params: [] };
-    }
-    return { sql: ` AND ${alias}.empresa_id = ?`, params: [empresaId] };
-}
 class EmailOutboxService {
     async enqueueTicketEmail(params) {
         const validation = validateTicketEmailOutboxParams(params);
@@ -57,13 +46,12 @@ class EmailOutboxService {
         const dedupeKey = validation.dedupeKey;
         const [result] = await pool.query(`
         INSERT INTO email_outbox (
-          empresa_id, ticket_id, tipo, destinatario, assunto, payload_json, dedupe_key, status, next_attempt_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', NOW())
+          ticket_id, tipo, destinatario, assunto, payload_json, dedupe_key, status, next_attempt_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'pendente', NOW())
         ON DUPLICATE KEY UPDATE
           id = LAST_INSERT_ID(id),
           updated_at = updated_at
       `, [
-            params.empresaId,
             params.ticketId,
             params.type,
             params.to,
@@ -141,7 +129,7 @@ class EmailOutboxService {
                 WHERE id = ?
               `, [row.id]);
                         if (payload.messageId) {
-                            await trackTicketEmailMessageIds(payload.empresaId, payload.ticketId, payload.messageId, sendResult);
+                            await trackTicketEmailMessageIds(payload.ticketId, payload.messageId, sendResult);
                         }
                         sent++;
                         console.log(`[EmailOutbox] E-mail #${row.id} enviado para ${maskEmail(row.destinatario)} ticket #${row.ticket_id}.`);
@@ -176,15 +164,13 @@ class EmailOutboxService {
             connection.release();
         }
     }
-    async getSummary(scope) {
-        const scopeCondition = buildEmailOutboxScopeCondition(scope);
+    async getSummary() {
         const [countsRows] = await pool.query(`
       SELECT status, COUNT(*) as total
       FROM email_outbox
       WHERE 1 = 1
-        ${scopeCondition.sql}
       GROUP BY status
-    `, scopeCondition.params);
+    `);
         const counts = {
             pendente: 0,
             processando: 0,
@@ -198,28 +184,25 @@ class EmailOutboxService {
         }
         return {
             ...counts,
-            lastErrors: await this.getErrors(20, scope),
+            lastErrors: await this.getErrors(20),
         };
     }
-    async getErrors(limit = 20, scope) {
+    async getErrors(limit = 20) {
         const safeLimit = normalizeOutboxProcessLimit(limit);
-        const scopeCondition = buildEmailOutboxScopeCondition(scope);
         const [rows] = await pool.query(`
-        SELECT id, empresa_id, ticket_id, tipo, destinatario, status, tentativas,
+        SELECT id, ticket_id, tipo, destinatario, status, tentativas,
                ultimo_erro, next_attempt_at, created_at, updated_at
         FROM email_outbox
         WHERE status = 'erro'
-          ${scopeCondition.sql}
         ORDER BY updated_at DESC, id DESC
         LIMIT ${safeLimit}
-      `, scopeCondition.params);
+      `, []);
         return rows.map((row) => ({
             ...row,
             destinatario: maskEmail(row.destinatario),
         }));
     }
-    async retryById(id, scope) {
-        const scopeCondition = buildEmailOutboxScopeCondition(scope);
+    async retryById(id) {
         const [result] = await pool.query(`
         UPDATE email_outbox
         SET status = 'pendente',
@@ -229,25 +212,22 @@ class EmailOutboxService {
         WHERE id = ?
           AND status = 'erro'
           AND sent_at IS NULL
-          ${scopeCondition.sql}
-      `, [id, ...scopeCondition.params]);
+      `, [id]);
         return result.affectedRows > 0;
     }
-    async retryRecentErrors(limit = 20, scope) {
+    async retryRecentErrors(limit = 20) {
         const safeLimit = normalizeOutboxProcessLimit(limit);
-        const scopeCondition = buildEmailOutboxScopeCondition(scope);
         const [rows] = await pool.query(`
         SELECT id
         FROM email_outbox
         WHERE status = 'erro'
           AND sent_at IS NULL
-          ${scopeCondition.sql}
         ORDER BY updated_at DESC, id DESC
         LIMIT ${safeLimit}
-      `, scopeCondition.params);
+      `, []);
         let retried = 0;
         for (const row of rows) {
-            if (await this.retryById(Number(row.id), scope))
+            if (await this.retryById(Number(row.id)))
                 retried++;
         }
         return retried;
