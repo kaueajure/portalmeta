@@ -200,7 +200,7 @@ export const Topbar = ({
         <button
           onClick={onMenuClick}
           aria-label="Abrir menu principal"
-          className="shrink-0 rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 lg:hidden"
+          className="shrink-0 rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
         >
           <Menu size={16} />
         </button>

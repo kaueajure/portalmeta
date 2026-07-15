@@ -16,6 +16,7 @@ import { env } from './config/env.js';
 import { EmailListenerService } from './services/email-listener.service.js';
 import { runTicketAutomations } from './jobs/ticketAutomationJob.js';
 import { emailOutboxService } from './services/email-outbox.service.js';
+import { setRealtimeServer } from './realtime.js';
 export let io;
 function getCookieValue(cookieHeader, name) {
     if (!cookieHeader)
@@ -125,6 +126,7 @@ async function startServer() {
         io = new SocketIOServer(httpServer, {
             cors: corsOptions
         });
+        setRealtimeServer(io);
         app.set('io', io);
         io.use(async (socket, next) => {
             try {
@@ -246,6 +248,15 @@ async function startServer() {
     // Services & Routes according to process roles
     if (env.ENABLE_WEB_SERVER) {
         app.use('/api', apiRoutes);
+        // Uma rota de API inexistente deve sempre responder JSON. Sem este fallback,
+        // o middleware SPA do Vite devolve index.html e mascara o erro real no cliente.
+        app.use('/api', (_req, res) => {
+            return res.status(404).json({
+                success: false,
+                message: 'Rota da API n\u00e3o encontrada. Reinicie o backend se ela foi adicionada recentemente.',
+                data: null,
+            });
+        });
         // `npm run dev` usa tsx + server.ts. Mesmo com NODE_ENV=production no .env,
         // precisamos do Vite (HMR). Build estático fica só para `npm start` (dist-server).
         const runningViaTsx = process.argv.some((arg) => arg.includes('tsx'))

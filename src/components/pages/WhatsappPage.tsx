@@ -17,6 +17,9 @@ import {
   Save,
   Folder,
   FolderOpen,
+  Hand,
+  UserRoundCheck,
+  Clock3,
 } from "lucide-react";
 import { PageShell } from "../layout/PageShell";
 import { Button } from "../ui/Button";
@@ -25,6 +28,7 @@ import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import { User } from "../../types";
 import { hasPermission } from "../../lib/permissions";
+import { getSocket } from "../../lib/socket";
 import { WhatsappAutoReplyPanel, type WhatsAppFlowToolbar } from "../whatsapp/WhatsappAutoReplyPanel";
 
 interface WhatsappPageProps {
@@ -55,6 +59,9 @@ interface WhatsAppConversation {
   service_id: string | null;
   service_title: string | null;
   attendance_status: "idle" | "active" | null;
+  assigned_user_id: number | null;
+  assigned_user_name: string | null;
+  assigned_at: string | null;
 }
 
 interface WhatsAppMessage {
@@ -164,6 +171,27 @@ function initials(name: string | null, phone: string) {
   return phone.slice(-2) || "?";
 }
 
+interface WhatsAppAssignment {
+  user_id: number;
+  user_name: string;
+  assigned_at: string;
+}
+
+interface WhatsAppAssignmentHistoryItem extends WhatsAppAssignment {
+  id: number;
+}
+
+interface WhatsAppAssignmentDetails {
+  current: WhatsAppAssignment | null;
+  history: WhatsAppAssignmentHistoryItem[];
+}
+
+function hasActiveService(conversation: WhatsAppConversation | null): boolean {
+  return Boolean(
+    conversation?.attendance_status === "active" && conversation.service_id?.trim(),
+  );
+}
+
 const META_CREDENTIALS_ALLOWED_EMAIL = "kaueajure@gmail.com";
 
 export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
@@ -177,6 +205,8 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   const [loading, setLoading] = useState(true);
   const [threadLoading, setThreadLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [assignmentDetails, setAssignmentDetails] = useState<WhatsAppAssignmentDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -195,11 +225,27 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
     [conversations, selectedPhone],
   );
 
+  const selectedAssignment = assignmentDetails !== null
+    ? assignmentDetails.current
+    : (
+        selectedConversation?.assigned_user_id &&
+        selectedConversation.assigned_user_name &&
+        selectedConversation.assigned_at
+          ? {
+              user_id: selectedConversation.assigned_user_id,
+              user_name: selectedConversation.assigned_user_name,
+              assigned_at: selectedConversation.assigned_at,
+            }
+          : null
+      );
+  const isCurrentUserResponsible = selectedAssignment?.user_id === Number(currentUser.id);
+  const isSelectedAttendanceActive = hasActiveService(selectedConversation);
+
   const serviceFolders = useMemo(() => {
     const map = new Map<string, { id: string; title: string; count: number }>();
     for (const conv of conversations) {
+      if (!hasActiveService(conv)) continue;
       const id = String(conv.service_id || "").trim().toUpperCase();
-      if (!id) continue;
       const current = map.get(id);
       if (current) {
         current.count += 1;
@@ -217,19 +263,23 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
     return conversations.filter((c) => {
+      const activeServiceId = hasActiveService(c)
+        ? String(c.service_id).trim().toUpperCase()
+        : "";
       if (activeFolder === "none") {
-        if (c.service_id) return false;
+        if (activeServiceId) return false;
       } else if (activeFolder !== "all") {
-        if (String(c.service_id || "").toUpperCase() !== activeFolder) return false;
+        if (activeServiceId !== activeFolder) return false;
       }
       if (!q) return true;
-      const hay = `${c.contact_name || ""} ${c.contact_phone} ${c.last_body || ""} ${c.service_id || ""} ${c.service_title || ""}`.toLowerCase();
+      const activeServiceTitle = activeServiceId ? c.service_title || "" : "";
+      const hay = `${c.contact_name || ""} ${c.contact_phone} ${c.last_body || ""} ${activeServiceId} ${activeServiceTitle}`.toLowerCase();
       return hay.includes(q);
     });
   }, [conversations, search, activeFolder]);
 
   const withoutServiceCount = useMemo(
-    () => conversations.filter((c) => !c.service_id).length,
+    () => conversations.filter((c) => !hasActiveService(c)).length,
     [conversations],
   );
 
@@ -265,6 +315,17 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
     }
   }, []);
 
+  const loadAssignment = useCallback(async (phone: string) => {
+    try {
+      const details = await api.get<WhatsAppAssignmentDetails>(
+        `/whatsapp/conversations/${encodeURIComponent(phone)}/assignment`,
+      );
+      setAssignmentDetails(details);
+    } catch (err: any) {
+      setError(err?.message || "N\u00e3o foi poss\u00edvel carregar o respons\u00e1vel pelo atendimento.");
+    }
+  }, []);
+
   useEffect(() => {
     loadStatusAndConversations();
   }, [loadStatusAndConversations]);
@@ -272,10 +333,12 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   useEffect(() => {
     if (!selectedPhone) {
       setThread([]);
+      setAssignmentDetails(null);
       return;
     }
-    loadThread(selectedPhone);
-  }, [selectedPhone, loadThread]);
+    setAssignmentDetails(null);
+    void Promise.all([loadThread(selectedPhone), loadAssignment(selectedPhone)]);
+  }, [selectedPhone, loadThread, loadAssignment]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -284,12 +347,41 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
   useEffect(() => {
     pollRef.current = window.setInterval(() => {
       loadStatusAndConversations({ silent: true });
-      if (selectedPhone) loadThread(selectedPhone, { silent: true });
+      if (selectedPhone) {
+        loadThread(selectedPhone, { silent: true });
+        loadAssignment(selectedPhone);
+      }
     }, 12_000);
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
     };
-  }, [loadStatusAndConversations, loadThread, selectedPhone]);
+  }, [loadStatusAndConversations, loadThread, loadAssignment, selectedPhone]);
+
+  useEffect(() => {
+    const empresaId = Number(currentUser.empresa_id);
+    if (!Number.isInteger(empresaId) || empresaId <= 0) return;
+
+    const socket = getSocket(empresaId);
+    let refreshTimer: number | null = null;
+
+    const handleWhatsAppChanged = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        loadStatusAndConversations({ silent: true });
+        if (selectedPhone) {
+          loadThread(selectedPhone, { silent: true });
+          loadAssignment(selectedPhone);
+        }
+      }, 150);
+    };
+
+    socket.on("whatsappChanged", handleWhatsAppChanged);
+
+    return () => {
+      socket.off("whatsappChanged", handleWhatsAppChanged);
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+    };
+  }, [currentUser.empresa_id, loadStatusAndConversations, loadThread, loadAssignment, selectedPhone]);
 
   const copyValue = async (field: string, value: string) => {
     try {
@@ -331,15 +423,42 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
           service_id: null,
           service_title: null,
           attendance_status: null,
+          assigned_user_id: null,
+          assigned_user_name: null,
+          assigned_at: null,
         },
         ...prev,
       ];
     });
   };
 
+  const handleClaimAttendance = async () => {
+    if (!canManage || !selectedPhone || selectedAssignment || !isSelectedAttendanceActive) return;
+    setClaiming(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const details = await api.post<WhatsAppAssignmentDetails>(
+        `/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/claim`,
+        {},
+      );
+      setAssignmentDetails(details);
+      setSuccess("O atendimento agora est\u00e1 sob sua responsabilidade.");
+      await loadStatusAndConversations({ silent: true });
+    } catch (err: any) {
+      setError(err?.message || "N\u00e3o foi poss\u00edvel iniciar o atendimento.");
+      await Promise.all([
+        loadAssignment(selectedPhone),
+        loadStatusAndConversations({ silent: true }),
+      ]);
+    } finally {
+      setClaiming(false);
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canManage || !selectedPhone || !composer.trim()) return;
+    if (!canManage || !selectedPhone || !composer.trim() || !isCurrentUserResponsible) return;
     setSending(true);
     setError(null);
     setSuccess(null);
@@ -350,6 +469,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
       setSuccess("Mensagem enviada.");
       await Promise.all([
         loadThread(selectedPhone, { silent: true }),
+        loadAssignment(selectedPhone),
         loadStatusAndConversations({ silent: true }),
       ]);
     } catch (err: any) {
@@ -358,6 +478,25 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
       setSending(false);
     }
   };
+
+  const timelineItems = useMemo(() => {
+    const messages = thread.map((message) => ({
+      kind: "message" as const,
+      date: message.created_at,
+      id: `message-${message.id}`,
+      message,
+    }));
+    const assignments = (assignmentDetails?.history || []).map((assignment) => ({
+      kind: "assignment" as const,
+      date: assignment.assigned_at,
+      id: `assignment-${assignment.id}`,
+      assignment,
+    }));
+    return [...messages, ...assignments].sort((a, b) => {
+      const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
+      return byDate || a.id.localeCompare(b.id);
+    });
+  }, [thread, assignmentDetails?.history]);
 
   const headerTitle = selectedConversation?.contact_name
     ? selectedConversation.contact_name
@@ -478,14 +617,14 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                 )}
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <p className="px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                   Pastas
                 </p>
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <FolderChip
                     active={activeFolder === "all"}
-                    icon={<FolderOpen size={13} />}
+                    icon={<FolderOpen size={12} />}
                     label="Todas"
                     count={conversations.length}
                     onClick={() => setActiveFolder("all")}
@@ -494,7 +633,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                     <FolderChip
                       key={folder.id}
                       active={activeFolder === folder.id}
-                      icon={<Folder size={13} />}
+                      icon={<Folder size={12} />}
                       label={folder.title}
                       badge={folder.id}
                       count={folder.count}
@@ -503,7 +642,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                   ))}
                   <FolderChip
                     active={activeFolder === "none"}
-                    icon={<Folder size={13} />}
+                    icon={<Folder size={12} />}
                     label="Sem serviço"
                     count={withoutServiceCount}
                     onClick={() => setActiveFolder("none")}
@@ -608,15 +747,10 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                                 <span className="truncate text-sm font-semibold text-slate-900">
                                   {conv.contact_name || formatPhoneLabel(conv.contact_phone)}
                                 </span>
-                                {conv.service_id ? (
+                                {hasActiveService(conv) ? (
                                   <span
                                     title={conv.service_title || conv.service_id}
-                                    className={cn(
-                                      "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
-                                      conv.attendance_status === "active"
-                                        ? "bg-emerald-600 text-white"
-                                        : "bg-slate-200/90 text-slate-600",
-                                    )}
+                                    className="shrink-0 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white"
                                   >
                                     {conv.service_id}
                                   </span>
@@ -631,9 +765,20 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                                 {formatPhoneLabel(conv.contact_phone)}
                               </p>
                             )}
-                            {conv.service_title ? (
+                            {hasActiveService(conv) && conv.service_title ? (
                               <p className="mt-0.5 truncate text-[11px] font-medium text-emerald-700/80">
                                 {conv.service_title}
+                              </p>
+                            ) : null}
+                            {hasActiveService(conv) && conv.assigned_user_name ? (
+                              <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] font-medium text-blue-700">
+                                <UserRoundCheck size={11} className="shrink-0" />
+                                <span className="truncate">Com {conv.assigned_user_name}</span>
+                              </p>
+                            ) : hasActiveService(conv) ? (
+                              <p className="mt-0.5 flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                                <Clock3 size={11} className="shrink-0" />
+                                {"Aguardando respons\u00e1vel"}
                               </p>
                             ) : null}
                             <p className="mt-0.5 truncate text-xs text-slate-500">
@@ -685,22 +830,17 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-1.5">
                       <p className="truncate text-sm font-semibold text-slate-900">{headerTitle}</p>
-                      {selectedConversation?.service_id ? (
+                      {hasActiveService(selectedConversation) ? (
                         <span
-                          title={selectedConversation.service_title || selectedConversation.service_id}
-                          className={cn(
-                            "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide",
-                            selectedConversation.attendance_status === "active"
-                              ? "bg-emerald-600 text-white"
-                              : "bg-slate-200 text-slate-600",
-                          )}
+                          title={selectedConversation?.service_title || selectedConversation?.service_id || ""}
+                          className="shrink-0 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white"
                         >
-                          {selectedConversation.service_id}
+                          {selectedConversation?.service_id}
                         </span>
                       ) : null}
                     </div>
                     <p className="truncate text-xs text-slate-500">
-                      {selectedConversation?.service_title
+                      {hasActiveService(selectedConversation) && selectedConversation?.service_title
                         ? `${selectedConversation.service_title} · `
                         : ""}
                       {formatPhoneLabel(selectedPhone)}
@@ -709,22 +849,106 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                         : ""}
                     </p>
                   </div>
+                  {selectedAssignment ? (
+                    <div
+                      className="hidden shrink-0 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 sm:flex"
+                      title={`Respons\u00e1vel desde ${formatMessageTime(selectedAssignment.assigned_at)}`}
+                    >
+                      <UserRoundCheck size={16} className="text-blue-700" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                          {"Respons\u00e1vel"}
+                        </p>
+                        <p className="max-w-40 truncate text-xs font-semibold text-blue-950">
+                          {selectedAssignment.user_name}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
                 </header>
+
+                {isSelectedAttendanceActive ? (
+                <div
+                  className={cn(
+                    "flex shrink-0 flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+                    selectedAssignment
+                      ? "border-blue-100 bg-blue-50/70"
+                      : "border-amber-200 bg-amber-50",
+                  )}
+                >
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <div
+                      className={cn(
+                        "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                        selectedAssignment
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-amber-100 text-amber-700",
+                      )}
+                    >
+                      {selectedAssignment ? <UserRoundCheck size={15} /> : <Clock3 size={15} />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className={cn(
+                        "text-xs font-semibold",
+                        selectedAssignment ? "text-blue-950" : "text-amber-950",
+                      )}>
+                        {selectedAssignment
+                          ? `Atendimento conduzido por ${selectedAssignment.user_name}`
+                          : "Atendimento dispon\u00edvel para in\u00edcio"}
+                      </p>
+                      <p className={cn(
+                        "mt-0.5 text-[11px] leading-relaxed",
+                        selectedAssignment ? "text-blue-700" : "text-amber-800",
+                      )}>
+                        {selectedAssignment
+                          ? `Responsabilidade registrada em ${formatMessageTime(selectedAssignment.assigned_at)}.`
+                          : "Nenhum atendente est\u00e1 vinculado a esta conversa no momento."}
+                      </p>
+                    </div>
+                  </div>
+                  {!selectedAssignment && canManage ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      loading={claiming}
+                      onClick={handleClaimAttendance}
+                      className="shrink-0 bg-amber-700 shadow-amber-700/15 hover:bg-amber-800 focus-visible:ring-amber-600"
+                    >
+                      <Hand size={14} />
+                      Iniciar atendimento
+                    </Button>
+                  ) : null}
+                </div>
+                ) : null}
 
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
                   {threadLoading ? (
                     <div className="py-16 text-center text-sm text-slate-500">Carregando conversa…</div>
-                  ) : thread.length === 0 ? (
+                  ) : timelineItems.length === 0 ? (
                     <div className="py-16 text-center text-sm text-slate-500">
                       Nenhuma mensagem nesta conversa. Envie a primeira abaixo.
                     </div>
                   ) : (
                     <div className="mx-auto flex max-w-3xl flex-col gap-2">
-                      {thread.map((msg) => {
+                      {timelineItems.map((item) => {
+                        if (item.kind === "assignment") {
+                          return (
+                            <div key={item.id} className="my-2 flex justify-center">
+                              <div className="flex max-w-[92%] items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] text-blue-800 shadow-sm">
+                                <UserRoundCheck size={13} className="shrink-0" />
+                                <span>
+                                  <strong>{item.assignment.user_name}</strong> iniciou o atendimento em{" "}
+                                  {formatMessageTime(item.assignment.assigned_at)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        const msg = item.message;
                         const outbound = msg.direction === "outbound";
                         return (
                           <div
-                            key={msg.id}
+                            key={item.id}
                             className={cn("flex", outbound ? "justify-end" : "justify-start")}
                           >
                             <div
@@ -758,7 +982,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                   )}
                 </div>
 
-                {canManage ? (
+                {canManage && isSelectedAttendanceActive ? (
                   <form
                     onSubmit={handleSend}
                     className="shrink-0 border-t border-slate-200 bg-white px-3 py-3 sm:px-4"
@@ -767,6 +991,17 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                       <p className="mb-2 flex items-center gap-1.5 text-xs text-emerald-700">
                         <Check size={12} />
                         {success}
+                      </p>
+                    )}
+                    {!isCurrentUserResponsible ? (
+                      <p className="mx-auto mb-2 max-w-3xl text-xs font-medium text-slate-500">
+                        {selectedAssignment
+                          ? `Somente ${selectedAssignment.user_name}, respons\u00e1vel por esta conversa, pode responder.`
+                          : "Inicie o atendimento para liberar o envio de mensagens."}
+                      </p>
+                    ) : (
+                      <p className="mx-auto mb-2 max-w-3xl text-[11px] text-emerald-700">
+                        {"Sua identifica\u00e7\u00e3o ser\u00e1 inclu\u00edda automaticamente na mensagem."}
                       </p>
                     )}
                     <div className="mx-auto flex max-w-3xl items-end gap-2">
@@ -779,7 +1014,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                             ? "Digite uma mensagem…"
                             : "Configure a integração para enviar"
                         }
-                        disabled={!status?.configured || sending}
+                        disabled={!status?.configured || sending || !isCurrentUserResponsible}
                         className="max-h-32 min-h-[42px] flex-1 resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-60"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
@@ -791,7 +1026,7 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                       <Button
                         type="submit"
                         loading={sending}
-                        disabled={!status?.configured || !composer.trim()}
+                        disabled={!status?.configured || !composer.trim() || !isCurrentUserResponsible}
                       >
                         <Send size={14} />
                         Enviar
@@ -802,11 +1037,15 @@ export const WhatsappPage = ({ currentUser }: WhatsappPageProps) => {
                       template aprovado.
                     </p>
                   </form>
-                ) : (
+                ) : !canManage ? (
                   <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-500">
                     Você pode visualizar o inbox, mas precisa da permissão{" "}
                     <span className="font-medium">integracoes.whatsapp.gerenciar</span> para
                     responder.
+                  </div>
+                ) : (
+                  <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs text-slate-500">
+                    {"Este atendimento est\u00e1 encerrado. Uma nova mensagem do cliente reabrir\u00e1 o fluxo de atendimento."}
                   </div>
                 )}
               </>
@@ -994,24 +1233,27 @@ function FolderChip({
     <button
       type="button"
       onClick={onClick}
+      title={badge ? `${label} (${badge})` : label}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-        active ? "bg-emerald-50 text-emerald-900" : "text-slate-600 hover:bg-slate-50",
+        "inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-left text-[11px] transition-colors",
+        active
+          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50",
       )}
     >
       <span className={cn("shrink-0", active ? "text-emerald-600" : "text-slate-400")}>{icon}</span>
-      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+      <span className="max-w-[7.5rem] truncate font-medium">{label}</span>
       {badge ? (
         <span
           className={cn(
-            "shrink-0 rounded px-1 py-0.5 text-[9px] font-bold tracking-wide",
+            "shrink-0 rounded px-1 py-px text-[9px] font-bold tracking-wide",
             active ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600",
           )}
         >
           {badge}
         </span>
       ) : null}
-      <span className="shrink-0 text-[10px] tabular-nums text-slate-400">{count}</span>
+      <span className="shrink-0 tabular-nums text-[10px] text-slate-400">{count}</span>
     </button>
   );
 }

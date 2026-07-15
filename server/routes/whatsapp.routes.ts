@@ -164,6 +164,42 @@ router.get(
 );
 
 router.get(
+  '/conversations/:phone/assignment',
+  requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const data = await whatsappService.getAssignmentDetails(String(req.params.phone || ''));
+      return sendSuccess(res, data);
+    } catch (err) {
+      console.error('[WhatsApp] assignment details error:', err);
+      return sendError(res, 'Erro ao obter a responsabilidade do atendimento', 500);
+    }
+  },
+);
+
+router.post(
+  '/conversations/:phone/claim',
+  requirePermission('integracoes.whatsapp.gerenciar', { allowDeveloper: true }),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.user) return sendError(res, 'Usu\u00e1rio n\u00e3o autenticado', 401);
+      const data = await whatsappService.claimAttendance(String(req.params.phone || ''), {
+        id: req.user.id,
+        name: req.user.nome,
+      });
+      return sendSuccess(res, data, 'Atendimento iniciado com sucesso');
+    } catch (err: any) {
+      console.error('[WhatsApp] claim attendance error:', err);
+      return sendError(
+        res,
+        err?.message || 'N\u00e3o foi poss\u00edvel iniciar o atendimento',
+        err?.status || 500,
+      );
+    }
+  },
+);
+
+router.get(
   '/messages',
   requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }),
   async (req: AuthRequest, res: Response) => {
@@ -187,7 +223,11 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const { to, text } = req.body || {};
-      const data = await whatsappService.sendTextMessage(to, text);
+      if (!req.user) return sendError(res, 'Usu\u00e1rio n\u00e3o autenticado', 401);
+      const data = await whatsappService.sendAgentTextMessage(to, text, {
+        id: req.user.id,
+        name: req.user.nome,
+      });
       return sendSuccess(res, data, 'Mensagem enviada');
     } catch (err: any) {
       console.error('[WhatsApp] send text error:', err);
