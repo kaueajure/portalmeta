@@ -94,6 +94,10 @@
   html.theme-dark-beta .bg-\[\#F5F7FA\],
   html.theme-dark-beta .bg-\[\#f0f2f5\],
   html.theme-dark-beta .bg-slate-50,
+  html.theme-dark-beta .bg-slate-50\/10,
+  html.theme-dark-beta .bg-slate-50\/20,
+  html.theme-dark-beta .bg-slate-50\/30,
+  html.theme-dark-beta .bg-slate-50\/40,
   html.theme-dark-beta .bg-slate-50\/50,
   html.theme-dark-beta .bg-slate-50\/60,
   html.theme-dark-beta .bg-slate-50\/70,
@@ -104,6 +108,7 @@
 
   html.theme-dark-beta .bg-\[\#F8FAFC\],
   html.theme-dark-beta .bg-white,
+  html.theme-dark-beta .bg-white\/70,
   html.theme-dark-beta .bg-white\/90,
   html.theme-dark-beta .bg-white\/95 {
     background-color: var(--dark-panel) !important;
@@ -114,11 +119,14 @@
   }
 
   html.theme-dark-beta .bg-slate-100,
+  html.theme-dark-beta .bg-slate-100\/40,
   html.theme-dark-beta .bg-slate-100\/70,
   html.theme-dark-beta .bg-slate-100\/80,
+  html.theme-dark-beta .bg-slate-150,
   html.theme-dark-beta .bg-slate-200,
   html.theme-dark-beta .bg-slate-200\/50,
   html.theme-dark-beta .bg-slate-200\/60,
+  html.theme-dark-beta .bg-slate-300,
   html.theme-dark-beta .bg-blue-100,
   html.theme-dark-beta .bg-amber-100,
   html.theme-dark-beta .bg-emerald-100,
@@ -332,23 +340,44 @@
     color: #52525b !important;
   }
 
-  html.theme-dark-beta .hover\:bg-white:hover {
+  html.theme-dark-beta .hover\:bg-white:hover,
+  html.theme-dark-beta .group:hover .group-hover\:bg-slate-50 {
     background-color: var(--dark-panel-muted) !important;
   }
 
   html.theme-dark-beta .hover\:bg-slate-50:hover,
+  html.theme-dark-beta .hover\:bg-slate-50\/30:hover,
+  html.theme-dark-beta .hover\:bg-slate-50\/50:hover,
+  html.theme-dark-beta .hover\:bg-slate-50\/60:hover,
   html.theme-dark-beta .hover\:bg-slate-50\/80:hover,
   html.theme-dark-beta .hover\:bg-slate-100:hover,
-  html.theme-dark-beta .hover\:bg-slate-200:hover {
+  html.theme-dark-beta .hover\:bg-slate-200:hover,
+  html.theme-dark-beta .hover\:bg-slate-200\/50:hover,
+  html.theme-dark-beta .hover\:bg-slate-200\/60:hover,
+  html.theme-dark-beta .focus\:bg-slate-50:focus {
     background-color: var(--dark-panel-hover) !important;
   }
 
-  html.theme-dark-beta .hover\:bg-blue-50:hover {
+  html.theme-dark-beta .hover\:bg-blue-50:hover,
+  html.theme-dark-beta .hover\:bg-indigo-50:hover,
+  html.theme-dark-beta .hover\:bg-indigo-50\/50:hover,
+  html.theme-dark-beta .group:hover .group-hover\:bg-blue-50,
+  html.theme-dark-beta .group:hover .group-hover\:bg-indigo-100 {
     background-color: #0f1d35 !important;
   }
 
-  html.theme-dark-beta .hover\:bg-red-50:hover {
+  html.theme-dark-beta .hover\:bg-red-50:hover,
+  html.theme-dark-beta .hover\:bg-rose-50:hover,
+  html.theme-dark-beta .focus\:bg-red-50:focus {
     background-color: #3a0d12 !important;
+  }
+
+  html.theme-dark-beta .hover\:bg-amber-50:hover {
+    background-color: #332006 !important;
+  }
+
+  html.theme-dark-beta .hover\:bg-emerald-50:hover {
+    background-color: #063824 !important;
   }
 
   html.theme-dark-beta .hover\:text-slate-950:hover,
