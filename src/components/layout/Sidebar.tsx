@@ -11,6 +11,9 @@ import {
   X,
   BookOpen,
   MessageCircle,
+  TableProperties,
+  MapPinned,
+  type LucideIcon,
 } from "lucide-react";
 import { User } from "../../types";
 import { cn } from "../../lib/utils";
@@ -26,6 +29,19 @@ interface SidebarProps {
   onClose: () => void;
   onLogout: () => void;
   onNavigate: (link: string) => void;
+}
+
+interface SidebarItem {
+  id: string;
+  icon: LucideIcon;
+  label: string;
+  access: boolean;
+  preview?: boolean;
+}
+
+interface SidebarSection {
+  title: string;
+  items: SidebarItem[];
 }
 
 export const Sidebar = ({
@@ -56,7 +72,7 @@ export const Sidebar = ({
     };
   }, [isOpen, onClose]);
 
-  const sections = [
+  const sections: SidebarSection[] = [
     {
       title: "Operação",
       items: [
@@ -83,6 +99,32 @@ export const Sidebar = ({
           icon: BookOpen,
           label: "Base de Conhecimento",
           access: canAccessAppScreen(currentUser, "knowledge"),
+        },
+      ],
+    },
+    {
+      title: "Obrigações",
+      items: [
+        {
+          id: "obligations-dashboard",
+          icon: LayoutDashboard,
+          label: "Dashboard",
+          access: true,
+          preview: true,
+        },
+        {
+          id: "obligations-spreadsheet",
+          icon: TableProperties,
+          label: "Planilha",
+          access: true,
+          preview: true,
+        },
+        {
+          id: "obligations-municipalities",
+          icon: MapPinned,
+          label: "Municípios",
+          access: true,
+          preview: true,
         },
       ],
     },
@@ -187,7 +229,11 @@ export const Sidebar = ({
                   {accessibleItems.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => handleNav(item.id)}
+                      onClick={() => {
+                        if (!item.preview) handleNav(item.id);
+                      }}
+                      aria-disabled={item.preview || undefined}
+                      title={item.preview ? "Prévia de navegação" : undefined}
                       aria-label={item.label}
                       className={cn(
                         "group flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-[13px] font-semibold transition-colors duration-150",
