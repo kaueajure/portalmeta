@@ -5,7 +5,7 @@ import { sanitizeUser, sanitizeUsers } from '../utils/sanitize.js';
 class UsersService {
   async list(filters: { search?: string; status?: string }) {
     let query = `
-      SELECT u.id, u.nome, u.email, u.cargo, u.administrador, u.desenvolvedor, 
+      SELECT u.id, u.nome, u.email, u.cargo, u.foto, u.administrador, u.desenvolvedor,
              u.ativo, u.perfil, u.access_profile_id,
              ap.nome as access_profile_nome
       FROM usuarios u

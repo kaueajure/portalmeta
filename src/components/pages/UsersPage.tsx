@@ -402,13 +402,21 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
                         <div className="flex items-center gap-2.5">
                           <div
                             className={cn(
-                              "w-8 h-8 rounded-md flex items-center justify-center font-medium text-xs border",
+                              "flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border text-xs font-medium",
                               user.ativo
                                 ? "bg-slate-100 text-slate-700 border-slate-200"
                                 : "bg-slate-50 text-slate-400 border-slate-100",
                             )}
                           >
-                            {(user.nome || "U").charAt(0).toUpperCase()}
+                            {user.foto ? (
+                              <img
+                                src={user.foto}
+                                alt={`Foto de ${user.nome || "usuário"}`}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              (user.nome || "U").charAt(0).toUpperCase()
+                            )}
                           </div>
                           <div className="min-w-0">
                             <div className="text-[13px] font-medium text-slate-900 truncate">
