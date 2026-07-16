@@ -7,6 +7,7 @@
     "dev": "tsx server/server.ts",
     "dev:worker": "tsx server/worker.ts",
     "db:migrate": "tsx server/db/migrate.ts",
+    "db:import:simao:dry-run": "tsx server/scripts/import-simao-obligations.ts",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "build": "npm run build:client && npm run build:server",

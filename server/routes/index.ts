@@ -25,6 +25,7 @@ import internalOutboxRoutes from './internal-outbox.routes.js';
 import whatsappRoutes from './whatsapp.routes.js';
 import ticketSettingsRoutes from './ticket-settings.routes.js';
 import applicationSettingsRoutes from './application-settings.routes.js';
+import obligationsRoutes from './obligations.routes.js';
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.use('/access-profiles', accessProfilesRoutes);
 router.use('/internal/jobs', internalJobsRoutes);
 router.use('/internal/outbox', internalOutboxRoutes);
 router.use('/whatsapp', whatsappRoutes);
+router.use('/obligations', obligationsRoutes);
 router.use('/', emailChannelsRoutes);
 
 export default router;

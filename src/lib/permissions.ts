@@ -60,6 +60,12 @@ export function canAccessAppScreen(
       return hasPermission(user, 'ia.visualizar');
     case 'settings':
       return hasPermission(user, 'configuracoes.visualizar');
+    case 'obligations-spreadsheet':
+      return hasPermission(user, 'obrigacoes.planilha.visualizar');
+    case 'obligations-dashboard':
+      return hasPermission(user, 'obrigacoes.dashboard.visualizar');
+    case 'obligations-municipalities':
+      return hasPermission(user, 'obrigacoes.municipios.visualizar');
     case 'profile':
       return !!user;
     default:
@@ -74,6 +80,9 @@ export function getFirstAccessibleAppScreen(user: User | null | undefined): stri
     'whatsapp',
     'knowledge',
     'reports',
+    'obligations-spreadsheet',
+    'obligations-dashboard',
+    'obligations-municipalities',
     'users',
     'settings',
     'logs',

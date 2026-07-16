@@ -11,6 +11,8 @@ import {
   X,
   BookOpen,
   MessageCircle,
+  TableProperties,
+  Building2,
 } from "lucide-react";
 import { User } from "../../types";
 import { cn } from "../../lib/utils";
@@ -100,6 +102,29 @@ export const Sidebar = ({
           icon: Users,
           label: "Usuários e Permissões",
           access: canAccessAppScreen(currentUser, "users"),
+        },
+      ],
+    },
+    {
+      title: "Obrigações",
+      items: [
+        {
+          id: "obligations-spreadsheet",
+          icon: TableProperties,
+          label: "Planilha Principal",
+          access: canAccessAppScreen(currentUser, "obligations-spreadsheet"),
+        },
+        {
+          id: "obligations-dashboard",
+          icon: LayoutDashboard,
+          label: "Dashboard",
+          access: canAccessAppScreen(currentUser, "obligations-dashboard"),
+        },
+        {
+          id: "obligations-municipalities",
+          icon: Building2,
+          label: "Municípios",
+          access: canAccessAppScreen(currentUser, "obligations-municipalities"),
         },
       ],
     },
