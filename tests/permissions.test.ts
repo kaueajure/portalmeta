@@ -56,6 +56,30 @@ test('unknown screens are unavailable', () => {
   assert.equal(canAccessAppScreen(user, 'unknown'), false);
 });
 
+test('obligations spreadsheet screen requires its module permission', () => {
+  const allowed = makeUser({ permissions: ['obrigacoes.planilha.visualizar'] });
+  const denied = makeUser({ permissions: ['tickets.visualizar'] });
+
+  assert.equal(canAccessAppScreen(allowed, 'obligations-spreadsheet'), true);
+  assert.equal(canAccessAppScreen(denied, 'obligations-spreadsheet'), false);
+});
+
+test('obligations municipalities screen requires its module permission', () => {
+  const allowed = makeUser({ permissions: ['obrigacoes.municipios.visualizar'] });
+  const denied = makeUser({ permissions: ['obrigacoes.planilha.visualizar'] });
+
+  assert.equal(canAccessAppScreen(allowed, 'obligations-municipalities'), true);
+  assert.equal(canAccessAppScreen(denied, 'obligations-municipalities'), false);
+});
+
+test('obligations dashboard screen requires its module permission', () => {
+  const allowed = makeUser({ permissions: ['obrigacoes.dashboard.visualizar'] });
+  const denied = makeUser({ permissions: ['obrigacoes.planilha.visualizar'] });
+
+  assert.equal(canAccessAppScreen(allowed, 'obligations-dashboard'), true);
+  assert.equal(canAccessAppScreen(denied, 'obligations-dashboard'), false);
+});
+
 test('hasAnyPermission and hasAllPermissions respect global-only wildcard exclusions', () => {
   const user = makeUser({ permissions: ['*'] });
 

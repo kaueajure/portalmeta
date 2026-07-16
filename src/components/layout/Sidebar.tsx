@@ -12,8 +12,7 @@ import {
   BookOpen,
   MessageCircle,
   TableProperties,
-  MapPinned,
-  type LucideIcon,
+  Building2,
 } from "lucide-react";
 import { User } from "../../types";
 import { cn } from "../../lib/utils";
@@ -29,19 +28,6 @@ interface SidebarProps {
   onClose: () => void;
   onLogout: () => void;
   onNavigate: (link: string) => void;
-}
-
-interface SidebarItem {
-  id: string;
-  icon: LucideIcon;
-  label: string;
-  access: boolean;
-  preview?: boolean;
-}
-
-interface SidebarSection {
-  title: string;
-  items: SidebarItem[];
 }
 
 export const Sidebar = ({
@@ -72,7 +58,7 @@ export const Sidebar = ({
     };
   }, [isOpen, onClose]);
 
-  const sections: SidebarSection[] = [
+  const sections = [
     {
       title: "Operação",
       items: [
@@ -103,32 +89,6 @@ export const Sidebar = ({
       ],
     },
     {
-      title: "Obrigações",
-      items: [
-        {
-          id: "obligations-dashboard",
-          icon: LayoutDashboard,
-          label: "Dashboard",
-          access: true,
-          preview: true,
-        },
-        {
-          id: "obligations-spreadsheet",
-          icon: TableProperties,
-          label: "Planilha",
-          access: true,
-          preview: true,
-        },
-        {
-          id: "obligations-municipalities",
-          icon: MapPinned,
-          label: "Municípios",
-          access: true,
-          preview: true,
-        },
-      ],
-    },
-    {
       title: "Gestão",
       items: [
         {
@@ -142,6 +102,29 @@ export const Sidebar = ({
           icon: Users,
           label: "Usuários e Permissões",
           access: canAccessAppScreen(currentUser, "users"),
+        },
+      ],
+    },
+    {
+      title: "Obrigações",
+      items: [
+        {
+          id: "obligations-spreadsheet",
+          icon: TableProperties,
+          label: "Planilha Principal",
+          access: canAccessAppScreen(currentUser, "obligations-spreadsheet"),
+        },
+        {
+          id: "obligations-dashboard",
+          icon: LayoutDashboard,
+          label: "Dashboard",
+          access: canAccessAppScreen(currentUser, "obligations-dashboard"),
+        },
+        {
+          id: "obligations-municipalities",
+          icon: Building2,
+          label: "Municípios",
+          access: canAccessAppScreen(currentUser, "obligations-municipalities"),
         },
       ],
     },
@@ -229,11 +212,7 @@ export const Sidebar = ({
                   {accessibleItems.map((item) => (
                     <button
                       key={item.id}
-                      onClick={() => {
-                        if (!item.preview) handleNav(item.id);
-                      }}
-                      aria-disabled={item.preview || undefined}
-                      title={item.preview ? "Prévia de navegação" : undefined}
+                      onClick={() => handleNav(item.id)}
                       aria-label={item.label}
                       className={cn(
                         "group flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-[13px] font-semibold transition-colors duration-150",

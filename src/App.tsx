@@ -73,6 +73,21 @@ const WhatsappPage = lazy(() =>
     default: module.WhatsappPage,
   })),
 );
+const ObligationsSpreadsheetPage = lazy(() =>
+  import("./components/pages/ObligationsSpreadsheetPage").then((module) => ({
+    default: module.ObligationsSpreadsheetPage,
+  })),
+);
+const ObligationsDashboardPage = lazy(() =>
+  import("./components/pages/ObligationsDashboardPage").then((module) => ({
+    default: module.ObligationsDashboardPage,
+  })),
+);
+const ObligationsMunicipalitiesPage = lazy(() =>
+  import("./components/pages/ObligationsMunicipalitiesPage").then((module) => ({
+    default: module.ObligationsMunicipalitiesPage,
+  })),
+);
 const TicketDetailsPage = lazy(() =>
   import("./components/pages/TicketDetailsPage").then((module) => ({
     default: module.TicketDetailsPage,
@@ -101,7 +116,10 @@ type ActiveTab =
   | "settings"
   | "reports"
   | "knowledge"
-  | "ai";
+  | "ai"
+  | "obligations-spreadsheet"
+  | "obligations-dashboard"
+  | "obligations-municipalities";
 
 const DASHBOARD_STATE_KEY = "portalmeta.dashboardState";
 
@@ -118,6 +136,9 @@ const isActiveTab = (value: string | null): value is ActiveTab =>
     "reports",
     "knowledge",
     "ai",
+    "obligations-spreadsheet",
+    "obligations-dashboard",
+    "obligations-municipalities",
   ].includes(value);
 
 const loadDashboardState = (): {
@@ -177,6 +198,7 @@ export default function App() {
   );
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [createMunicipalityRequested, setCreateMunicipalityRequested] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(
     () => loadDashboardState().selectedTicketId,
   );
@@ -531,12 +553,6 @@ export default function App() {
         onSubmit={handleLogin}
         authError={authError}
         loading={authLoading}
-        onForgotPassword={() => {
-          setView("forgot-password");
-          setAuthError(null);
-          setAuthSuccess(null);
-          window.history.pushState({}, "", "/esqueci-senha");
-        }}
       />
     );
   }
@@ -641,6 +657,12 @@ export default function App() {
           return "Configurações de Perfil";
         case "settings":
           return "Preferências";
+        case "obligations-spreadsheet":
+          return "Planilha Principal";
+        case "obligations-dashboard":
+          return "Dashboard";
+        case "obligations-municipalities":
+          return "Municípios";
         default:
           return "Portal Meta";
       }
@@ -730,6 +752,37 @@ export default function App() {
                           );
                           setActiveTab("settings");
                         }}
+                      />
+                    ) : (
+                      <AccessDenied />
+                    ))}
+
+                  {activeTab === "obligations-spreadsheet" &&
+                    (canAccessAppScreen(currentUser, "obligations-spreadsheet") ? (
+                      <ObligationsSpreadsheetPage
+                        currentUser={currentUser}
+                        onNavigate={(tab) => {
+                          setCreateMunicipalityRequested(true);
+                          setActiveTab(tab);
+                        }}
+                      />
+                    ) : (
+                      <AccessDenied />
+                    ))}
+
+                  {activeTab === "obligations-dashboard" &&
+                    (canAccessAppScreen(currentUser, "obligations-dashboard") ? (
+                      <ObligationsDashboardPage />
+                    ) : (
+                      <AccessDenied />
+                    ))}
+
+                  {activeTab === "obligations-municipalities" &&
+                    (canAccessAppScreen(currentUser, "obligations-municipalities") ? (
+                      <ObligationsMunicipalitiesPage
+                        currentUser={currentUser}
+                        openCreateOnMount={createMunicipalityRequested}
+                        onCreateOpened={() => setCreateMunicipalityRequested(false)}
                       />
                     ) : (
                       <AccessDenied />
