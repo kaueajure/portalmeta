@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useId, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { AlertTriangle, X } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -25,12 +25,47 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelLabel = "Cancelar",
   variant = "warning",
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const titleId = useId();
+  const descriptionId = useId();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseRef.current();
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const buttons = Array.from(dialogRef.current.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+      if (!buttons.length) return;
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    const frame = window.requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLButtonElement>('[data-autofocus="true"]')?.focus();
+    });
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
         <motion.div
+          ref={dialogRef}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={descriptionId}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -61,22 +96,23 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
+                aria-label="Fechar confirmação"
                 className="h-8 w-8 p-0 text-slate-400"
               >
                 <X size={16} />
               </Button>
             </div>
 
-            <h3 className="text-base font-semibold text-slate-950 mb-1.5">
+            <h3 id={titleId} className="text-base font-semibold text-slate-950 mb-1.5">
               {title}
             </h3>
-            <p className="text-xs text-slate-500 leading-normal">
+            <p id={descriptionId} className="text-sm text-slate-600 leading-relaxed">
               {description}
             </p>
           </div>
 
           <div className="px-5 py-3 bg-slate-50 flex items-center justify-end gap-2 border-t border-slate-100">
-            <Button variant="ghost" size="sm" onClick={onClose} className="px-4">
+            <Button data-autofocus="true" variant="ghost" size="sm" onClick={onClose} className="px-4">
               {cancelLabel}
             </Button>
             <Button

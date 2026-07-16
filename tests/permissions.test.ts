@@ -54,6 +54,7 @@ test('explicit permissions remain precise without wildcard', () => {
 test('unknown screens are unavailable', () => {
   const user = makeUser({ permissions: ['*'] });
   assert.equal(canAccessAppScreen(user, 'unknown'), false);
+  assert.equal(canAccessAppScreen(user, 'knowledge'), false);
 });
 
 test('obligations spreadsheet screen requires its module permission', () => {

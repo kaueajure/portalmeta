@@ -1,6 +1,6 @@
 # Portal Meta - Sistema de Gestão de Tickets
 
-Sistema profissional de atendimento ao cliente com suporte Omnichannel, SLA, Portal do Cliente e Base de Conhecimento.
+Sistema profissional de atendimento ao cliente com suporte Omnichannel, SLA e Portal do Cliente.
 
 ## 🚀 Guia de Deploy para Hostinger (Business Web Hosting)
 

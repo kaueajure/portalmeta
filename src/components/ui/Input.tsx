@@ -14,9 +14,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     ref,
   ) => {
     const sizeClasses = {
-      sm: "h-7 px-2 py-1 text-xs",
-      md: "h-8 px-2.5 py-1.5 text-[13px]",
-      lg: "h-10 px-3 py-2 text-sm",
+      sm: "h-9 px-2.5 py-1 text-xs",
+      md: "h-10 px-3 py-1.5 text-[13px]",
+      lg: "h-11 px-3.5 py-2 text-sm",
     };
 
     return (
@@ -39,9 +39,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           {...props}
         />
-        {hint && !error && <p className="text-[11px] text-slate-500">{hint}</p>}
+        {hint && !error && <p className="text-xs text-slate-500">{hint}</p>}
         {error && (
-          <p className="text-[11px] font-medium text-red-600">{error}</p>
+          <p className="text-xs font-medium text-red-700">{error}</p>
         )}
       </div>
     );

@@ -3,9 +3,13 @@ import { api } from '../../lib/api';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
-import { Trash2, Plus, Edit2, Check, X, ShieldAlert } from 'lucide-react';
-import { TicketOption, User } from '../../types';
+import { Trash2, Plus, Edit2, Check, X, ShieldAlert, ListChecks } from 'lucide-react';
+import { ServiceFormField, TicketOption, User } from '../../types';
 import { hasPermission } from '../../lib/permissions';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Modal } from '../ui/Modal';
+import { Select } from '../ui/Select';
+import { Checkbox } from '../ui/Checkbox';
 
 interface TicketOptionsManagerProps {
   currentUser: User;
@@ -32,6 +36,7 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
   const [services, setServices] = useState<TicketOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'category' | 'service'; id: number; name: string } | null>(null);
 
   const [newCategorySigla, setNewCategorySigla] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -40,8 +45,43 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editSigla, setEditSigla] = useState('');
+  const [formService, setFormService] = useState<TicketOption | null>(null);
+  const [formFields, setFormFields] = useState<ServiceFormField[]>([]);
 
   const canManageOptions = hasPermission(currentUser, 'configuracoes.atendimento');
+
+  const parseServiceForm = (value: TicketOption['formulario_json']): ServiceFormField[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value !== 'string') return [];
+    try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+  };
+
+  const openServiceForm = (service: TicketOption) => {
+    setFormService(service);
+    setFormFields(parseServiceForm(service.formulario_json));
+  };
+
+  const addFormField = () => setFormFields(fields => [...fields, {
+    chave: `campo_${fields.length + 1}`,
+    rotulo: '',
+    tipo: 'texto',
+    obrigatorio: false,
+  }]);
+
+  const updateFormField = (index: number, patch: Partial<ServiceFormField>) => {
+    setFormFields(fields => fields.map((field, position) => position === index ? { ...field, ...patch } : field));
+  };
+
+  const saveServiceForm = async () => {
+    if (!formService) return;
+    try {
+      await api.patch(`/ticket-settings/services/${formService.id}`, { formulario_json: formFields });
+      setFormService(null);
+      await loadOptions();
+    } catch (err) {
+      setError(getErrorMessage(err, 'Erro ao salvar formulario do servico'));
+    }
+  };
 
   const loadOptions = async () => {
     try {
@@ -109,11 +149,11 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
     }
   };
 
-  const handleDelete = async (type: 'category' | 'service', id: number) => {
-    if (!confirm('Deseja realmente excluir esta opcao?')) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      const path = type === 'category' ? 'categories' : 'services';
-      await api.delete(`/ticket-settings/${path}/${id}`);
+      const path = deleteTarget.type === 'category' ? 'categories' : 'services';
+      await api.delete(`/ticket-settings/${path}/${deleteTarget.id}`);
       loadOptions();
     } catch (err) {
       setError(getErrorMessage(err, 'Erro ao excluir item'));
@@ -198,10 +238,15 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
                 </>
               ) : (
                 <>
+                  {type === 'service' && (
+                    <Button size="sm" variant="ghost" onClick={() => openServiceForm(item)} className="h-7 gap-1 px-2 text-xs text-blue-600 hover:bg-blue-50">
+                      <ListChecks size={13} /> Formulário
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => startEdit(type, item)} className="h-7 w-7 p-0 text-slate-400 hover:text-slate-600">
                     <Edit2 size={13} />
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(type, item.id)} className="h-7 w-7 p-0 text-red-500 hover:bg-red-50 hover:text-red-600">
+                  <Button size="icon" variant="ghost" aria-label={`Excluir ${item.nome}`} onClick={() => setDeleteTarget({ type, id: item.id, name: item.nome })} className="text-red-600 hover:bg-red-50 hover:text-red-700">
                     <Trash2 size={13} />
                   </Button>
                 </>
@@ -278,6 +323,66 @@ export const TicketOptionsManager = ({ currentUser }: TicketOptionsManagerProps)
           {renderList('service', services)}
         </Card>
       </div>
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title={`Excluir ${deleteTarget?.type === 'category' ? 'categoria' : 'serviço'}?`}
+        description={`${deleteTarget?.name || 'Esta opção'} deixará de estar disponível para classificação dos chamados. Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir opção"
+        variant="danger"
+      />
+      <Modal
+        isOpen={!!formService}
+        onClose={() => setFormService(null)}
+        title={`Formulário — ${formService?.nome || 'serviço'}`}
+        size="lg"
+        footer={<><Button variant="ghost" size="sm" onClick={() => setFormService(null)}>Cancelar</Button><Button size="sm" onClick={saveServiceForm}>Salvar formulário</Button></>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">Estes campos aparecem quando o serviço é selecionado na abertura do chamado.</p>
+          {formFields.map((field, index) => (
+            <div key={index} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="grid gap-2 sm:grid-cols-[1fr_160px_auto]">
+                <Input
+                  label="Nome do campo"
+                  value={field.rotulo}
+                  onChange={event => updateFormField(index, { rotulo: event.target.value, chave: slugifyOptionValue(event.target.value) || field.chave })}
+                  placeholder="Ex: Número do contrato"
+                />
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700">Tipo</label>
+                  <Select
+                    value={field.tipo}
+                    onChange={value => updateFormField(index, { tipo: value as ServiceFormField['tipo'], opcoes: value === 'selecao' ? field.opcoes || [] : undefined })}
+                    options={[
+                      { value: 'texto', label: 'Texto curto' },
+                      { value: 'texto_longo', label: 'Texto longo' },
+                      { value: 'numero', label: 'Número' },
+                      { value: 'data', label: 'Data' },
+                      { value: 'selecao', label: 'Lista de opções' },
+                    ]}
+                  />
+                </div>
+                <Button type="button" variant="ghost" size="icon" aria-label="Remover campo" onClick={() => setFormFields(fields => fields.filter((_, position) => position !== index))} className="self-end text-red-600 hover:bg-red-50"><Trash2 size={15} /></Button>
+              </div>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Checkbox checked={Boolean(field.obrigatorio)} onChange={event => updateFormField(index, { obrigatorio: event.target.checked })} label="Obrigatório" />
+                {field.tipo === 'selecao' && (
+                  <Input
+                    value={(field.opcoes || []).join(', ')}
+                    onChange={event => updateFormField(index, { opcoes: event.target.value.split(',').map(value => value.trim()).filter(Boolean) })}
+                    placeholder="Opções separadas por vírgula"
+                    className="flex-1"
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+          {!formFields.length && <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Este serviço ainda não possui campos adicionais.</div>}
+          <Button type="button" variant="outline" size="sm" onClick={addFormField}><Plus size={14} className="mr-1" /> Adicionar campo</Button>
+        </div>
+      </Modal>
     </div>
   );
 };

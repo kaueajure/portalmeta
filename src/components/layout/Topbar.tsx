@@ -14,6 +14,7 @@ import { cn } from "../../lib/utils";
 interface TopbarProps {
   title: string;
   onMenuClick: () => void;
+  isMenuOpen?: boolean;
   showSearch?: boolean;
   onNavigate?: (target: { tab: string; ticketId?: number }) => void;
 }
@@ -42,6 +43,7 @@ const extractTickets = (response: TicketListResponse | Ticket[]): Ticket[] => {
 export const Topbar = ({
   title,
   onMenuClick,
+  isMenuOpen = false,
   showSearch = true,
   onNavigate,
 }: TopbarProps) => {
@@ -195,23 +197,26 @@ export const Topbar = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/95 px-3 backdrop-blur sm:px-5">
-      <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/95 px-3 backdrop-blur sm:gap-5 sm:px-5">
+      <div className="relative z-10 flex min-w-0 max-w-[calc(100%-48px)] shrink items-center gap-2 overflow-hidden bg-white/95 pr-1 sm:max-w-none sm:shrink-0 sm:gap-4 sm:pr-3">
         <button
           onClick={onMenuClick}
+          onMouseEnter={onMenuClick}
           aria-label="Abrir menu principal"
-          className="shrink-0 rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+          aria-controls="menu-principal"
+          aria-expanded={isMenuOpen}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white p-0 text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
         >
           <Menu size={16} />
         </button>
-        <h1 className="truncate text-sm font-semibold tracking-tight text-slate-950">
+        <h1 className="relative z-10 truncate text-sm font-semibold tracking-tight text-slate-950">
           {title}
         </h1>
       </div>
 
-      <div className="ml-auto hidden flex-1 justify-end sm:flex">
+      <div className="relative z-20 ml-auto flex min-w-0 flex-1 justify-end">
         {showSearch && (
-          <div ref={searchRef} className="relative w-full max-w-md">
+          <div ref={searchRef} className="relative w-9 transition-[width] focus-within:w-full sm:w-full sm:max-w-md">
             <Search
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors focus-within:text-blue-500"
               size={13}
@@ -225,6 +230,7 @@ export const Topbar = ({
               }}
               onFocus={() => trimmedQuery.length >= 2 && setIsOpen(true)}
               placeholder="Buscar chamados, clientes ou usuários..."
+              aria-label="Pesquisa global"
               className="h-8 w-full rounded-md border border-slate-200 bg-slate-50/80 pl-8 pr-8 text-xs text-slate-700 shadow-[0_1px_1px_rgba(15,23,42,0.02)] outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
             />
             {loading && (
@@ -232,7 +238,7 @@ export const Topbar = ({
             )}
 
             {isOpen && trimmedQuery.length > 0 && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-full min-w-[360px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
+              <div className="fixed left-3 right-3 top-14 z-50 mt-2 min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.16)] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:w-full sm:min-w-[360px]">
                 {trimmedQuery.length < 2 ? (
                   <div className="px-3 py-3 text-xs font-medium text-slate-500">
                     Digite pelo menos 2 caracteres.

@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  Bookmark, 
-  Plus, 
-  Trash2,
-  X
-} from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { TicketView } from '../../types';
 
 import { Select } from '../ui/Select';
+import { Modal } from '../ui/Modal';
+import { Input } from '../ui/Input';
 
 interface Props {
   views: TicketView[];
@@ -82,55 +79,18 @@ export const TicketSavedViews: React.FC<Props> = ({
         </Button>
       )}
 
-      {showSaveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 backdrop-blur-sm p-4">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-lg w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                  <Bookmark className="text-blue-500" size={16} />
-                  Salvar View
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Os filtros atuais serão salvos.</p>
-              </div>
-              <button
-                onClick={() => setShowSaveModal(false)}
-                className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            
-            <div className="p-4 space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-700">Nome da View</label>
-                <input
-                  type="text"
-                  autoFocus
-                  value={newViewName}
-                  onChange={(e) => setNewViewName(e.target.value)}
-                  placeholder="Ex: Meus Urgentes"
-                  className="w-full bg-white border border-slate-200 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder:text-slate-400"
-                  onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                />
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setShowSaveModal(false)}>
-                Cancelar
-              </Button>
-              <Button 
-                size="sm"
-                onClick={handleSave} 
-                disabled={!newViewName.trim()}
-              >
-                Salvar
-              </Button>
-            </div>
-          </div>
+      <Modal
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        title="Salvar visualização"
+        size="sm"
+        footer={<><Button size="sm" variant="ghost" onClick={() => setShowSaveModal(false)}>Cancelar</Button><Button size="sm" onClick={handleSave} disabled={!newViewName.trim()}>Salvar</Button></>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">Os filtros atuais ficarão disponíveis na sua lista de visualizações.</p>
+          <Input label="Nome da visualização" autoFocus value={newViewName} onChange={(event) => setNewViewName(event.target.value)} placeholder="Ex.: Meus urgentes" onKeyDown={(event) => event.key === 'Enter' && handleSave()} />
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

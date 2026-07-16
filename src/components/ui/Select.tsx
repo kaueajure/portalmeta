@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
+import React, { useState, useRef, useEffect, useId, useLayoutEffect } from "react";
 import { ChevronDown, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -44,7 +44,9 @@ export const Select: React.FC<SelectProps> = ({
   align = "auto",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const listboxId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -115,7 +117,10 @@ export const Select: React.FC<SelectProps> = ({
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      }
     };
 
     const handleReposition = () => updateMenuPosition();
@@ -138,13 +143,52 @@ export const Select: React.FC<SelectProps> = ({
   }, [isOpen, options.length, align]);
 
   const toggleDropdown = () => {
-    if (!disabled) setIsOpen((open) => !open);
+    if (disabled) return;
+    setIsOpen((open) => {
+      if (!open) {
+        const selectedIndex = options.findIndex((option) => String(option.value) === String(value) && !option.disabled);
+        setActiveIndex(selectedIndex >= 0 ? selectedIndex : options.findIndex((option) => !option.disabled));
+      }
+      return !open;
+    });
   };
 
   const handleSelect = (option: SelectOption) => {
     if (!option.disabled) {
       onChange(option.value);
       setIsOpen(false);
+    }
+  };
+
+  const moveActive = (direction: 1 | -1) => {
+    if (!options.length) return;
+    let next = activeIndex;
+    for (let count = 0; count < options.length; count += 1) {
+      next = (next + direction + options.length) % options.length;
+      if (!options[next].disabled) {
+        setActiveIndex(next);
+        return;
+      }
+    }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (["ArrowDown", "ArrowUp", "Home", "End", "Enter", " "].includes(event.key)) {
+      event.preventDefault();
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (!isOpen) toggleDropdown();
+      else moveActive(event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Home" && isOpen) {
+      setActiveIndex(options.findIndex((option) => !option.disabled));
+    } else if (event.key === "End" && isOpen) {
+      for (let index = options.length - 1; index >= 0; index -= 1) {
+        if (!options[index].disabled) { setActiveIndex(index); break; }
+      }
+    } else if ((event.key === "Enter" || event.key === " ") && isOpen && activeIndex >= 0) {
+      handleSelect(options[activeIndex]);
+    } else if ((event.key === "Enter" || event.key === " ") && !isOpen) {
+      toggleDropdown();
     }
   };
 
@@ -168,17 +212,20 @@ export const Select: React.FC<SelectProps> = ({
         ref={buttonRef}
         type="button"
         onClick={toggleDropdown}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-controls={listboxId}
+        aria-activedescendant={isOpen && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
         className={cn(
           "flex w-full items-center justify-between rounded-md border border-slate-300 bg-white text-slate-700 shadow-[0_1px_1px_rgba(15,23,42,0.02)] transition-all outline-none",
-          "focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15",
+          "focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600/25",
           "hover:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500",
-          size === "xs" && "h-6 px-2 text-[11px]",
-          size === "sm" && "h-7 px-2 py-1 text-xs",
-          size === "md" && "h-8 px-2.5 py-1.5 text-[13px]",
-          size === "lg" && "h-10 px-3 py-2 text-sm",
+          size === "xs" && "h-8 px-2 text-xs",
+          size === "sm" && "h-9 px-2.5 py-1 text-xs",
+          size === "md" && "h-10 px-3 py-1.5 text-[13px]",
+          size === "lg" && "h-11 px-3.5 py-2 text-sm",
           buttonClassName,
         )}
       >
@@ -213,25 +260,30 @@ export const Select: React.FC<SelectProps> = ({
             maxHeight: menuPosition.maxHeight,
           }}
           role="listbox"
+          id={listboxId}
         >
           {options.length === 0 ? (
             <div className="px-3 py-2 text-xs text-slate-400 italic text-center">
               Nenhuma opção
             </div>
           ) : (
-            options.map((option) => {
+            options.map((option, index) => {
               const isSelected = String(option.value) === String(value);
               return (
                 <div
                   key={option.value}
+                  id={`${listboxId}-option-${index}`}
                   role="option"
                   aria-selected={isSelected}
                   onClick={() => handleSelect(option)}
+                  onMouseEnter={() => setActiveIndex(index)}
                   className={cn(
                     "flex cursor-pointer items-center justify-between rounded px-2.5 py-1.5 text-[13px] transition-colors group",
                     isSelected
                       ? "bg-blue-50 text-blue-800 font-semibold ring-1 ring-inset ring-blue-200"
-                      : "text-slate-700 hover:bg-slate-50 hover:text-slate-950",
+                      : index === activeIndex
+                        ? "bg-slate-100 text-slate-950"
+                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-950",
                     option.disabled &&
                       "opacity-50 cursor-not-allowed pointer-events-none",
                   )}

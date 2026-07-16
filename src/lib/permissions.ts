@@ -54,8 +54,6 @@ export function canAccessAppScreen(
       return hasPermission(user, 'auditoria.visualizar');
     case 'reports':
       return hasPermission(user, 'relatorios.visualizar');
-    case 'knowledge':
-      return hasPermission(user, 'base_conhecimento.visualizar');
     case 'ai':
       return hasPermission(user, 'ia.visualizar');
     case 'settings':
@@ -78,7 +76,6 @@ export function getFirstAccessibleAppScreen(user: User | null | undefined): stri
     'dashboard',
     'tickets',
     'whatsapp',
-    'knowledge',
     'reports',
     'obligations-spreadsheet',
     'obligations-dashboard',

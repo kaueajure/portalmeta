@@ -55,8 +55,8 @@ export const ProfilePage = ({
   const [loading, setLoading] = useState(false);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [pwdLoading, setPwdLoading] = useState(false);
-  const [darkThemeBeta, setDarkThemeBeta] = useState(() => {
-    return window.localStorage.getItem("portalmeta-theme") === "dark-beta";
+  const [darkTheme, setDarkTheme] = useState(() => {
+    return ["dark", "dark-beta"].includes(window.localStorage.getItem("portalmeta-theme") || "");
   });
   const [showPwd, setShowPwd] = useState({
     current: false,
@@ -67,12 +67,12 @@ export const ProfilePage = ({
   const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
-    document.documentElement.classList.toggle("theme-dark-beta", darkThemeBeta);
+    document.documentElement.classList.toggle("theme-dark", darkTheme);
     window.localStorage.setItem(
       "portalmeta-theme",
-      darkThemeBeta ? "dark-beta" : "light",
+      darkTheme ? "dark" : "light",
     );
-  }, [darkThemeBeta]);
+  }, [darkTheme]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -516,15 +516,10 @@ export const ProfilePage = ({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-semibold text-slate-900">
-                        Tema escuro
-                      </h4>
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
-                        Beta
-                      </span>
+                      <h4 className="text-sm font-semibold text-slate-900">Tema escuro</h4>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      Experimente a versão inicial do tema escuro.
+                    <p className="text-xs text-slate-500">
+                      Reduza o brilho da interface em ambientes com pouca luz.
                     </p>
                   </div>
                 </div>
@@ -532,19 +527,20 @@ export const ProfilePage = ({
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50 p-4">
                   <div>
                     <div className="text-[13px] font-semibold text-slate-800">
-                      Ativar tema escuro beta
+                      Ativar tema escuro
                     </div>
-                    <p className="mt-1 text-[11px] font-medium leading-relaxed text-slate-500">
-                      Algumas telas ainda podem receber ajustes visuais nas próximas versões.
+                    <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">
+                      A preferência fica salva neste navegador.
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setDarkThemeBeta((current) => !current)}
-                    aria-pressed={darkThemeBeta}
+                    onClick={() => setDarkTheme((current) => !current)}
+                    aria-pressed={darkTheme}
+                    aria-label="Ativar tema escuro"
                     className={cn(
                       "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
-                      darkThemeBeta
+                      darkTheme
                         ? "border-blue-600 bg-blue-600"
                         : "border-slate-300 bg-slate-200",
                     )}
@@ -552,7 +548,7 @@ export const ProfilePage = ({
                     <span
                       className={cn(
                         "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
-                        darkThemeBeta ? "left-5" : "left-0.5",
+                        darkTheme ? "left-5" : "left-0.5",
                       )}
                     />
                   </button>

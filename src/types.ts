@@ -90,6 +90,15 @@ export interface TicketOption {
   cor?: string | null;
   especial?: TicketStatusSpecial | string | null;
   ordem?: number;
+  formulario_json?: ServiceFormField[] | string | null;
+}
+
+export interface ServiceFormField {
+  chave: string;
+  rotulo: string;
+  tipo: 'texto' | 'texto_longo' | 'numero' | 'data' | 'selecao';
+  obrigatorio?: boolean;
+  opcoes?: string[];
 }
 
 export interface Ticket {

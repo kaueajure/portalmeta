@@ -15,6 +15,8 @@ import {
   getTicketStatusConfig,
   isFinalTicketStatusSpecial
 } from '../utils/ticket-status-config.js';
+import { isValidEmail } from '../utils/validators.js';
+import { validateServiceFormAnswers } from '../utils/service-form.js';
 
 const router = Router();
 
@@ -215,7 +217,7 @@ router.get('/options', requirePermission('tickets.visualizar'), async (req: Auth
       'SELECT id, nome, sigla, valor, ativo, ordem FROM ticket_categories ORDER BY ordem ASC, id ASC'
     );
     const [services]: any = await pool.query(
-      'SELECT id, nome, valor, ativo, ordem FROM ticket_services ORDER BY ordem ASC, id ASC'
+      'SELECT id, nome, valor, ativo, ordem, formulario_json FROM ticket_services ORDER BY ordem ASC, id ASC'
     );
 
     sendSuccess(res, {
@@ -225,6 +227,35 @@ router.get('/options', requirePermission('tickets.visualizar'), async (req: Auth
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao carregar opções de chamados';
     sendError(res, message);
+  }
+});
+
+router.get('/requesters', requirePermission('tickets.criar_para_cliente'), async (req: AuthRequest, res) => {
+  try {
+    const search = String(req.query.search || '').trim();
+    if (search.length < 2) return sendSuccess(res, []);
+    const term = `%${search}%`;
+    const [rows]: any = await pool.query(`
+      SELECT usuario_id, nome, email, MAX(last_seen) AS last_seen
+      FROM (
+        SELECT id AS usuario_id, nome, email, updated_at AS last_seen
+        FROM usuarios
+        WHERE ativo = 1 AND perfil = 'cliente' AND (nome LIKE ? OR email LIKE ?)
+        UNION ALL
+        SELECT NULL AS usuario_id, solicitante_nome AS nome, solicitante_email AS email, MAX(updated_at) AS last_seen
+        FROM tickets
+        WHERE deleted_at IS NULL AND solicitante_email IS NOT NULL
+          AND (solicitante_nome LIKE ? OR solicitante_email LIKE ?)
+        GROUP BY solicitante_nome, solicitante_email
+      ) solicitantes
+      WHERE email IS NOT NULL AND email <> ''
+      GROUP BY usuario_id, nome, email
+      ORDER BY last_seen DESC, nome ASC
+      LIMIT 20
+    `, [term, term, term, term]);
+    sendSuccess(res, rows);
+  } catch (error: unknown) {
+    sendError(res, error instanceof Error ? error.message : 'Erro ao buscar solicitantes');
   }
 });
 
@@ -563,7 +594,7 @@ router.post('/', requirePermission('tickets.criar'), async (req: AuthRequest, re
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
-    let { titulo, descricao, prioridade, categoria, servico } = req.body;
+    let { titulo, descricao, prioridade, categoria, servico, solicitante, campos_personalizados } = req.body;
     
     // Validations
     if (!titulo || titulo.trim().length < 3) return sendError(res, 'Título obrigatório (min 3 caracteres)', 400);
@@ -576,10 +607,40 @@ router.post('/', requirePermission('tickets.criar'), async (req: AuthRequest, re
     if (!prioridade) prioridade = 'media';
     if (!categoria) categoria = 'suporte_tecnico';
 
+    let requester = {
+      usuario_id: currentUser.id as number | null,
+      solicitante_nome: currentUser.nome as string | null,
+      solicitante_email: currentUser.email as string | null,
+    };
+    if (solicitante) {
+      const canCreateForCustomer = await permissionsService.hasPermission(currentUser, 'tickets.criar_para_cliente');
+      if (!canCreateForCustomer) return sendError(res, 'Você não tem permissão para criar chamados em nome de clientes.', 403);
+
+      const requesterUserId = toPositiveInt(solicitante.usuario_id);
+      if (requesterUserId) {
+        const [rows]: any = await pool.query(
+          `SELECT id, nome, email FROM usuarios WHERE id = ? AND ativo = 1 AND perfil = 'cliente' LIMIT 1`,
+          [requesterUserId],
+        );
+        if (!rows.length) return sendError(res, 'Solicitante não encontrado.', 400);
+        requester = { usuario_id: rows[0].id, solicitante_nome: rows[0].nome, solicitante_email: rows[0].email };
+      } else {
+        const nome = String(solicitante.nome || '').trim();
+        const email = String(solicitante.email || '').trim().toLowerCase();
+        if (nome.length < 2 || !isValidEmail(email)) return sendError(res, 'Informe nome e e-mail válidos para o solicitante.', 400);
+        requester = { usuario_id: null, solicitante_nome: nome.slice(0, 255), solicitante_email: email.slice(0, 255) };
+      }
+    }
+
+    const customFields = await validateServiceFormAnswers(servico, campos_personalizados);
+
     const ticketId = await ticketsService.create({
-      usuario_id: currentUser.id,
-      titulo, descricao, prioridade, categoria, servico
+      ...requester,
+      titulo, descricao, prioridade, categoria, servico,
+      origem: 'sistema',
+      created_by_id: currentUser.id,
     });
+    if (customFields.length) await ticketsService.setCustomFields(ticketId, customFields);
 
     await logSystemAction(req, currentUser.id, 'TICKET_CREATE', `Novo chamado criado: #${ticketId}`);
     
@@ -595,6 +656,69 @@ router.post('/', requirePermission('tickets.criar'), async (req: AuthRequest, re
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Erro ao criar chamado';
     sendError(res, message);
+  }
+});
+
+router.post('/:id/unir', requirePermission('tickets.unir'), async (req: AuthRequest, res) => {
+  const currentUser = req.user;
+  if (!currentUser) return sendError(res, 'Não autenticado', 401);
+  const targetId = toPositiveInt(req.params.id);
+  const sourceId = toPositiveInt(req.body?.chamado_duplicado_id);
+  if (!targetId || !sourceId || targetId === sourceId) return sendError(res, 'Informe dois chamados diferentes.', 400);
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [ticketRows]: any = await connection.query(
+      `SELECT id, usuario_id, titulo, descricao FROM tickets
+       WHERE id IN (?, ?) AND deleted_at IS NULL FOR UPDATE`,
+      [targetId, sourceId],
+    );
+    const target = ticketRows.find((row: any) => Number(row.id) === targetId);
+    const source = ticketRows.find((row: any) => Number(row.id) === sourceId);
+    if (!target || !source) {
+      await connection.rollback();
+      return sendError(res, 'Um dos chamados não foi encontrado.', 404);
+    }
+
+    await connection.query(
+      `INSERT INTO ticket_mensagens (ticket_id, usuario_id, mensagem, interno, tipo)
+       VALUES (?, ?, ?, 0, 'sistema')`,
+      [targetId, source.usuario_id, `Conteúdo da abertura do chamado #${sourceId} — ${source.titulo}\n\n${source.descricao || ''}`],
+    );
+    await connection.query('UPDATE ticket_mensagens SET ticket_id = ? WHERE ticket_id = ?', [targetId, sourceId]);
+    await connection.query('UPDATE ticket_anexos SET ticket_id = ? WHERE ticket_id = ?', [targetId, sourceId]);
+    await connection.query('UPDATE ticket_eventos SET ticket_id = ? WHERE ticket_id = ?', [targetId, sourceId]);
+    await connection.query(
+      `INSERT IGNORE INTO ticket_tags (ticket_id, tag)
+       SELECT ?, tag FROM ticket_tags WHERE ticket_id = ?`,
+      [targetId, sourceId],
+    );
+    await connection.query('DELETE FROM ticket_tags WHERE ticket_id = ?', [sourceId]);
+    await connection.query(
+      `INSERT IGNORE INTO ticket_custom_fields (ticket_id, field_key, field_label, field_value)
+       SELECT ?, CONCAT('unido_', ?, '_', LEFT(field_key, 60)), CONCAT(field_label, ' (chamado #', ?, ')'), field_value
+       FROM ticket_custom_fields WHERE ticket_id = ?`,
+      [targetId, sourceId, sourceId, sourceId],
+    );
+    await connection.query('DELETE FROM ticket_custom_fields WHERE ticket_id = ?', [sourceId]);
+    await connection.query(
+      `UPDATE tickets SET deleted_at = NOW(), deleted_by = ?, unido_em = NOW(), unido_por = ?, unido_ao_ticket_id = ? WHERE id = ?`,
+      [currentUser.id, currentUser.id, targetId, sourceId],
+    );
+    await connection.query(
+      `INSERT INTO ticket_eventos (ticket_id, usuario_id, tipo, descricao, metadata_json)
+       VALUES (?, ?, 'tickets_unidos', ?, ?)`,
+      [targetId, currentUser.id, `Chamado #${sourceId} unido a este atendimento`, JSON.stringify({ chamado_duplicado_id: sourceId })],
+    );
+    await connection.commit();
+    await logSystemAction(req, currentUser.id, 'TICKET_MERGE', `Uniu o chamado #${sourceId} ao chamado #${targetId}`);
+    sendSuccess(res, { id: targetId, chamado_duplicado_id: sourceId }, 'Chamados unidos com sucesso.');
+  } catch (error: unknown) {
+    await connection.rollback();
+    sendError(res, error instanceof Error ? error.message : 'Erro ao unir chamados');
+  } finally {
+    connection.release();
   }
 });
 

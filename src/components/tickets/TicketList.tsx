@@ -21,6 +21,7 @@ import { Badge } from '../ui/Badge';
 import { cn, formatRelativeTime, getSlaInfo, getFirstResponseSlaInfo } from '../../lib/utils';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
 import { api } from '../../lib/api';
 import { hasPermission } from '../../lib/permissions';
 
@@ -244,9 +245,8 @@ export const TicketList = ({
                 </div>
 
                 {canSelectBulk && (
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-opacity-20"
+                  <Checkbox
+                    className="mt-1"
                     checked={isSelected}
                     onChange={() => toggleSelectTicket(ticket.id)}
                     onClick={(event) => event.stopPropagation()}
@@ -333,11 +333,10 @@ export const TicketList = ({
             <tr className="border-b border-slate-200 bg-slate-50/90">
               {canSelectBulk && (
                 <th className="w-10 px-3 py-2 text-center">
-                  <input 
-                    type="checkbox" 
-                    className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-opacity-20 cursor-pointer shadow-sm"
+                  <Checkbox
                     onChange={toggleSelectAll}
                     checked={isAllSelected}
+                    aria-label="Selecionar todos os chamados desta página"
                   />
                 </th>
               )}
@@ -374,11 +373,10 @@ export const TicketList = ({
                 >
                   {canSelectBulk && (
                   <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                    <input 
-                      type="checkbox" 
-                      className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-opacity-20 cursor-pointer shadow-sm"
+                    <Checkbox
                       checked={isSelected}
                       onChange={() => toggleSelectTicket(ticket.id)}
+                      aria-label={`Selecionar chamado ${ticket.id}`}
                     />
                   </td>
                 )}

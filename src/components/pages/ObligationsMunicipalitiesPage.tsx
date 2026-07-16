@@ -13,6 +13,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { ErrorState } from '../ui/ErrorState';
 import { LoadingState } from '../ui/LoadingState';
 import { Modal } from '../ui/Modal';
+import { Checkbox } from '../ui/Checkbox';
 import { PageShell } from '../layout/PageShell';
 
 interface Municipality {
@@ -119,7 +120,7 @@ function MunicipalityForm({
                 {active && expanded ? <div className="max-h-36 space-y-0.5 overflow-y-auto border-t border-slate-100 p-2">
                   {!users.length ? <p className="p-2 text-[11px] text-slate-400">Nenhum usuário interno ativo.</p> : users.map((user) => {
                     const checked = names.includes(user.name);
-                    return <label key={user.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50"><input type="checkbox" checked={checked} onChange={() => toggleUser(service.code, user.name)} className="rounded border-slate-300 text-blue-600" /><span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-semibold text-slate-700">{user.name}</span><span className="block truncate text-[9px] text-slate-400">{user.role || user.email}</span></span></label>;
+                    return <label key={user.id} className="flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 hover:bg-slate-50"><Checkbox checked={checked} onChange={() => toggleUser(service.code, user.name)} aria-label={`Selecionar ${user.name}`} /><span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-semibold text-slate-700">{user.name}</span><span className="block truncate text-[9px] text-slate-400">{user.role || user.email}</span></span></label>;
                   })}
                 </div> : null}
               </div>;

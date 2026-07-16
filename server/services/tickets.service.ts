@@ -839,7 +839,7 @@ class TicketsService {
     try {
       await recordTicketEvent({
         ticket_id: ticketId,
-        usuario_id,
+        usuario_id: data.created_by_id ?? usuario_id,
         tipo: 'ticket_criado',
         descricao: 'Abertura do chamado'
       });

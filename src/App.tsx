@@ -11,6 +11,7 @@ import { User } from "./types";
 import { api } from "./lib/api";
 import { cn } from "./lib/utils";
 import { Loader2 } from "lucide-react";
+import { ProfileIntroduction } from "./components/onboarding/ProfileIntroduction";
 
 const DashboardPage = lazy(() =>
   import("./components/pages/DashboardPage").then((module) => ({
@@ -63,11 +64,6 @@ const ReportsPage = lazy(() =>
     default: module.ReportsPage,
   })),
 );
-const KnowledgePage = lazy(() =>
-  import("./components/pages/KnowledgePage").then((module) => ({
-    default: module.KnowledgePage,
-  })),
-);
 const WhatsappPage = lazy(() =>
   import("./components/pages/WhatsappPage").then((module) => ({
     default: module.WhatsappPage,
@@ -115,11 +111,79 @@ type ActiveTab =
   | "profile"
   | "settings"
   | "reports"
-  | "knowledge"
   | "ai"
   | "obligations-spreadsheet"
   | "obligations-dashboard"
   | "obligations-municipalities";
+
+export type SettingsRouteSection =
+  | "geral"
+  | "atendimento"
+  | "sla"
+  | "automacoes"
+  | "canais-de-email"
+  | "whatsapp"
+  | "identidade"
+  | "sistema";
+
+const ACTIVE_TAB_PATHS: Record<ActiveTab, string> = {
+  dashboard: "/painel",
+  tickets: "/chamados",
+  whatsapp: "/whatsapp",
+  users: "/usuarios",
+  logs: "/auditoria",
+  profile: "/minha-conta",
+  settings: "/configuracoes/geral",
+  reports: "/relatorios",
+  ai: "/assistente-ia",
+  "obligations-spreadsheet": "/obrigacoes/planilha",
+  "obligations-dashboard": "/obrigacoes/indicadores",
+  "obligations-municipalities": "/obrigacoes/municipios",
+};
+
+const SETTINGS_ROUTE_SECTIONS = new Set<SettingsRouteSection>([
+  "geral", "atendimento", "sla", "automacoes", "canais-de-email",
+  "whatsapp", "identidade", "sistema",
+]);
+
+const parseDashboardPath = (pathname: string): {
+  activeTab: ActiveTab;
+  selectedTicketId: number | null;
+  settingsSection?: SettingsRouteSection;
+} | null => {
+  const path = pathname.length > 1 ? pathname.replace(/\/$/, "") : pathname;
+  const ticketMatch = path.match(/^\/chamados\/(\d+)$/);
+  if (ticketMatch) return { activeTab: "tickets", selectedTicketId: Number(ticketMatch[1]) };
+
+  const settingsMatch = path.match(/^\/configuracoes\/([^/]+)$/);
+  if (settingsMatch && SETTINGS_ROUTE_SECTIONS.has(settingsMatch[1] as SettingsRouteSection)) {
+    return { activeTab: "settings", selectedTicketId: null, settingsSection: settingsMatch[1] as SettingsRouteSection };
+  }
+  if (path === "/configuracoes") {
+    return { activeTab: "settings", selectedTicketId: null, settingsSection: "geral" };
+  }
+
+  const entry = (Object.entries(ACTIVE_TAB_PATHS) as Array<[ActiveTab, string]>)
+    .find(([, route]) => route === path);
+  if (entry) return { activeTab: entry[0], selectedTicketId: null, settingsSection: entry[0] === "settings" ? "geral" : undefined };
+
+  // Compatibilidade de entrada; a URL é canonizada em seguida.
+  if (path === "/tickets") return { activeTab: "tickets", selectedTicketId: null };
+  const legacyTicket = path.match(/^\/tickets\/(\d+)$/);
+  if (legacyTicket) return { activeTab: "tickets", selectedTicketId: Number(legacyTicket[1]) };
+  if (path === "/reports") return { activeTab: "reports", selectedTicketId: null };
+  return null;
+};
+
+const getDashboardPath = (
+  activeTab: ActiveTab,
+  selectedTicketId: number | null,
+  settingsSection: SettingsRouteSection,
+) => {
+  if (activeTab === "tickets" && selectedTicketId) return `/chamados/${selectedTicketId}`;
+  if (activeTab === "settings") return `/configuracoes/${settingsSection}`;
+  return ACTIVE_TAB_PATHS[activeTab];
+};
 
 const DASHBOARD_STATE_KEY = "portalmeta.dashboardState";
 
@@ -134,7 +198,6 @@ const isActiveTab = (value: string | null): value is ActiveTab =>
     "profile",
     "settings",
     "reports",
-    "knowledge",
     "ai",
     "obligations-spreadsheet",
     "obligations-dashboard",
@@ -183,24 +246,31 @@ const LazyPageFallback = () => (
 
 export default function App() {
   const getViewFromPath = (pathname: string): ViewState => {
-    if (pathname === "/login") return "login";
+    if (pathname === "/entrar" || pathname === "/login" || pathname === "/") return "login";
     if (pathname === "/esqueci-senha") return "forgot-password";
-    if (pathname === "/reset-password") return "reset-password";
+    if (pathname === "/redefinir-senha" || pathname === "/reset-password") return "reset-password";
     if (pathname === "/portal") return "portal-access";
+    if (pathname.startsWith("/portal/")) return "portal";
+    if (parseDashboardPath(pathname)) return "dashboard";
     return "login";
   };
+
+  const initialDashboardRoute = parseDashboardPath(window.location.pathname);
 
   const [view, setView] = useState<ViewState>(() =>
     getViewFromPath(window.location.pathname),
   );
   const [activeTab, setActiveTab] = useState<ActiveTab>(
-    () => loadDashboardState().activeTab,
+    () => initialDashboardRoute?.activeTab || loadDashboardState().activeTab,
   );
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [createMunicipalityRequested, setCreateMunicipalityRequested] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(
-    () => loadDashboardState().selectedTicketId,
+    () => initialDashboardRoute?.selectedTicketId ?? loadDashboardState().selectedTicketId,
+  );
+  const [settingsSection, setSettingsSection] = useState<SettingsRouteSection>(
+    () => initialDashboardRoute?.settingsSection || "geral",
   );
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
@@ -211,15 +281,18 @@ export default function App() {
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("portalmeta-theme");
     document.documentElement.classList.toggle(
-      "theme-dark-beta",
-      savedTheme === "dark-beta",
+      "theme-dark",
+      savedTheme === "dark" || savedTheme === "dark-beta",
     );
   }, []);
 
-  // CSAT Route Check
+  // Rota pública de satisfação (mantém compatibilidade com links antigos).
   const path = window.location.pathname;
-  if (path.startsWith("/csat/")) {
-    const token = path.replace("/csat/", "");
+  if (path.startsWith("/satisfacao/") || path.startsWith("/csat/")) {
+    const token = path.replace(/^\/(satisfacao|csat)\//, "");
+    if (path.startsWith("/csat/")) {
+      window.history.replaceState({}, "", `/satisfacao/${token}`);
+    }
     return (
       <Suspense fallback={<LazyPageFallback />}>
         <SatisfactionPage token={token} />
@@ -260,22 +333,35 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      // Sync browser history with authentication routes.
       const path = window.location.pathname;
-      const parsedView = getViewFromPath(path);
-
-      setView((currentView) => {
-        // If they are on dashboard/portal, don't break their session on back button
-        // They would explicitly logout
-        if (currentView === "dashboard" || currentView === "portal") {
-          return currentView;
+      const dashboardRoute = parseDashboardPath(path);
+      if (dashboardRoute) {
+        if (!currentUser) {
+          window.sessionStorage.setItem("portalmeta.rotaAposLogin", path);
+          setView("login");
+          window.history.replaceState({}, "", "/entrar");
+          return;
         }
-        return parsedView;
-      });
+        setActiveTab(dashboardRoute.activeTab);
+        setSelectedTicketId(dashboardRoute.selectedTicketId);
+        if (dashboardRoute.settingsSection) setSettingsSection(dashboardRoute.settingsSection);
+        setView("dashboard");
+        return;
+      }
+      const parsedView = getViewFromPath(path);
+      setView(parsedView);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || view !== "dashboard") return;
+    const desiredPath = getDashboardPath(activeTab, selectedTicketId, settingsSection);
+    if (window.location.pathname !== desiredPath) {
+      window.history.pushState({}, "", desiredPath);
+    }
+  }, [activeTab, currentUser, selectedTicketId, settingsSection, view]);
 
   useEffect(() => {
     if (!currentUser || view !== "dashboard") return;
@@ -316,13 +402,14 @@ export default function App() {
     const checkAuth = async () => {
       const pathname = window.location.pathname;
 
-      if (pathname === "/portal") {
+      if (pathname === "/portal" || pathname.startsWith("/portal/")) {
         const restored = await restorePortalSession();
         if (restored) {
           setIsBooting(false);
           return;
         }
         setView("portal-access");
+        window.history.replaceState({}, "", "/portal");
         setIsBooting(false);
         return;
       }
@@ -336,14 +423,25 @@ export default function App() {
           setView("dashboard");
         }
       } catch (err) {
-        const unauthenticatedView = getViewFromPath(window.location.pathname);
-        setView(unauthenticatedView);
+        const requestedPath = window.location.pathname;
+        const unauthenticatedView = getViewFromPath(requestedPath);
+        const requiresAuthentication = unauthenticatedView === "dashboard" || unauthenticatedView === "portal";
+        if (requiresAuthentication) {
+          window.sessionStorage.setItem("portalmeta.rotaAposLogin", requestedPath);
+          setView("login");
+        } else {
+          setView(unauthenticatedView);
+        }
         if (
-          !["/", "/login", "/esqueci-senha", "/reset-password", "/portal"].includes(
+          !["/", "/entrar", "/login", "/esqueci-senha", "/redefinir-senha", "/reset-password", "/portal"].includes(
             window.location.pathname,
           )
         ) {
-          window.history.replaceState({}, "", "/login");
+          window.history.replaceState({}, "", "/entrar");
+        } else if (window.location.pathname === "/login") {
+          window.history.replaceState({}, "", "/entrar");
+        } else if (window.location.pathname === "/reset-password") {
+          window.history.replaceState({}, "", "/redefinir-senha");
         }
       } finally {
         setIsBooting(false);
@@ -363,7 +461,7 @@ export default function App() {
 
       setCurrentUser(null);
       setView("login");
-      window.history.pushState({}, "", "/login");
+      window.history.pushState({}, "", "/entrar");
       setAuthError("Sessão expirada. Faça login novamente.");
     };
 
@@ -421,7 +519,19 @@ export default function App() {
       setCurrentUser(profile);
       if (profile.perfil === "cliente") {
         setView("portal");
+        window.history.replaceState({}, "", "/portal");
       } else {
+        const requestedPath = window.sessionStorage.getItem("portalmeta.rotaAposLogin");
+        const requestedRoute = requestedPath ? parseDashboardPath(requestedPath) : null;
+        window.sessionStorage.removeItem("portalmeta.rotaAposLogin");
+        if (requestedRoute && canAccessAppScreen(profile, requestedRoute.activeTab, { selectedTicketId: requestedRoute.selectedTicketId })) {
+          setActiveTab(requestedRoute.activeTab);
+          setSelectedTicketId(requestedRoute.selectedTicketId);
+          if (requestedRoute.settingsSection) setSettingsSection(requestedRoute.settingsSection);
+          window.history.replaceState({}, "", getDashboardPath(requestedRoute.activeTab, requestedRoute.selectedTicketId, requestedRoute.settingsSection || settingsSection));
+        } else {
+          window.history.replaceState({}, "", getDashboardPath(activeTab, selectedTicketId, settingsSection));
+        }
         setView("dashboard");
       }
     } catch (err) {
@@ -443,7 +553,7 @@ export default function App() {
     localStorage.removeItem(DASHBOARD_STATE_KEY);
     setCurrentUser(null);
     setView("login");
-    window.history.pushState({}, "", "/");
+    window.history.replaceState({}, "", "/entrar");
   };
 
   const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -463,7 +573,7 @@ export default function App() {
       setResetEmail(email);
       setTimeout(() => {
         setView("reset-password");
-        window.history.pushState({}, "", "/reset-password");
+        window.history.pushState({}, "", "/redefinir-senha");
       }, 2000);
     } catch (err) {
       const message =
@@ -494,7 +604,7 @@ export default function App() {
       setAuthSuccess(data.message);
       setTimeout(() => {
         setView("login");
-        window.history.pushState({}, "", "/login");
+        window.history.pushState({}, "", "/entrar");
         setAuthSuccess(null);
       }, 2000);
     } catch (err) {
@@ -551,6 +661,12 @@ export default function App() {
     return (
       <LoginPage
         onSubmit={handleLogin}
+        onForgotPassword={() => {
+          setView("forgot-password");
+          setAuthError(null);
+          setAuthSuccess(null);
+          window.history.pushState({}, "", "/esqueci-senha");
+        }}
         authError={authError}
         loading={authLoading}
       />
@@ -568,7 +684,7 @@ export default function App() {
           setView("login");
           setAuthError(null);
           setAuthSuccess(null);
-          window.history.pushState({}, "", "/login");
+          window.history.pushState({}, "", "/entrar");
         }}
       />
     );
@@ -586,7 +702,7 @@ export default function App() {
           setView("login");
           setAuthError(null);
           setAuthSuccess(null);
-          window.history.pushState({}, "", "/login");
+          window.history.pushState({}, "", "/entrar");
         }}
       />
     );
@@ -601,7 +717,7 @@ export default function App() {
             setView("login");
             setAuthError(null);
             setAuthSuccess(null);
-            window.history.pushState({}, "", "/login");
+            window.history.pushState({}, "", "/entrar");
           }}
         />
       </Suspense>
@@ -649,8 +765,6 @@ export default function App() {
           return "Logs do Sistema";
         case "reports":
           return "Relatórios Gerenciais";
-        case "knowledge":
-          return "Base de Conhecimento";
         case "ai":
           return "Assistente IA";
         case "profile":
@@ -660,7 +774,7 @@ export default function App() {
         case "obligations-spreadsheet":
           return "Planilha Principal";
         case "obligations-dashboard":
-          return "Dashboard";
+          return "Dashboard de Obrigações";
         case "obligations-municipalities":
           return "Municípios";
         default:
@@ -687,7 +801,8 @@ export default function App() {
           <Topbar
             title={getPageTitle()}
             onMenuClick={() => setIsSidebarOpen(true)}
-            showSearch={!(activeTab === "tickets" && selectedTicketId)}
+            isMenuOpen={isSidebarOpen}
+            showSearch
             onNavigate={handleTopbarNavigate}
           />
 
@@ -746,10 +861,7 @@ export default function App() {
                       <WhatsappPage
                         currentUser={currentUser}
                         onOpenSettings={() => {
-                          window.sessionStorage.setItem(
-                            "portalmeta.settingsTab",
-                            "whatsapp",
-                          );
+                          setSettingsSection("whatsapp");
                           setActiveTab("settings");
                         }}
                       />
@@ -809,13 +921,6 @@ export default function App() {
                       <AccessDenied />
                     ))}
 
-                  {activeTab === "knowledge" &&
-                    (canAccessAppScreen(currentUser, "knowledge") ? (
-                      <KnowledgePage currentUser={currentUser} />
-                    ) : (
-                      <AccessDenied />
-                    ))}
-
                   {activeTab === "ai" &&
                     (canAccessAppScreen(currentUser, "ai") ? (
                       <AITesterPage currentUser={currentUser} />
@@ -837,6 +942,8 @@ export default function App() {
                         currentUser={currentUser}
                         onNavigate={(tab) => setActiveTab(tab)}
                         onUpdateUser={setCurrentUser}
+                        routeSection={settingsSection}
+                        onRouteSectionChange={setSettingsSection}
                       />
                     ) : (
                       <AccessDenied />
@@ -847,6 +954,15 @@ export default function App() {
             </div>
           </main>
         </div>
+        <ProfileIntroduction
+          currentUser={currentUser}
+          onNavigate={(tab) => {
+            if (isActiveTab(tab)) {
+              setActiveTab(tab);
+              setSelectedTicketId(null);
+            }
+          }}
+        />
       </div>
     );
   }

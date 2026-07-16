@@ -8,11 +8,12 @@ import { AuthAlert } from './AuthAlert';
 
 interface LoginPageProps {
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  onForgotPassword: () => void;
   authError: string | null;
   loading: boolean;
 }
 
-export const LoginPage = ({ onSubmit, authError, loading }: LoginPageProps) => {
+export const LoginPage = ({ onSubmit, onForgotPassword, authError, loading }: LoginPageProps) => {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -40,9 +41,17 @@ export const LoginPage = ({ onSubmit, authError, loading }: LoginPageProps) => {
           />
 
           <div className="space-y-1">
-            <label htmlFor="login-password" className="text-xs font-semibold text-slate-700">
-              Senha
-            </label>
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="login-password" className="text-xs font-semibold text-slate-700">Senha</label>
+              <button
+                type="button"
+                onClick={onForgotPassword}
+                className="rounded text-xs font-semibold text-blue-700 hover:text-blue-800 focus-visible:ring-2 focus-visible:ring-blue-600/30"
+                disabled={loading}
+              >
+                Esqueci minha senha
+              </button>
+            </div>
             <div className="relative">
               <input
                 id="login-password"

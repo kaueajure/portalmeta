@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Plus, Trash2, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Select } from '../ui/Select';
+import { Modal } from '../ui/Modal';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { api } from '../../lib/api';
 import { useTicketOptions } from '../../hooks/useTicketOptions';
 
@@ -11,6 +14,7 @@ export const SlaPoliciesManager = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   const [nome, setNome] = useState('');
   const [prioridade, setPrioridade] = useState('');
@@ -75,10 +79,10 @@ export const SlaPoliciesManager = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Excluir esta política?')) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.delete(`/ticket-settings/sla-policies/${id}`);
+      await api.delete(`/ticket-settings/sla-policies/${deleteTarget.id}`);
       loadData();
     } catch (err) {
       console.error(err);
@@ -117,10 +121,10 @@ export const SlaPoliciesManager = () => {
                  </div>
                </div>
                <div className="flex items-center gap-1">
-                  <button onClick={() => handleOpenModal(p)} className="p-1.5 text-slate-400 hover:text-blue-600 rounded bg-white border border-slate-200 shadow-sm">
+                  <button type="button" aria-label={`Editar política ${p.nome}`} onClick={() => handleOpenModal(p)} className="flex h-9 w-9 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 shadow-sm hover:text-blue-700">
                     <Edit2 size={12} />
                   </button>
-                  <button onClick={() => handleDelete(p.id)} className="p-1.5 text-slate-400 hover:text-red-600 rounded bg-white border border-slate-200 shadow-sm">
+                  <button type="button" aria-label={`Excluir política ${p.nome}`} onClick={() => setDeleteTarget(p)} className="flex h-9 w-9 items-center justify-center rounded border border-slate-200 bg-white text-slate-500 shadow-sm hover:text-red-700">
                     <Trash2 size={12} />
                   </button>
                </div>
@@ -129,14 +133,14 @@ export const SlaPoliciesManager = () => {
         </div>
       )}
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 p-4">
-          <div className="w-full max-w-sm bg-white rounded-xl shadow-xl overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <h3 className="text-sm font-semibold">{editingPolicy ? 'Editar' : 'Nova'} Política SLA</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
-            </div>
-            <div className="p-4 space-y-3">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={`${editingPolicy ? 'Editar' : 'Nova'} política de SLA`}
+        size="sm"
+        footer={<><Button size="sm" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancelar</Button><Button size="sm" onClick={handleSave} disabled={!nome || !tempoResolucao}>Salvar</Button></>}
+      >
+            <div className="space-y-3">
                <div>
                  <label className="block text-xs font-medium text-slate-700 mb-1">Nome</label>
                  <Input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Prioridade SLA Urgente" className="h-8 text-sm" />
@@ -144,13 +148,7 @@ export const SlaPoliciesManager = () => {
                <div className="grid grid-cols-2 gap-3">
                  <div>
                    <label className="block text-xs font-medium text-slate-700 mb-1">Prioridade</label>
-                   <select value={prioridade} onChange={e => setPrioridade(e.target.value)} className="w-full h-8 px-2 text-sm flex items-center border border-slate-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500 bg-white">
-                     <option value="">Todas</option>
-                     <option value="baixa">Baixa</option>
-                     <option value="media">Média</option>
-                     <option value="alta">Alta</option>
-                     <option value="urgente">Urgente</option>
-                   </select>
+                   <Select value={prioridade} onChange={setPrioridade} options={[{ value: '', label: 'Todas' }, { value: 'baixa', label: 'Baixa' }, { value: 'media', label: 'Média' }, { value: 'alta', label: 'Alta' }, { value: 'urgente', label: 'Urgente' }]} />
                  </div>
                  <div>
                    <label className="block text-xs font-medium text-slate-700 mb-1">Resolver em (horas)</label>
@@ -160,31 +158,24 @@ export const SlaPoliciesManager = () => {
                <div className="grid grid-cols-2 gap-3">
                  <div>
                    <label className="block text-xs font-medium text-slate-700 mb-1">Categoria (Opc)</label>
-                   <select value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full h-8 px-2 text-sm flex items-center border border-slate-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500 bg-white">
-                     <option value="">Todas</option>
-                     {categories?.map(c => (
-                       <option key={c.valor} value={c.valor}>{c.nome}</option>
-                     ))}
-                   </select>
+                   <Select value={categoria} onChange={setCategoria} options={[{ value: '', label: 'Todas' }, ...(categories || []).map(c => ({ value: c.valor, label: c.nome }))]} />
                  </div>
                  <div>
                    <label className="block text-xs font-medium text-slate-700 mb-1">Serviço (Opc)</label>
-                   <select value={servico} onChange={e => setServico(e.target.value)} className="w-full h-8 px-2 text-sm flex items-center border border-slate-200 rounded-md outline-none focus:ring-1 focus:ring-blue-500 bg-white">
-                     <option value="">Todos</option>
-                     {services?.map(s => (
-                       <option key={s.valor} value={s.valor}>{s.nome}</option>
-                     ))}
-                   </select>
+                   <Select value={servico} onChange={setServico} options={[{ value: '', label: 'Todos' }, ...(services || []).map(s => ({ value: s.valor, label: s.nome }))]} />
                  </div>
                </div>
             </div>
-            <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-              <Button size="sm" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-              <Button size="sm" onClick={handleSave} disabled={!nome || !tempoResolucao}>Salvar</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Excluir política de SLA?"
+        description={`A política ${deleteTarget?.nome || ''} deixará de definir prazos para novos chamados. Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir política"
+        variant="danger"
+      />
     </Card>
   );
 };

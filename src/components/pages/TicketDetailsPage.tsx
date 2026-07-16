@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
 import { Ticket, Message, User, TicketAttachment, TicketTimelineItem, TicketOption, TicketStatus } from '../../types';
-import { AlertCircle, Loader2, CheckCircle2, X } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { TicketHeader } from '../tickets/details/TicketHeader';
@@ -14,6 +14,9 @@ import { hasAnyPermission, hasPermission } from '../../lib/permissions';
 import { getSocket } from '../../lib/socket';
 import { motion, AnimatePresence } from 'motion/react';
 import { PageShell } from '../layout/PageShell';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Modal } from '../ui/Modal';
+import { Input } from '../ui/Input';
 
 interface TicketDetailsPageProps {
   ticketId: number;
@@ -36,6 +39,10 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
   const [agents, setAgents] = useState<User[]>([]);
   const [ticketAttachments, setTicketAttachments] = useState<TicketAttachment[]>([]);
   const [ticketStatusOptions, setTicketStatusOptions] = useState<TicketOption[]>([]);
+  const [attachmentToDelete, setAttachmentToDelete] = useState<number | null>(null);
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [duplicateTicketId, setDuplicateTicketId] = useState('');
+  const [merging, setMerging] = useState(false);
 
   // Resolution Modal State
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
@@ -207,7 +214,7 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
 
   const handleConfirmResolution = async () => {
     if (!resolutionData.resolucao_motivo) {
-        alert('Por favor, informe o motivo da resolução.');
+        setActionError('Por favor, informe o motivo da resolução.');
         return;
     }
 
@@ -220,7 +227,7 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
         setTimeout(() => setActionSuccess(null), 3000);
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Erro ao finalizar chamado.';
-        alert(message);
+        setActionError(message);
     }
   };
 
@@ -238,7 +245,7 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
       setTicket(prev => prev ? { ...prev, tags } : null);
     } catch (err) {
       console.error('Erro ao atualizar tags:', err);
-      alert('Erro ao atualizar tags.');
+      setActionError('Erro ao atualizar tags.');
     }
   };
 
@@ -248,21 +255,45 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
       setTicket(prev => prev ? { ...prev, custom_fields: fields } : null);
     } catch (err) {
       console.error('Erro ao atualizar campos personalizados:', err);
-      alert('Erro ao atualizar campos personalizados.');
+      setActionError('Erro ao atualizar campos personalizados.');
     }
   };
 
   const handleDeleteAttachment = async (attachmentId: number) => {
-    if (!window.confirm('Tem certeza que deseja excluir este anexo permanentemente?')) return;
-    
+    setAttachmentToDelete(attachmentId);
+  };
+
+  const confirmDeleteAttachment = async () => {
+    if (attachmentToDelete === null) return;
     try {
-      await api.delete(`/attachments/${attachmentId}`);
+      await api.delete(`/attachments/${attachmentToDelete}`);
       setActionSuccess('Anexo removido do sistema.');
       refreshConversation();
       setTimeout(() => setActionSuccess(null), 3000);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao excluir anexo.';
       setActionError(message);
+    }
+  };
+
+  const handleMergeTicket = async () => {
+    const sourceId = Number(duplicateTicketId);
+    if (!Number.isInteger(sourceId) || sourceId <= 0 || sourceId === ticketId) {
+      setActionError('Informe o número de outro chamado válido.');
+      return;
+    }
+    setMerging(true);
+    setActionError(null);
+    try {
+      await api.post(`/tickets/${ticketId}/unir`, { chamado_duplicado_id: sourceId });
+      setIsMergeModalOpen(false);
+      setDuplicateTicketId('');
+      setActionSuccess(`Chamado #${sourceId} unido com sucesso.`);
+      await fetchData({ silent: true });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Erro ao unir chamados.');
+    } finally {
+      setMerging(false);
     }
   };
 
@@ -303,6 +334,7 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
   const canAddInternalNote = hasPermission(currentUser, 'ticket_mensagens.comentar_interno');
   const canAttachFiles = hasPermission(currentUser, 'ticket_mensagens.anexar');
   const canDeleteAttachments = hasPermission(currentUser, 'ticket_mensagens.excluir_anexos');
+  const canMergeTickets = hasPermission(currentUser, 'tickets.unir');
   const activeTicketStatusOptions = ticketStatusOptions.filter(option => Number(option.ativo) === 1);
   const currentStatusOption = ticketStatusOptions.find(option => option.valor === ticket.status);
   const isCurrentFinalStatus = currentStatusOption?.especial === 'finalizado' || currentStatusOption?.especial === 'encerrado';
@@ -338,6 +370,8 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
             canEditResponsavel={canEditResponsavel}
             agents={agents}
             statusOptions={ticketStatusOptions}
+            canMerge={canMergeTickets}
+            onMerge={() => setIsMergeModalOpen(true)}
            />
       </div>
 
@@ -424,37 +458,15 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
         </div>
       </div>
 
-      {/* Resolution Modal */}
-      {isResolveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-3 sm:p-4">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200"
-          >
-             <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-slate-100 flex justify-between items-center bg-white gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                     <CheckCircle2 size={16} />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-slate-900 tracking-tight truncate">
-                       Concluir chamado
-                    </h3>
-                    <p className="text-[10px] sm:text-xs text-slate-500 font-medium truncate">
-                       Informe como este chamado foi resolvido
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsResolveModalOpen(false)}
-                  className="p-1.5 hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-lg transition-colors shrink-0 md:hidden"
-                >
-                  <X size={16} />
-                </button>
-             </div>
-
-             <div className="p-4 sm:p-5 space-y-4">
+      <Modal
+        isOpen={isResolveModalOpen}
+        onClose={() => setIsResolveModalOpen(false)}
+        title="Concluir chamado"
+        size="sm"
+        footer={<><Button variant="ghost" size="sm" onClick={() => setIsResolveModalOpen(false)}>Desistir</Button><Button size="sm" onClick={handleConfirmResolution} disabled={!resolutionData.resolucao_motivo} className="bg-emerald-600 hover:bg-emerald-700">Finalizar agora</Button></>}
+      >
+             <div className="space-y-4">
+                <p className="text-sm text-slate-600">Informe como este chamado foi resolvido.</p>
                 <div className="space-y-1.5">
                    <label className="text-[11px] font-semibold text-slate-600">Motivo da Resolução</label>
                    <Select 
@@ -484,28 +496,36 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
                    />
                 </div>
              </div>
-
-             <div className="px-4 sm:px-5 py-3 sm:py-4 bg-slate-50/50 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 border-t border-slate-100">
-                <Button 
-                   variant="ghost" 
-                   size="sm"
-                   className="text-slate-500 hover:text-slate-700 font-sans" 
-                   onClick={() => setIsResolveModalOpen(false)}
-                >
-                   Desistir
-                </Button>
-                <Button 
-                   size="sm"
-                   onClick={handleConfirmResolution} 
-                   disabled={!resolutionData.resolucao_motivo}
-                   className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm font-sans"
-                >
-                   Finalizar Agora
-                </Button>
-             </div>
-          </motion.div>
+      </Modal>
+      <ConfirmDialog
+        isOpen={attachmentToDelete !== null}
+        onClose={() => setAttachmentToDelete(null)}
+        onConfirm={confirmDeleteAttachment}
+        title="Excluir anexo?"
+        description="O arquivo será removido permanentemente do chamado e não poderá ser recuperado."
+        confirmLabel="Excluir anexo"
+        variant="danger"
+      />
+      <Modal
+        isOpen={isMergeModalOpen}
+        onClose={() => setIsMergeModalOpen(false)}
+        title="Unir chamado duplicado"
+        size="sm"
+        footer={<><Button variant="ghost" size="sm" onClick={() => setIsMergeModalOpen(false)}>Cancelar</Button><Button size="sm" loading={merging} onClick={handleMergeTicket}>Unir chamados</Button></>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-slate-600">As mensagens, anexos, tags, campos e histórico do chamado duplicado serão movidos para o chamado #{ticketId}. O duplicado será arquivado.</p>
+          <Input
+            label="Número do chamado duplicado"
+            type="number"
+            min={1}
+            value={duplicateTicketId}
+            onChange={event => setDuplicateTicketId(event.target.value)}
+            placeholder="Ex: 123"
+          />
+          {actionError && <div className="rounded-md border border-red-100 bg-red-50 p-2 text-xs font-medium text-red-600">{actionError}</div>}
         </div>
-      )}
+      </Modal>
     </PageShell>
   );
 };

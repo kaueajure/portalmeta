@@ -9,6 +9,7 @@ import {
   Mail,
   UserRound,
   CalendarDays,
+  GitMerge,
 } from 'lucide-react';
 import { Ticket, TicketOption, TicketStatus, User } from '../../../types';
 import { cn, getSlaInfo } from '../../../lib/utils';
@@ -27,6 +28,8 @@ interface TicketHeaderProps {
   canEditResponsavel: boolean;
   agents: User[];
   statusOptions: TicketOption[];
+  canMerge: boolean;
+  onMerge: () => void;
 }
 
 export const TicketHeader = ({ 
@@ -42,7 +45,9 @@ export const TicketHeader = ({
   canEditPriority,
   canEditResponsavel,
   agents,
-  statusOptions: configuredStatusOptions
+  statusOptions: configuredStatusOptions,
+  canMerge,
+  onMerge,
 }: TicketHeaderProps) => {
   const { 
     id, 
@@ -140,6 +145,17 @@ export const TicketHeader = ({
           </div>
 
           <div className="flex shrink-0 items-center">
+            {canMerge && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onMerge}
+                className="mr-2 h-8 rounded-md px-3 text-xs font-semibold"
+              >
+                <GitMerge size={14} className="mr-1.5" />
+                Unir duplicado
+              </Button>
+            )}
             {showResolveButton && (
               <Button 
                 onClick={onResolve}

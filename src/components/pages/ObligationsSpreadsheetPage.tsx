@@ -1,4 +1,5 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle, Building2, Check, ChevronDown, CircleCheckBig, Clock3, Download,
   FileDown, FileText, Filter, History, Loader2, MessageSquare, Paperclip,
@@ -12,6 +13,8 @@ import { Button } from '../ui/Button';
 import { ErrorState } from '../ui/ErrorState';
 import { LoadingState } from '../ui/LoadingState';
 import { Modal } from '../ui/Modal';
+import { Select } from '../ui/Select';
+import { Checkbox } from '../ui/Checkbox';
 import { PageShell } from '../layout/PageShell';
 
 type Status = 'Falta XML' | 'Não iniciado' | 'Pendência Cliente' | 'Trabalhando' | 'Retificar' | 'Enviado' | 'Homologado';
@@ -52,6 +55,14 @@ interface WorkspaceResponse {
   competences: string[];
 }
 interface DetailsResponse { history: HistoryRecord[]; comments: Comment[]; attachments: Attachment[]; }
+interface CommentPreviewState {
+  taskId: number;
+  municipalityName: string;
+  competence: string;
+  comments: Comment[];
+  top: number;
+  left: number;
+}
 
 const OBLIGATIONS = [
   { code: 'MSC', name: 'Matriz de Saldos Contábeis', accent: 'bg-blue-600', tone: 'text-blue-700' },
@@ -72,6 +83,15 @@ const STATUS_STYLE: Record<Status, string> = {
   'Enviado': 'border-violet-200 bg-violet-50 text-violet-700',
   'Homologado': 'border-emerald-200 bg-emerald-50 text-emerald-700',
 };
+const STATUS_CARD_STYLE: Record<Status, string> = {
+  'Falta XML': 'border-slate-200/80 bg-rose-50/55 text-rose-700 hover:border-rose-200 hover:bg-rose-50/90',
+  'Não iniciado': 'border-slate-200/80 bg-slate-50/80 text-slate-600 hover:border-slate-300 hover:bg-slate-100/70',
+  'Pendência Cliente': 'border-slate-200/80 bg-amber-50/60 text-amber-800 hover:border-amber-200 hover:bg-amber-50',
+  'Trabalhando': 'border-slate-200/80 bg-blue-50/60 text-blue-700 hover:border-blue-200 hover:bg-blue-50',
+  'Retificar': 'border-slate-200/80 bg-orange-50/60 text-orange-700 hover:border-orange-200 hover:bg-orange-50',
+  'Enviado': 'border-slate-200/80 bg-violet-50/60 text-violet-700 hover:border-violet-200 hover:bg-violet-50',
+  'Homologado': 'border-slate-200/80 bg-emerald-50/60 text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50',
+};
 const STATUS_DOT: Record<Status, string> = {
   'Falta XML': 'bg-rose-500',
   'Não iniciado': 'bg-slate-400',
@@ -80,11 +100,6 @@ const STATUS_DOT: Record<Status, string> = {
   Retificar: 'bg-orange-500',
   Enviado: 'bg-violet-500',
   Homologado: 'bg-emerald-500',
-};
-const SHORT_STATUS: Record<Status, string> = {
-  'Falta XML': 'Falta XML', 'Não iniciado': 'Não iniciado',
-  'Pendência Cliente': 'Pendência', Trabalhando: 'Em curso', Retificar: 'Retificar',
-  Enviado: 'Enviado', Homologado: 'Homologado',
 };
 const MONTH_INDEX: Record<string, number> = {
   Janeiro: 1, Fevereiro: 2, Março: 3, Abril: 4, Maio: 5, Junho: 6,
@@ -121,7 +136,47 @@ function saveBlob(content: BlobPart, type: string, name: string) {
 }
 
 function EmptyCell() {
-  return <div className="flex h-14 items-center justify-center"><span className="h-1 w-1 rounded-full bg-slate-200" /></div>;
+  return <div className="flex h-11 items-center justify-center"><span className="h-1 w-1 rounded-full bg-slate-200" /></div>;
+}
+
+function CommentPreviewPopover({ preview }: { preview: CommentPreviewState }) {
+  const recentComments = preview.comments.slice(-3).reverse();
+
+  return createPortal(
+    <div
+      role="tooltip"
+      aria-label={`Comentários de ${preview.municipalityName}, ${preview.competence}`}
+      className="pointer-events-none fixed z-[100] w-[min(320px,calc(100vw-24px))] rounded-xl border border-slate-200 bg-white/95 p-3 shadow-[0_16px_40px_rgba(15,23,42,0.18)] backdrop-blur-sm"
+      style={{ top: preview.top, left: preview.left }}
+    >
+      <div className="mb-2.5 flex items-start justify-between gap-3 border-b border-slate-100 pb-2.5">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-bold text-slate-950">{preview.municipalityName}</p>
+          <p className="mt-0.5 text-[10px] font-medium text-slate-500">{preview.competence}</p>
+        </div>
+        <span className="flex shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">
+          <MessageSquare size={11} />{preview.comments.length}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {recentComments.map((comment) => (
+          <div key={comment.id} className="rounded-lg bg-slate-50 px-2.5 py-2">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="truncate text-[10px] font-bold text-slate-800">{comment.authorName}</span>
+              <span className="shrink-0 text-[9px] text-slate-400">{formatDate(comment.createdAt)}</span>
+            </div>
+            <p className="line-clamp-3 whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-600">{comment.text}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 border-t border-slate-100 pt-2 text-[9px] font-medium text-slate-400">
+        {preview.comments.length > recentComments.length
+          ? `Mostrando os ${recentComments.length} mais recentes · clique no contador para ver todos`
+          : 'Clique no contador para abrir os comentários'}
+      </p>
+    </div>,
+    document.body,
+  );
 }
 
 interface TaskModalProps {
@@ -272,22 +327,16 @@ function TaskModal({ task, municipality, currentUser, initialTab, onClose, onUpd
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-1.5 text-xs font-semibold text-slate-700">
               Status principal
-              <select disabled={!canEdit} value={status} onChange={(e) => setStatus(e.target.value as Status)} className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">
-                {STATUSES.filter((item) => task.obligationCode === 'SIOPE' || task.obligationCode === 'SIOPS' || item !== 'Pendência Cliente').map((item) => <option key={item}>{item}</option>)}
-              </select>
+              <Select disabled={!canEdit} value={status} onChange={(value) => setStatus(value as Status)} options={STATUSES.filter((item) => task.obligationCode === 'SIOPE' || task.obligationCode === 'SIOPS' || item !== 'Pendência Cliente').map((item) => ({ value: item, label: item }))} />
             </label>
             {task.obligationCode === 'SIOPS' ? (
               <label className="space-y-1.5 text-xs font-semibold text-slate-700">Controle de membros
-                <select disabled={!canEdit} value={siopsMembros} onChange={(e) => setSiopsMembros(e.target.value as AuxiliaryStatus)} className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">
-                  {AUXILIARY_STATUSES.map((item) => <option key={item}>{item}</option>)}
-                </select>
+                <Select disabled={!canEdit} value={siopsMembros} onChange={(value) => setSiopsMembros(value as AuxiliaryStatus)} options={AUXILIARY_STATUSES.map((item) => ({ value: item, label: item }))} />
               </label>
             ) : null}
             {task.obligationCode === 'SIOPE' ? (
               <label className="space-y-1.5 text-xs font-semibold text-slate-700">Controle da folha
-                <select disabled={!canEdit} value={siopeFolha} onChange={(e) => setSiopeFolha(e.target.value as AuxiliaryStatus)} className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-[13px] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50">
-                  {AUXILIARY_STATUSES.map((item) => <option key={item}>{item}</option>)}
-                </select>
+                <Select disabled={!canEdit} value={siopeFolha} onChange={(value) => setSiopeFolha(value as AuxiliaryStatus)} options={AUXILIARY_STATUSES.map((item) => ({ value: item, label: item }))} />
               </label>
             ) : null}
           </div>
@@ -376,6 +425,7 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   const filterRef = useRef<HTMLDivElement>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalTab, setModalTab] = useState<ModalTab>('update');
+  const [commentPreview, setCommentPreview] = useState<CommentPreviewState | null>(null);
   const canManageMunicipalities = hasPermission(currentUser, 'obrigacoes.municipios.visualizar');
 
   const loadWorkspace = useCallback(async () => {
@@ -429,7 +479,22 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
     const next = new Set(current); next.has(value) ? next.delete(value) : next.add(value); return next;
   });
   const clearFilters = () => { setStatusFilters(new Set()); setMunicipalityFilters(new Set()); setCompetenceFilters(new Set()); setAuxiliaryFilters(new Set()); setSearch(''); };
-  const openTask = (task: Task, tab: ModalTab = 'update') => { setSelectedTask(task); setModalTab(tab); };
+  const openTask = (task: Task, tab: ModalTab = 'update') => {
+    setCommentPreview(null); setSelectedTask(task); setModalTab(tab);
+  };
+  const showCommentPreview = (element: HTMLElement, task: Task, municipalityName: string, comments: Comment[]) => {
+    if (!comments.length) return;
+    const rect = element.getBoundingClientRect();
+    const width = Math.min(320, window.innerWidth - 24);
+    const height = Math.min(310, 74 + Math.min(comments.length, 3) * 72);
+    const fitsOnRight = rect.right + 10 + width <= window.innerWidth - 12;
+    const left = fitsOnRight ? rect.right + 10 : Math.max(12, rect.left - width - 10);
+    const top = Math.min(
+      Math.max(12, rect.top + rect.height / 2 - height / 2),
+      Math.max(12, window.innerHeight - height - 12),
+    );
+    setCommentPreview({ taskId: task.id, municipalityName, competence: task.competence, comments, top, left });
+  };
   const updateTask = (updated: Task) => {
     setWorkspace((current) => current ? { ...current, tasks: current.tasks.map((task) => task.id === updated.id ? updated : task) } : current);
     setSelectedTask((current) => current?.id === updated.id ? updated : current);
@@ -461,8 +526,9 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   if (error && !workspace) return <ErrorState className="h-full w-full" message={error} onRetry={loadWorkspace} />;
 
   return (
-    <PageShell
-      actions={<>{canManageMunicipalities ? <Button size="sm" onClick={() => onNavigate('obligations-municipalities')}><Plus size={13} />Adicionar município</Button> : null}<label className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-semibold text-slate-500">Exercício<select value={year} onChange={(event) => setYear(Number(event.target.value))} className="bg-transparent text-xs font-bold text-slate-950 outline-none">{[currentYear - 1, currentYear, currentYear + 1].map((item) => <option key={item}>{item}</option>)}</select></label><Button size="sm" variant="outline" disabled={loading} onClick={loadWorkspace}><RefreshCw size={13} className={cn(loading && 'animate-spin')} />Atualizar</Button></>}
+    <>
+      <PageShell
+      actions={<>{canManageMunicipalities ? <Button size="sm" onClick={() => onNavigate('obligations-municipalities')}><Plus size={13} />Adicionar município</Button> : null}<div className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white pl-2.5 text-xs font-semibold text-slate-500"><span>Exercício</span><Select value={year} onChange={(value) => setYear(Number(value))} options={[currentYear - 1, currentYear, currentYear + 1].map((item) => ({ value: String(item), label: String(item) }))} size="sm" className="w-20" buttonClassName="border-0 bg-transparent px-2 shadow-none" /></div><Button size="sm" variant="outline" disabled={loading} onClick={loadWorkspace}><RefreshCw size={13} className={cn(loading && 'animate-spin')} />Atualizar</Button></>}
       tabs={<div className="flex gap-1 overflow-x-auto py-3">{OBLIGATIONS.map((item) => { const selected = item.code === obligation; return <button key={item.code} onClick={() => { setObligation(item.code); clearFilters(); }} className={cn('flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-medium transition-all', selected ? 'border border-slate-200/60 bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900')}><span className={cn('h-1.5 w-1.5 rounded-full', item.accent)} />{item.code}</button>; })}</div>}
       flush
       contentClassName="flex min-h-0 flex-col bg-white print:block"
@@ -480,8 +546,8 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
                   <div className="grid gap-5 p-4 sm:grid-cols-2">
                     <fieldset><legend className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Status</legend><div className="flex flex-wrap gap-1.5">{STATUSES.map((item) => <button key={item} onClick={() => toggleSet(setStatusFilters, item)} className={cn('flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[10px] font-semibold transition', statusFilters.has(item) ? STATUS_STYLE[item] : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50')}><span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[item])} />{item}</button>)}</div></fieldset>
                     <fieldset><legend className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Competências</legend><div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">{workspace?.competences.map((item) => <button key={item} onClick={() => toggleSet(setCompetenceFilters, item)} className={cn('rounded-md border px-2 py-1.5 text-[10px] font-semibold transition', competenceFilters.has(item) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50')}>{item}</button>)}</div></fieldset>
-                    <fieldset><legend className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Municípios</legend><div className="max-h-36 space-y-1.5 overflow-y-auto pr-2">{workspace?.municipalities.map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-slate-600"><input type="checkbox" checked={municipalityFilters.has(item.id)} onChange={() => toggleSet(setMunicipalityFilters, item.id)} className="rounded border-slate-300 text-blue-600" /><span className="truncate">{item.name}</span></label>)}</div></fieldset>
-                    {obligation === 'SIOPE' || obligation === 'SIOPS' ? <fieldset><legend className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">{obligation === 'SIOPE' ? 'Folha SIOPE' : 'Membros SIOPS'}</legend><div className="space-y-1.5">{AUXILIARY_STATUSES.map((item) => <label key={item} className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-slate-600"><input type="checkbox" checked={auxiliaryFilters.has(item)} onChange={() => toggleSet(setAuxiliaryFilters, item)} className="rounded border-slate-300 text-blue-600" />{item}</label>)}</div></fieldset> : null}
+                    <fieldset><legend className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">Municípios</legend><div className="max-h-36 space-y-0.5 overflow-y-auto pr-2">{workspace?.municipalities.map((item) => <Checkbox key={item.id} checked={municipalityFilters.has(item.id)} onChange={() => toggleSet(setMunicipalityFilters, item.id)} label={item.name} />)}</div></fieldset>
+                    {obligation === 'SIOPE' || obligation === 'SIOPS' ? <fieldset><legend className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">{obligation === 'SIOPE' ? 'Folha SIOPE' : 'Membros SIOPS'}</legend><div className="space-y-0.5">{AUXILIARY_STATUSES.map((item) => <Checkbox key={item} checked={auxiliaryFilters.has(item)} onChange={() => toggleSet(setAuxiliaryFilters, item)} label={item} />)}</div></fieldset> : null}
                   </div>
                 </div> : null}
               </div>
@@ -494,11 +560,11 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5"><span className="rounded-md border border-slate-200 bg-white p-1.5 text-slate-500"><Building2 size={14} /></span><div><strong className="block text-base font-semibold leading-none text-slate-950">{visibleMunicipalities.length}</strong><span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Municípios</span></div></div>
-            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5"><span className="rounded-md border border-blue-200 bg-blue-50 p-1.5 text-blue-600"><CircleCheckBig size={14} /></span><div><strong className="block text-base font-semibold leading-none text-slate-950">{stats.completionRate}%</strong><span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Conclusão</span></div></div>
-            <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5"><span className="rounded-md border border-emerald-200 bg-emerald-50 p-1.5 text-emerald-600"><Check size={14} /></span><div><strong className="block text-base font-semibold leading-none text-slate-950">{stats.homologated}</strong><span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Homologadas</span></div></div>
-            <div className={cn('flex items-center gap-3 rounded-lg border px-3 py-2.5', stats.overdue ? 'border-rose-200 bg-rose-50/70' : 'border-slate-200 bg-slate-50/70')}><span className={cn('rounded-md border bg-white p-1.5', stats.overdue ? 'border-rose-200 text-rose-600' : 'border-slate-200 text-slate-500')}><Clock3 size={14} /></span><div><strong className={cn('block text-base font-semibold leading-none', stats.overdue ? 'text-rose-700' : 'text-slate-950')}>{stats.overdue}</strong><span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Em atraso</span></div></div>
+          <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-1.5"><span className="rounded border border-slate-200 bg-white p-1 text-slate-500"><Building2 size={12} /></span><div><strong className="block text-sm font-semibold leading-none text-slate-950">{visibleMunicipalities.length}</strong><span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Municípios</span></div></div>
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-1.5"><span className="rounded border border-blue-200 bg-blue-50 p-1 text-blue-600"><CircleCheckBig size={12} /></span><div><strong className="block text-sm font-semibold leading-none text-slate-950">{stats.completionRate}%</strong><span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Conclusão</span></div></div>
+            <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-1.5"><span className="rounded border border-emerald-200 bg-emerald-50 p-1 text-emerald-600"><Check size={12} /></span><div><strong className="block text-sm font-semibold leading-none text-slate-950">{stats.homologated}</strong><span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Homologadas</span></div></div>
+            <div className={cn('flex items-center gap-2 rounded-md border px-2.5 py-1.5', stats.overdue ? 'border-rose-200 bg-rose-50/70' : 'border-slate-200 bg-slate-50/70')}><span className={cn('rounded border bg-white p-1', stats.overdue ? 'border-rose-200 text-rose-600' : 'border-slate-200 text-slate-500')}><Clock3 size={12} /></span><div><strong className={cn('block text-sm font-semibold leading-none', stats.overdue ? 'text-rose-700' : 'text-slate-950')}>{stats.overdue}</strong><span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">Em atraso</span></div></div>
           </div>
         </div>
       </div>
@@ -508,31 +574,43 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
       <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white print:overflow-visible">
         <div className="shrink-0 overflow-x-auto border-b border-slate-100 bg-white px-4 py-2 print:hidden">
           <div className="flex min-w-max items-center justify-between gap-6">
-            <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500"><span className="font-semibold text-slate-900">{stats.cells} competências visíveis</span><span className="text-slate-300">·</span><span>{stats.completed} concluídas</span><span className="text-slate-300">·</span><span>{stats.working} em execução</span></div>
-            <div className="flex items-center gap-3">{STATUSES.map((status) => <span key={status} className="flex items-center gap-1.5 whitespace-nowrap text-[9px] font-semibold text-slate-500"><span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[status])} />{SHORT_STATUS[status]}</span>)}</div>
+            <div className="flex items-center gap-2 text-[11px] font-medium text-slate-500"><span className="font-semibold text-slate-900">{stats.cells} competências visíveis</span><span className="text-slate-300">·</span><span>{stats.completed} concluídas</span><span className="text-slate-300">·</span><span>{stats.working} trabalhando</span></div>
+            <div className="flex items-center gap-3">{STATUSES.map((status) => <span key={status} className="flex items-center gap-1.5 whitespace-nowrap text-[9px] font-semibold text-slate-500"><span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT[status])} />{status}</span>)}</div>
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto print:overflow-visible">
+        <div className="min-h-0 flex-1 overflow-auto print:overflow-visible" onScroll={() => setCommentPreview(null)}>
           <table className="w-max min-w-full border-separate border-spacing-0 text-left print:w-full">
           <thead><tr>
-            <th className="sticky left-0 top-0 z-30 w-[150px] min-w-[150px] max-w-[150px] border-b border-r border-slate-200 bg-slate-50 px-2.5 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600">Município</th>
-            {visibleCompetences.map((competence, index) => <th key={competence} className="sticky top-0 z-10 min-w-[126px] border-b border-r border-slate-200 bg-slate-50/95 px-2 py-3 text-center last:border-r-0"><span className="block text-[9px] font-semibold uppercase tracking-widest text-slate-400">{String(index + 1).padStart(2, '0')}</span><span className="mt-0.5 block text-[11px] font-bold text-slate-700">{competence}</span></th>)}
+            <th className="sticky left-0 top-0 z-30 w-[140px] min-w-[140px] max-w-[140px] border-b border-r border-slate-200 bg-slate-50 px-2 py-2 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-600">Município</th>
+            {visibleCompetences.map((competence, index) => <th key={competence} className="sticky top-0 z-10 min-w-[116px] border-b border-r border-slate-200 bg-slate-50/95 px-1 py-1.5 text-center last:border-r-0"><span className="block text-[7px] font-semibold uppercase tracking-widest text-slate-400">{String(index + 1).padStart(2, '0')}</span><span className="block truncate text-[9px] font-bold text-slate-700" title={competence}>{competence}</span></th>)}
           </tr></thead>
           <tbody>{visibleMunicipalities.map((municipality) => {
             return <tr key={municipality.id} className="group/row even:bg-slate-50/25 hover:bg-blue-50/20">
-              <th className="sticky left-0 z-10 w-[150px] min-w-[150px] max-w-[150px] border-b border-r border-slate-200 bg-white px-2.5 py-2.5 group-even/row:bg-[#fbfcfd] group-hover/row:bg-blue-50"><span title={municipality.name} className="block truncate text-xs font-semibold text-slate-950">{municipality.name}</span></th>
+              <th className="sticky left-0 z-10 w-[140px] min-w-[140px] max-w-[140px] border-b border-r border-slate-200 bg-white px-2 py-1.5 group-even/row:bg-[#fbfcfd] group-hover/row:bg-blue-50"><span title={municipality.name} className="block truncate text-[11px] font-semibold text-slate-950">{municipality.name}</span></th>
               {visibleCompetences.map((competence) => {
                 const task = taskMap.get(`${municipality.id}|${competence}`);
                 if (!task || !filteredTaskIds.has(task.id)) return <td key={competence} className="border-b border-r border-slate-100 last:border-r-0"><EmptyCell /></td>;
                 const overdue = isOverdue(task); const comments = workspace?.commentsMap[task.id] || [];
                 const auxiliary = obligation === 'SIOPS' ? task.siopsMembros : obligation === 'SIOPE' ? task.siopeFolha : null;
-                return <td key={competence} className="border-b border-r border-slate-100 p-1.5 last:border-r-0">
-                  <button onClick={() => openTask(task)} className={cn('group/cell relative flex h-14 w-full min-w-[112px] flex-col items-start justify-center overflow-hidden rounded-lg border bg-white px-3 text-left shadow-[0_1px_1px_rgba(15,23,42,0.03)] transition-all hover:-translate-y-px hover:border-slate-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-300', overdue ? 'border-rose-200' : 'border-slate-200')}>
-                    <span className={cn('absolute inset-y-2 left-0 w-0.5 rounded-r-full', STATUS_DOT[task.status])} />
-                    <span className="flex w-full items-center gap-1.5"><span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[task.status])} /><span className="truncate text-[10px] font-bold text-slate-700">{SHORT_STATUS[task.status]}</span></span>
-                    {auxiliary ? <span className="mt-1 max-w-[95px] truncate rounded bg-slate-100 px-1.5 py-0.5 text-[8px] font-semibold text-slate-500">{auxiliary}</span> : <span className="mt-1 text-[8px] font-medium text-slate-300">Abrir detalhes</span>}
-                    {overdue ? <Clock3 size={10} className="absolute right-1.5 top-1.5 text-rose-500" /> : null}
-                    {comments.length ? <span onClick={(event) => { event.stopPropagation(); openTask(task, 'collaboration'); }} className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 rounded-md bg-slate-100 px-1.5 py-0.5 text-[8px] font-bold text-slate-500 transition group-hover/cell:bg-blue-50 group-hover/cell:text-blue-600"><MessageSquare size={8} />{comments.length}</span> : null}
+                return <td key={competence} className="border-b border-r border-slate-100 p-1 last:border-r-0">
+                  <button
+                    type="button"
+                    onClick={() => openTask(task)}
+                    onMouseEnter={(event) => showCommentPreview(event.currentTarget, task, municipality.name, comments)}
+                    onMouseLeave={() => setCommentPreview(null)}
+                    onFocus={(event) => showCommentPreview(event.currentTarget, task, municipality.name, comments)}
+                    onBlur={() => setCommentPreview(null)}
+                    className={cn(
+                      'group/cell relative flex w-full min-w-[110px] flex-col items-start justify-center overflow-hidden rounded-md border px-2.5 text-left transition-all hover:-translate-y-px hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300',
+                      auxiliary ? 'h-10' : 'h-9',
+                      STATUS_CARD_STYLE[task.status],
+                      overdue && 'ring-1 ring-inset ring-rose-200',
+                    )}
+                  >
+                    <span className="w-full truncate text-[10px] font-bold leading-tight" title={task.status}>{task.status}</span>
+                    {auxiliary ? <span title={auxiliary} className={cn('mt-1 block w-full truncate text-[9px] font-medium leading-none text-slate-500', comments.length && 'pr-7')}>{auxiliary}</span> : null}
+                    {overdue ? <Clock3 size={9} className="absolute right-1 top-1 text-rose-500" /> : null}
+                    {comments.length ? <span onClick={(event) => { event.stopPropagation(); openTask(task, 'collaboration'); }} className="absolute bottom-1 right-1.5 flex items-center gap-0.5 rounded bg-white/70 px-1 py-0.5 text-[8px] font-bold text-slate-400 transition group-hover/cell:text-blue-600"><MessageSquare size={8} />{comments.length}</span> : null}
                   </button>
                 </td>;
               })}
@@ -544,6 +622,8 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
       </section>
 
       <TaskModal task={selectedTask} municipality={workspace?.municipalities.find((item) => item.id === selectedTask?.municipalityId)} currentUser={currentUser} initialTab={modalTab} onClose={() => setSelectedTask(null)} onUpdated={updateTask} onCommentAdded={addComment} />
-    </PageShell>
+      </PageShell>
+      {commentPreview ? <CommentPreviewPopover preview={commentPreview} /> : null}
+    </>
   );
 }

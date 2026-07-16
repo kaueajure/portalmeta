@@ -49,6 +49,7 @@ export const TicketReplyBox = ({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [showMacros, setShowMacros] = useState(false);
   const [suggestedReply, setSuggestedReply] = useState<string | null>(null);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const submittingRef = useRef(false);
 
@@ -63,6 +64,7 @@ export const TicketReplyBox = ({
   const handleSuggestReply = async () => {
     setLoadingSuggestion(true);
     setSuggestedReply(null);
+    setSuggestionError(null);
     try {
       const res = await api.post<{ suggestion: string }>(`/ai/tickets/${ticket.id}/suggest-reply`, {
         agentDraft: newMessage.trim() || undefined
@@ -70,7 +72,7 @@ export const TicketReplyBox = ({
       setSuggestedReply(res.suggestion);
     } catch (err: any) {
       console.error('Erro ao gerar sugestão de resposta:', err);
-      alert(err.message || 'Erro ao gerar sugestão de resposta com IA.');
+      setSuggestionError(err.message || 'Erro ao gerar sugestão de resposta com IA.');
     } finally {
       setLoadingSuggestion(false);
     }
@@ -252,6 +254,11 @@ export const TicketReplyBox = ({
                   >
                     <AlertCircle size={14} /> {actionError}
                   </motion.div>
+                )}
+                {suggestionError && (
+                  <div role="alert" className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                    <AlertCircle size={14} /> {suggestionError}
+                  </div>
                 )}
                 {actionSuccess && (
                   <motion.div 

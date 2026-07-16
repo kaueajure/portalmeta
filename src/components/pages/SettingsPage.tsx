@@ -48,10 +48,22 @@ type SettingsSubTab =
   | "identity"
   | "system";
 
+export type SettingsRouteSection =
+  | "geral"
+  | "atendimento"
+  | "sla"
+  | "automacoes"
+  | "canais-de-email"
+  | "whatsapp"
+  | "identidade"
+  | "sistema";
+
 interface SettingsPageProps {
   currentUser: User;
   onNavigate: (tab: AppTab) => void;
   onUpdateUser?: (user: User) => void;
+  routeSection?: SettingsRouteSection;
+  onRouteSectionChange?: (section: SettingsRouteSection) => void;
 }
 
 type HealthOverviewResponse = {
@@ -103,10 +115,23 @@ export const SettingsPage = ({
   currentUser,
   onNavigate,
   onUpdateUser: _onUpdateUser,
+  routeSection = "geral",
+  onRouteSectionChange,
 }: SettingsPageProps) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const routeToSubTab = (section: SettingsRouteSection): SettingsSubTab => {
+    if (["atendimento", "sla", "automacoes", "canais-de-email"].includes(section)) return "tickets";
+    if (section === "geral") return "general";
+    if (section === "identidade") return "identity";
+    if (section === "sistema") return "system";
+    return "whatsapp";
+  };
+  const subTabToRoute: Record<SettingsSubTab, SettingsRouteSection> = {
+    general: "geral", tickets: "atendimento", whatsapp: "whatsapp",
+    identity: "identidade", system: "sistema",
+  };
   const [activeSubTab, setActiveSubTab] = useState<SettingsSubTab>(() => {
     const requested = window.sessionStorage.getItem("portalmeta.settingsTab");
     window.sessionStorage.removeItem("portalmeta.settingsTab");
@@ -115,7 +140,7 @@ export const SettingsPage = ({
       requested === "identity" ||
       requested === "system"
       ? requested
-      : "general";
+      : routeToSubTab(routeSection);
   });
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
@@ -160,6 +185,16 @@ export const SettingsPage = ({
   ];
 
   React.useEffect(() => {
+    const nextSubTab = routeToSubTab(routeSection);
+    setActiveSubTab(nextSubTab);
+    if (["sla", "automacoes", "canais-de-email"].includes(routeSection)) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(`configuracao-${routeSection}`)?.scrollIntoView({ block: "start" });
+      });
+    }
+  }, [routeSection]);
+
+  React.useEffect(() => {
     if (
       (activeSubTab !== "identity" && activeSubTab !== "tickets") ||
       !canEditIdentity
@@ -176,7 +211,10 @@ export const SettingsPage = ({
 
     if (!currentIsAvailable) {
       const nextTab = availableSettingsTabs.find((tab) => tab.visible)?.id;
-      if (nextTab) setActiveSubTab(nextTab);
+      if (nextTab) {
+        setActiveSubTab(nextTab);
+        onRouteSectionChange?.(subTabToRoute[nextTab]);
+      }
     }
   }, [
     activeSubTab,
@@ -289,7 +327,10 @@ export const SettingsPage = ({
               .map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveSubTab(tab.id)}
+                  onClick={() => {
+                    setActiveSubTab(tab.id);
+                    onRouteSectionChange?.(subTabToRoute[tab.id]);
+                  }}
                   className={cn(
                     "h-8 px-3 rounded-md text-xs font-medium transition-all flex items-center gap-1.5",
                     activeSubTab === tab.id
@@ -796,6 +837,17 @@ export const SettingsPage = ({
 
               {activeSubTab === "tickets" && (
                 <div className="space-y-4">
+                  <nav aria-label="Seções de configuração do atendimento" className="no-scrollbar flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1.5">
+                    {[
+                      { id: "atendimento" as const, label: "Atendimento", visible: canManageTicketOptions || canEditIdentity },
+                      { id: "sla" as const, label: "SLA", visible: canManageSlaPolicies },
+                      { id: "automacoes" as const, label: "Automações", visible: canManageAutomations },
+                      { id: "canais-de-email" as const, label: "Canais de e-mail", visible: canManageEmailChannelsByBackend },
+                    ].filter((item) => item.visible).map((item) => (
+                      <button key={item.id} type="button" onClick={() => onRouteSectionChange?.(item.id)} className={cn("h-8 shrink-0 rounded-md px-3 text-xs font-semibold transition-colors", routeSection === item.id ? "bg-blue-50 text-blue-800 ring-1 ring-inset ring-blue-200" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950")}>{item.label}</button>
+                    ))}
+                  </nav>
+                  <section id="configuracao-atendimento" className="scroll-mt-4 space-y-4">
                   {canEditIdentity && (
                     <Card className="p-4 sm:p-5">
                       <form
@@ -847,14 +899,15 @@ export const SettingsPage = ({
                   {canManageTicketOptions && (
                     <TicketOptionsManager currentUser={currentUser} />
                   )}
+                  </section>
                   {canManageSlaPolicies && (
-                    <SlaPoliciesManager />
+                    <section id="configuracao-sla" className="scroll-mt-4"><SlaPoliciesManager /></section>
                   )}
                   {canManageAutomations && (
-                    <AutomationsManager />
+                    <section id="configuracao-automacoes" className="scroll-mt-4"><AutomationsManager /></section>
                   )}
                   {canManageEmailChannelsByBackend && (
-                    <Card className="p-4 sm:p-5">
+                    <Card id="configuracao-canais-de-email" className="scroll-mt-4 p-4 sm:p-5">
                       <EmailChannelsManager
                         canCreate={canManageEmailChannelsByBackend}
                         canEdit={canManageEmailChannelsByBackend}

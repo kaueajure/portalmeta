@@ -37,11 +37,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizes = {
-      xs: "h-6 px-2.5 text-[11px] rounded-md gap-1.5",
-      sm: "h-7 px-3 text-xs rounded-md gap-1.5",
-      md: "h-8 px-3.5 text-[13px] rounded-md gap-2",
-      lg: "h-10 px-5 text-sm rounded-lg gap-2",
-      icon: "h-8 w-8 p-0 rounded-md",
+      xs: "h-8 px-2.5 text-xs rounded-md gap-1.5",
+      sm: "h-9 px-3 text-xs rounded-md gap-1.5",
+      md: "h-10 px-3.5 text-[13px] rounded-md gap-2",
+      lg: "h-11 px-5 text-sm rounded-lg gap-2",
+      icon: "h-10 w-10 p-0 rounded-md",
     };
 
     return (
@@ -49,7 +49,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center font-semibold transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed active:translate-y-px",
+          "inline-flex items-center justify-center font-semibold transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:translate-y-px",
           variants[variant],
           sizes[size],
           className,

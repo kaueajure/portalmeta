@@ -7,6 +7,14 @@ import { Select } from '../ui/Select';
 import { api } from '../../lib/api';
 import { useTicketOptions } from '../../hooks/useTicketOptions';
 import { getCategoryShortLabel } from '../../lib/ticketOptions';
+import { hasPermission } from '../../lib/permissions';
+import { ServiceFormFields } from './ServiceFormFields';
+
+interface RequesterOption {
+  usuario_id: number | null;
+  nome: string;
+  email: string;
+}
 
 interface CreateTicketModalProps {
   isOpen: boolean;
@@ -18,6 +26,13 @@ interface CreateTicketModalProps {
 export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: CreateTicketModalProps) => {
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [requesterMode, setRequesterMode] = useState<'self' | 'customer'>('self');
+  const [requesterSearch, setRequesterSearch] = useState('');
+  const [requesterResults, setRequesterResults] = useState<RequesterOption[]>([]);
+  const [selectedRequester, setSelectedRequester] = useState<RequesterOption | null>(null);
+  const [newRequesterName, setNewRequesterName] = useState('');
+  const [newRequesterEmail, setNewRequesterEmail] = useState('');
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
   
   const { activeCategories, activeServices, loading: optionsLoading } = useTicketOptions();
 
@@ -48,18 +63,40 @@ export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: C
   const [categoria, setCategoria] = useState<string>('');
   const [servico, setServico] = useState<string>('');
   const [prioridade, setPrioridade] = useState<string>('media');
+  const canCreateForCustomer = hasPermission(currentUser, 'tickets.criar_para_cliente');
+  const rawServiceFields = activeServices.find(item => item.valor === servico)?.formulario_json;
+  const serviceFields = Array.isArray(rawServiceFields) ? rawServiceFields : [];
 
   useEffect(() => {
     if (categoryOptions.length > 0 && !categoria) setCategoria(categoryOptions[0].value);
     if (serviceOptions.length > 0 && !servico) setServico(serviceOptions[0].value);
   }, [categoryOptions, serviceOptions, categoria, servico]);
 
+  useEffect(() => {
+    if (!isOpen || requesterMode !== 'customer' || requesterSearch.trim().length < 2) {
+      setRequesterResults([]);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      try {
+        setRequesterResults(await api.get<RequesterOption[]>(`/tickets/requesters?search=${encodeURIComponent(requesterSearch.trim())}`));
+      } catch { setRequesterResults([]); }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, requesterMode, requesterSearch]);
+
   const handleCreateTicket = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoadingCreate(true);
     setCreateError(null);
     const formData = new FormData(e.currentTarget);
-    const data = Object.fromEntries(formData.entries());
+    const data: any = Object.fromEntries(formData.entries());
+    data.campos_personalizados = customFields;
+    if (requesterMode === 'customer') {
+      data.solicitante = selectedRequester
+        ? { usuario_id: selectedRequester.usuario_id, nome: selectedRequester.nome, email: selectedRequester.email }
+        : { nome: newRequesterName.trim(), email: newRequesterEmail.trim() };
+    }
 
     try {
       if (data.titulo && String(data.titulo).length < 3) throw new Error("O título precisa ter no mínimo 3 caracteres");
@@ -100,6 +137,56 @@ export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: C
           />
         </div>
 
+        {canCreateForCustomer && (
+          <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-700">Solicitante</label>
+              <Select
+                value={requesterMode}
+                onChange={value => { setRequesterMode(value as 'self' | 'customer'); setSelectedRequester(null); }}
+                options={[
+                  { value: 'self', label: `${currentUser.nome} (eu)` },
+                  { value: 'customer', label: 'Cliente' },
+                ]}
+              />
+            </div>
+            {requesterMode === 'customer' && (
+              <div className="space-y-3">
+                <div className="relative">
+                  <Input
+                    label="Buscar cliente já atendido"
+                    value={requesterSearch}
+                    onChange={event => { setRequesterSearch(event.target.value); setSelectedRequester(null); }}
+                    placeholder="Digite nome ou e-mail"
+                  />
+                  {requesterResults.length > 0 && !selectedRequester && (
+                    <div className="absolute z-30 mt-1 max-h-44 w-full overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+                      {requesterResults.map((item, index) => (
+                        <button
+                          key={`${item.usuario_id || 'externo'}-${item.email}-${index}`}
+                          type="button"
+                          onClick={() => { setSelectedRequester(item); setRequesterSearch(`${item.nome} — ${item.email}`); }}
+                          className="block w-full rounded px-2 py-2 text-left hover:bg-blue-50"
+                        >
+                          <span className="block text-xs font-semibold text-slate-800">{item.nome}</span>
+                          <span className="block text-xs text-slate-500">{item.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {!selectedRequester && (
+                  <div className="grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2">
+                    <Input label="Nome do novo solicitante" value={newRequesterName} onChange={event => setNewRequesterName(event.target.value)} required />
+                    <Input label="E-mail do novo solicitante" type="email" value={newRequesterEmail} onChange={event => setNewRequesterEmail(event.target.value)} required />
+                  </div>
+                )}
+                {selectedRequester && <p className="text-xs font-medium text-emerald-700">Chamado será aberto para {selectedRequester.nome}.</p>}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid md:grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-xs font-medium text-slate-700">Categoria</label>
@@ -116,7 +203,7 @@ export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: C
             <Select 
               name="servico"
               value={servico}
-              onChange={setServico}
+              onChange={value => { setServico(value); setCustomFields({}); }}
               options={serviceOptions}
               buttonClassName="h-9 text-sm"
             />
@@ -137,6 +224,8 @@ export const CreateTicketModal = ({ isOpen, onClose, currentUser, onSuccess }: C
             />
           </div>
         </div>
+
+        <ServiceFormFields fields={serviceFields} values={customFields} onChange={setCustomFields} />
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-slate-700">Descrição</label>

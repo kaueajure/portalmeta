@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../../lib/api';
 import { Badge } from '../ui/Badge';
-import { User } from '../../types';
+import { TicketAttachment, User } from '../../types';
 import { Button } from '../ui/Button';
 import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
+import { FileUpload } from '../ui/FileUpload';
+import { AttachmentList } from '../ui/AttachmentList';
 
 interface PortalTicketDetailsPageProps {
   ticketId: number;
@@ -18,6 +20,10 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
   const [ticket, setTicket] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [replyMessage, setReplyMessage] = useState('');
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [openingAttachments, setOpeningAttachments] = useState<TicketAttachment[]>([]);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [uploadResetKey, setUploadResetKey] = useState(0);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -27,6 +33,8 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
       setTicket(t);
       const m = await api.get<any[]>(`/portal/tickets/${ticketId}/messages`);
       setMessages(m);
+      const attachments = await api.get<TicketAttachment[]>(`/portal/tickets/${ticketId}/attachments`);
+      setOpeningAttachments(attachments.filter(item => !item.mensagem_id));
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
@@ -39,16 +47,20 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyMessage.trim()) return;
+    if (!replyMessage.trim() && replyFiles.length === 0) return;
     setSending(true);
+    setSendError(null);
     try {
-      await api.post(`/portal/tickets/${ticketId}/messages`, {
-        mensagem: replyMessage
-      });
+      const formData = new FormData();
+      formData.append('mensagem', replyMessage);
+      replyFiles.forEach(file => formData.append('files', file));
+      await api.post(`/portal/tickets/${ticketId}/messages`, formData);
       setReplyMessage('');
+      setReplyFiles([]);
+      setUploadResetKey(value => value + 1);
       fetchTicket();
     } catch (e) {
-      console.error(e);
+      setSendError(e instanceof Error ? e.message : 'Não foi possível enviar a resposta.');
     } finally {
       setSending(false);
     }
@@ -87,6 +99,7 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
           <div className="prose prose-sm prose-slate max-w-none text-slate-700 whitespace-pre-wrap">
             {ticket.descricao}
           </div>
+          <AttachmentList attachments={openingAttachments} compact className="mt-3" />
         </div>
 
         <div className="flex-1 p-4 space-y-4 overflow-y-auto bg-slate-50">
@@ -94,7 +107,7 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
             <div className="text-center py-10 text-slate-400 text-sm font-medium">Nenhuma mensagem ainda.</div>
           ) : (
             messages.map((msg, i) => {
-              const isMine = msg.usuario_id === currentUser.id;
+              const isMine = Number(msg.is_requester) === 1 || msg.usuario_id === currentUser.id;
               
               if (msg.tipo === 'status_change') {
                  return (
@@ -107,7 +120,7 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
               return (
                 <div key={i} className={cn("flex flex-col", isMine ? "items-end" : "items-start")}>
                   <div className="flex items-center gap-2 mb-1 px-1">
-                    <span className="text-sm font-semibold text-slate-900">{msg.usuario_nome || 'Equipe de suporte'}</span>
+                    <span className="text-sm font-semibold text-slate-900">{isMine ? currentUser.nome : (msg.usuario_nome || 'Equipe de suporte')}</span>
                     <span className="text-xs text-slate-500">{format(new Date(msg.created_at), "dd MMM, HH:mm", { locale: ptBR })}</span>
                   </div>
                   <div className={cn(
@@ -118,6 +131,7 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
                   )}>
                     {msg.mensagem}
                   </div>
+                  <AttachmentList attachments={msg.attachments || []} compact className="mt-2 max-w-[85%]" />
                 </div>
               );
             })
@@ -127,14 +141,16 @@ export const PortalTicketDetailsPage = ({ ticketId, onBack, currentUser }: Porta
 
         <div className="p-4 bg-white border-t border-slate-200">
           <form onSubmit={handleReply} className="flex flex-col gap-2.5">
+            {sendError && <div className="rounded-md border border-red-100 bg-red-50 p-2 text-xs font-medium text-red-600">{sendError}</div>}
             <textarea
               value={replyMessage}
               onChange={e => setReplyMessage(e.target.value)}
               placeholder="Escreva sua mensagem..."
               className="w-full resize-none h-16 p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 focus:bg-white transition-all outline-none"
             />
+            <FileUpload onFilesChange={setReplyFiles} compact resetKey={uploadResetKey} />
             <div className="flex justify-end gap-2">
-              <Button type="submit" disabled={sending || !replyMessage.trim()} className="font-semibold px-5 text-sm h-9">
+              <Button type="submit" disabled={sending || (!replyMessage.trim() && replyFiles.length === 0)} className="font-semibold px-5 text-sm h-9">
                 {sending ? 'Enviando...' : <span className="flex items-center"><Send size={16} className="mr-2" /> Enviar</span>}
               </Button>
             </div>

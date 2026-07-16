@@ -14,6 +14,7 @@ interface FileUploadProps {
   maxSizeMB?: number;
   className?: string;
   compact?: boolean;
+  resetKey?: number;
 }
 
 export const FileUpload = ({
@@ -22,10 +23,17 @@ export const FileUpload = ({
   maxSizeMB = 10,
   className,
   compact = false,
+  resetKey,
 }: FileUploadProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    setSelectedFiles([]);
+    setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [resetKey]);
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return "0 B";

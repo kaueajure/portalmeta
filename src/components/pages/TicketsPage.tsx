@@ -22,6 +22,7 @@ import {
   Tag,
   ChevronDown,
   Settings2,
+  SlidersHorizontal,
   Eye,
   EyeOff,
   RotateCcw,
@@ -236,18 +237,19 @@ export const TicketsPage = ({
   const [error, setError] = useState<string | null>(null);
 
   const [toasts, setToasts] = useState<
-    { id: number; message: string; type: "success" | "error" | "info" }[]
+    { id: number; message: string; type: "success" | "error" | "info"; action?: { label: string; onClick: () => void } }[]
   >([]);
 
   const addToast = (
     message: string,
     type: "success" | "error" | "info" = "success",
+    action?: { label: string; onClick: () => void },
   ) => {
     const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type, action }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, action ? 6500 : 4000);
   };
 
   // Filters
@@ -272,11 +274,13 @@ export const TicketsPage = ({
     sla_status: initialStoredFilters.current?.advanced?.sla_status || "todos",
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showWorkspaceTools, setShowWorkspaceTools] = useState(false);
   const [showTeamSidebar, setShowTeamSidebar] = useState(false);
   const [showMoreQueues, setShowMoreQueues] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const moreQueuesButtonRef = useRef<HTMLButtonElement | null>(null);
   const categoryButtonRef = useRef<HTMLButtonElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const fetchRunRef = useRef(0);
   const [moreQueuesMenuPosition, setMoreQueuesMenuPosition] = useState<{
     top: number;
@@ -327,6 +331,7 @@ export const TicketsPage = ({
     y: number;
   } | null>(null);
   const [ticketToDelete, setTicketToDelete] = useState<Ticket | null>(null);
+  const [viewToDelete, setViewToDelete] = useState<TicketView | null>(null);
   const [deletingTicketId, setDeletingTicketId] = useState<number | null>(null);
 
   const handleSortChange = (key: TicketSortKey, order: TicketSortOrder) => {
@@ -353,6 +358,19 @@ export const TicketsPage = ({
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = target?.matches("input, textarea, select, [contenteditable='true']");
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !isTyping) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
   }, []);
 
   const mapWorkflowRows = (rows: any[]): TicketWorkflowStatus[] =>
@@ -1049,8 +1067,14 @@ export const TicketsPage = ({
     }
   };
 
-  const handleDeleteView = async (id: number) => {
-    if (!confirm("Deseja excluir esta view?")) return;
+  const handleDeleteView = (id: number) => {
+    const target = savedViews.find((view) => view.id === id);
+    if (target) setViewToDelete(target);
+  };
+
+  const confirmDeleteView = async () => {
+    if (!viewToDelete) return;
+    const id = viewToDelete.id;
     if (id < 0) {
       const nextLocalViews = readLocalViews(currentUser.id).filter((v) => v.id !== id);
       writeLocalViews(currentUser.id, nextLocalViews);
@@ -1153,7 +1177,26 @@ export const TicketsPage = ({
     selectedQueue !== "todos" ||
     hasAdvancedFilters;
 
+  const restoreFilters = (
+    snapshot: TicketFilterSnapshot,
+    savedViewId: number | null = null,
+  ) => {
+    setSearchTerm(snapshot.search || "");
+    setStatusFilter(snapshot.status || "todos");
+    setPriorityFilter(snapshot.prioridade || "todas");
+    setCategoryFilter(snapshot.categoria || "todas");
+    setServiceFilter(snapshot.servico || "todos");
+    setSelectedQueue(snapshot.fila || "todos");
+    setAdvancedFilters({ ...(snapshot.advanced || {}), sla_status: snapshot.advanced?.sla_status || "todos" });
+    setSortBy(snapshot.sort_by || "operacional");
+    setSortOrder(snapshot.sort_order || "desc");
+    if (snapshot.mode) setViewMode(snapshot.mode);
+    setCurrentViewId(savedViewId);
+  };
+
   const clearFilters = () => {
+    const previousFilters = getCurrentFilterSnapshot();
+    const previousViewId = currentViewId;
     setSearchTerm("");
     setStatusFilter("todos");
     setPriorityFilter("todas");
@@ -1162,9 +1205,15 @@ export const TicketsPage = ({
     setSelectedQueue("todos");
     setAdvancedFilters({ sla_status: "todos" });
     setCurrentViewId(null);
+    addToast("Filtros limpos.", "info", {
+      label: "Desfazer",
+      onClick: () => restoreFilters(previousFilters, previousViewId),
+    });
   };
 
   const removeFilter = (key: string) => {
+    const previousFilters = getCurrentFilterSnapshot();
+    const previousViewId = currentViewId;
     if (key === "search") setSearchTerm("");
     else if (key === "status") setStatusFilter("todos");
     else if (key === "priority") setPriorityFilter("todas");
@@ -1175,6 +1224,10 @@ export const TicketsPage = ({
       const advKey = key.replace("adv:", "") as keyof IAdvancedFilters;
       setAdvancedFilters((prev) => ({ ...prev, [advKey]: undefined }));
     }
+    addToast("Filtro removido.", "info", {
+      label: "Desfazer",
+      onClick: () => restoreFilters(previousFilters, previousViewId),
+    });
   };
 
   const getActiveFilterChips = () => {
@@ -1257,7 +1310,6 @@ export const TicketsPage = ({
 
   const moreActionOptions = [
     { value: "", label: "Mais" },
-    { value: "filtros", label: "Filtros" },
     ...(canViewTeam ? [{ value: "equipe", label: "Ver Equipe" }] : []),
     ...(canConfigureTicketStatuses ? [{ value: "config_status", label: "Configurar status" }] : []),
     { value: "exportar", label: "Exportar CSV" },
@@ -1273,104 +1325,44 @@ export const TicketsPage = ({
         <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col space-y-3">
           {/* Main Toolbar */}
           <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            <div className="flex flex-col justify-between gap-3 xl:flex-row xl:items-center">
+            <div className="grid gap-2 xl:grid-cols-[minmax(280px,1fr)_auto] xl:items-center">
               <div className="relative flex-1 w-full group">
                 <Search
                   className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors"
                   size={14}
                 />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Buscar chamado..."
-                  className="h-9 w-full rounded-md border border-slate-200 bg-slate-50/80 pl-8 pr-3 text-[13px] text-slate-700 shadow-[0_1px_1px_rgba(15,23,42,0.02)] outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
+                  className="h-9 w-full rounded-md border border-slate-200 bg-slate-50/80 pl-8 pr-10 text-[13px] text-slate-700 shadow-[0_1px_1px_rgba(15,23,42,0.02)] outline-none transition-all placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
+                <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs font-semibold text-slate-500 sm:block">/</kbd>
               </div>
 
               <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-end shrink-0">
-                <div className="hidden h-9 items-center rounded-md border border-slate-200 bg-slate-100/80 p-0.5 sm:flex">
-                  <button
-                    onClick={() => setViewMode("list")}
-                    className={cn(
-                      "h-8 px-2 rounded transition-all flex items-center gap-1",
-                      viewMode === "list"
-                        ? "bg-white text-slate-950 shadow-sm border border-slate-200/80"
-                        : "text-slate-500 hover:text-slate-800",
-                    )}
-                  >
-                    <ListIcon size={14} />
-                    <span className="text-[11px] font-bold hidden sm:inline">
-                      Lista
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setViewMode("kanban")}
-                    className={cn(
-                      "h-8 px-2 rounded transition-all flex items-center gap-1",
-                      viewMode === "kanban"
-                        ? "bg-white text-slate-950 shadow-sm border border-slate-200/80"
-                        : "text-slate-500 hover:text-slate-800",
-                    )}
-                  >
-                    <Kanban size={14} />
-                    <span className="text-[11px] font-bold hidden sm:inline">
-                      Kanban
-                    </span>
-                  </button>
-                </div>
-
-                <div className="flex min-w-[180px] flex-1 items-center gap-1 sm:flex-none">
-                  <Select
-                    size="sm"
-                    value={currentViewId ? String(currentViewId) : ""}
-                    onChange={(value) => {
-                      if (!value) return;
-                      const selected = savedViews.find((view) => String(view.id) === value);
-                      if (selected) handleSelectView(selected);
-                    }}
-                    options={savedViewOptions}
-                    className="min-w-0 flex-1 sm:w-44"
-                    buttonClassName={cn(
-                      "h-9 bg-slate-50 border-slate-200 text-[11px]",
-                      activeSavedView && "border-slate-300 bg-white text-slate-950",
-                    )}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-9 w-9 rounded-md p-0"
-                    onClick={() => {
-                      setNewViewName(activeSavedView?.nome || "");
-                      setShowSaveViewModal(true);
-                    }}
-                    title="Salvar filtro atual"
-                    aria-label="Salvar filtro atual"
-                  >
-                    <Save size={14} />
-                  </Button>
-                  {activeSavedView && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 w-9 rounded-md p-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                      onClick={() => handleDeleteView(activeSavedView.id)}
-                      title="Excluir filtro salvo"
-                      aria-label="Excluir filtro salvo"
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  )}
-                </div>
-
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9 px-3 rounded-md text-[11px] font-bold sm:hidden"
+                  className="h-9 px-3 rounded-md text-xs font-semibold"
                   onClick={() => setShowAdvanced(true)}
                 >
-                  <Settings2 size={14} className="mr-1.5" />
+                  <SlidersHorizontal size={14} />
                   Filtros
+                  {getActiveFilterChips().length > 0 && <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-800">{getActiveFilterChips().length}</span>}
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant={showWorkspaceTools ? "secondary" : "outline"}
+                  className="h-9 px-3 rounded-md text-xs font-semibold"
+                  onClick={() => setShowWorkspaceTools((visible) => !visible)}
+                  aria-expanded={showWorkspaceTools}
+                >
+                  <Settings2 size={14} />
+                  <span className="hidden sm:inline">Visualizações</span>
                 </Button>
 
                 {canCreateTicket && (
@@ -1390,7 +1382,6 @@ export const TicketsPage = ({
                   value=""
                   align="end"
                   onChange={(val) => {
-                    if (val === "filtros") setShowAdvanced(true);
                     if (val === "equipe") setShowTeamSidebar(!showTeamSidebar);
                     if (val === "config_status")
                       setShowWorkflowSettings(true);
@@ -1404,7 +1395,41 @@ export const TicketsPage = ({
               </div>
             </div>
 
-            <div className="no-scrollbar flex items-center gap-3 overflow-x-auto border-t border-slate-100 pt-2">
+            <AnimatePresence initial={false}>
+              {showWorkspaceTools && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50/70 p-2 sm:flex-row sm:items-center">
+                    <span className="px-1 text-xs font-semibold text-slate-600">Organizar visualização</span>
+                    <div className="flex h-9 items-center rounded-md border border-slate-200 bg-white p-0.5">
+                      <button type="button" onClick={() => setViewMode("list")} className={cn("flex h-8 items-center gap-1.5 rounded px-2.5 text-xs font-semibold", viewMode === "list" ? "bg-slate-100 text-slate-950" : "text-slate-500 hover:text-slate-800")}><ListIcon size={14} />Lista</button>
+                      <button type="button" onClick={() => setViewMode("kanban")} className={cn("flex h-8 items-center gap-1.5 rounded px-2.5 text-xs font-semibold", viewMode === "kanban" ? "bg-slate-100 text-slate-950" : "text-slate-500 hover:text-slate-800")}><Kanban size={14} />Kanban</button>
+                    </div>
+                    <div className="flex min-w-0 flex-1 items-center gap-1 sm:max-w-md">
+                      <Select
+                        size="sm"
+                        value={currentViewId ? String(currentViewId) : ""}
+                        onChange={(value) => {
+                          const selected = savedViews.find((view) => String(view.id) === value);
+                          if (selected) handleSelectView(selected);
+                        }}
+                        options={savedViewOptions}
+                        className="min-w-0 flex-1"
+                        buttonClassName={cn("bg-white", activeSavedView && "border-blue-300 text-slate-950")}
+                      />
+                      <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => { setNewViewName(activeSavedView?.nome || ""); setShowSaveViewModal(true); }} title="Salvar filtros atuais" aria-label="Salvar filtros atuais"><Save size={14} /></Button>
+                      {activeSavedView && <Button size="icon" variant="ghost" className="h-9 w-9 text-rose-600 hover:bg-rose-50" onClick={() => handleDeleteView(activeSavedView.id)} title="Excluir visualização" aria-label="Excluir visualização"><Trash2 size={14} /></Button>}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="no-scrollbar flex items-center gap-3 overflow-x-auto pt-1">
               <div className="flex items-center gap-1.5 pr-2 border-r border-slate-200 my-1">
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Filas
@@ -2104,6 +2129,15 @@ export const TicketsPage = ({
         cancelLabel="Cancelar"
         variant="danger"
       />
+      <ConfirmDialog
+        isOpen={!!viewToDelete}
+        onClose={() => setViewToDelete(null)}
+        onConfirm={confirmDeleteView}
+        title="Excluir visualização salva?"
+        description={`A visualização ${viewToDelete?.nome || ''} será removida. Os chamados e seus dados não serão alterados.`}
+        confirmLabel="Excluir visualização"
+        variant="danger"
+      />
 
       {/* Toast System */}
       <div className="fixed bottom-6 right-6 z-[10000] flex flex-col gap-2 pointer-events-none">
@@ -2126,6 +2160,18 @@ export const TicketsPage = ({
             >
               <AlertCircle size={14} />
               <span>{toast.message}</span>
+              {toast.action && (
+                <button
+                  type="button"
+                  className="ml-2 rounded border border-white/40 bg-white/15 px-2 py-1 text-xs font-bold text-white hover:bg-white/25"
+                  onClick={() => {
+                    toast.action?.onClick();
+                    setToasts((current) => current.filter((item) => item.id !== toast.id));
+                  }}
+                >
+                  {toast.action.label}
+                </button>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

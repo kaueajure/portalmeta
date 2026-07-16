@@ -5,6 +5,7 @@ import  { sendSuccess, sendError } from  '../utils/response.js';
 import pool from '../db/connection.js';
 import { isValidTicketStatusValue, normalizeTicketStatusSpecial, TICKET_STATUS_SPECIALS } from '../utils/ticket-status-config.js';
 import { recomputeTicketMessageState } from '../utils/ticket-state.js';
+import { normalizeServiceForm } from '../utils/service-form.js';
 
 const router = Router();
 
@@ -137,12 +138,12 @@ router.post('/services', async (req: AuthRequest, res) => {
     const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
 
-    const { nome, valor, ativo, ordem } = req.body;
+    const { nome, valor, ativo, ordem, formulario_json } = req.body;
     if (!nome || !valor) return sendError(res, 'Nome e valor são obrigatórios', 400);
 
     const [result]: any = await pool.query(
-      'INSERT INTO ticket_services (nome, valor, ativo, ordem) VALUES (?, ?, ?, ?)',
-      [nome, valor, ativo !== undefined ? ativo : 1, ordem || 0]
+      'INSERT INTO ticket_services (nome, valor, ativo, ordem, formulario_json) VALUES (?, ?, ?, ?, ?)',
+      [nome, valor, ativo !== undefined ? ativo : 1, ordem || 0, JSON.stringify(normalizeServiceForm(formulario_json))]
     );
     sendSuccess(res, { id: result.insertId });
   } catch(error: unknown) {
@@ -158,13 +159,14 @@ router.patch('/services/:servId', async (req: AuthRequest, res) => {
     const hasConfigPerm = await permissionsService.hasPermission(currentUser, 'configuracoes.atendimento');
     if (!hasConfigPerm) return sendError(res, 'Acesso negado', 403);
 
-    const { nome, valor, ativo, ordem } = req.body;
+    const { nome, valor, ativo, ordem, formulario_json } = req.body;
     let updates = [];
     let params = [];
     if (nome !== undefined) { updates.push('nome = ?'); params.push(nome); }
     if (valor !== undefined) { updates.push('valor = ?'); params.push(valor); }
     if (ativo !== undefined) { updates.push('ativo = ?'); params.push(ativo); }
     if (ordem !== undefined) { updates.push('ordem = ?'); params.push(ordem); }
+    if (formulario_json !== undefined) { updates.push('formulario_json = ?'); params.push(JSON.stringify(normalizeServiceForm(formulario_json))); }
 
     if (updates.length > 0) {
       params.push(servId);

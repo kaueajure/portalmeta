@@ -7,6 +7,9 @@ import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { Checkbox } from '../ui/Checkbox';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Select } from '../ui/Select';
 
 interface EmailChannel {
   id: number;
@@ -159,6 +162,7 @@ export const EmailChannelsManager = ({
   const [createError, setCreateError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{ action: 'delete' | 'regenerate'; channel: EmailChannel } | null>(null);
 
   // --- Configuração de SMTP por canal ---
   const [smtpModalChannel, setSmtpModalChannel] = useState<EmailChannel | null>(null);
@@ -347,15 +351,15 @@ export const EmailChannelsManager = ({
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async () => {
     if (!canDelete) {
       setFeedback({ type: 'error', message: 'Sem permissão para remover canais de e-mail.' });
       return;
     }
-    if (!confirm('Remover este canal de e-mail? Nenhum novo chamado será recebido por este endereço técnico.')) return;
+    if (!pendingConfirmation) return;
 
     try {
-      await api.delete(`/email-channels/${id}`);
+      await api.delete(`/email-channels/${pendingConfirmation.channel.id}`);
       setFeedback({ type: 'success', message: 'Canal removido com sucesso.' });
       fetchChannels();
     } catch (err: any) {
@@ -363,15 +367,15 @@ export const EmailChannelsManager = ({
     }
   };
 
-  const handleRegenerate = async (id: number) => {
+  const handleRegenerate = async () => {
     if (!canEdit) {
       setFeedback({ type: 'error', message: 'Sem permissão para regenerar canais de e-mail.' });
       return;
     }
-    if (!confirm('Regerar o endereço de encaminhamento? O endereço antigo para de funcionar imediatamente.')) return;
+    if (!pendingConfirmation) return;
 
     try {
-      await api.post(`/email-channels/${id}/regenerate`, {});
+      await api.post(`/email-channels/${pendingConfirmation.channel.id}/regenerate`, {});
       setFeedback({ type: 'success', message: 'Endereço de encaminhamento regenerado.' });
       fetchChannels();
     } catch (err: any) {
@@ -485,7 +489,7 @@ export const EmailChannelsManager = ({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRegenerate(channel.id)}
+                          onClick={() => setPendingConfirmation({ action: 'regenerate', channel })}
                           title="Regerar endereco inbound"
                           className="h-7 w-7 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md"
                         >
@@ -496,7 +500,7 @@ export const EmailChannelsManager = ({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(channel.id)}
+                          onClick={() => setPendingConfirmation({ action: 'delete', channel })}
                           className="h-7 w-7 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md"
                         >
                           <Trash2 size={14} />
@@ -667,6 +671,17 @@ export const EmailChannelsManager = ({
           </div>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={!!pendingConfirmation}
+        onClose={() => setPendingConfirmation(null)}
+        onConfirm={pendingConfirmation?.action === 'delete' ? handleDelete : handleRegenerate}
+        title={pendingConfirmation?.action === 'delete' ? 'Remover canal de e-mail?' : 'Regerar endereço de entrada?'}
+        description={pendingConfirmation?.action === 'delete'
+          ? `Nenhum novo chamado será recebido por ${pendingConfirmation.channel.email_publico}. Esta ação não pode ser desfeita.`
+          : 'O endereço técnico atual deixará de funcionar imediatamente. Atualize o encaminhamento no provedor de e-mail após confirmar.'}
+        confirmLabel={pendingConfirmation?.action === 'delete' ? 'Remover canal' : 'Regerar endereço'}
+        variant={pendingConfirmation?.action === 'delete' ? 'danger' : 'warning'}
+      />
 
       <Modal
         isOpen={!!smtpModalChannel}
@@ -725,17 +740,13 @@ export const EmailChannelsManager = ({
             <div className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">Qual provedor de e-mail você usa?</label>
-                <select
+                <Select
                   value={smtpProvider}
-                  onChange={(e) => applyProvider(e.target.value)}
+                  onChange={applyProvider}
                   disabled={smtpSaving || !canEdit}
-                  className="w-full h-8 text-sm rounded-md border border-slate-200 bg-white px-2 text-slate-700"
-                >
-                  <option value="">Selecione (preenche host/porta automaticamente)…</option>
-                  {SMTP_PROVIDERS.map((p) => (
-                    <option key={p.key} value={p.key}>{p.label}</option>
-                  ))}
-                </select>
+                  placeholder="Selecione (preenche host/porta automaticamente)…"
+                  options={SMTP_PROVIDERS.map((provider) => ({ value: provider.key, label: provider.label }))}
+                />
                 {selectedProvider?.note && (
                   <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded p-1.5 mt-1">
                     {selectedProvider.note}
@@ -743,15 +754,12 @@ export const EmailChannelsManager = ({
                 )}
               </div>
 
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                <input
-                  type="checkbox"
+              <Checkbox
                   checked={smtpForm.smtp_enabled}
                   onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_enabled: e.target.checked }))}
                   disabled={smtpSaving || !canEdit}
-                />
-                Habilitar envio por este canal
-              </label>
+                  label="Habilitar envio por este canal"
+              />
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1 sm:col-span-2">
@@ -777,15 +785,12 @@ export const EmailChannelsManager = ({
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                <input
-                  type="checkbox"
+              <Checkbox
                   checked={smtpForm.smtp_secure}
                   onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_secure: e.target.checked }))}
                   disabled={smtpSaving || !canEdit}
-                />
-                Conexão segura SSL/TLS (porta 465). Deixe desmarcado para STARTTLS (porta 587).
-              </label>
+                  label="Conexão segura SSL/TLS (porta 465). Deixe desmarcado para STARTTLS (porta 587)."
+              />
 
               <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded p-2">
                 <strong>Porta 587:</strong> usa STARTTLS — deixe “SSL/TLS” desmarcado.{' '}

@@ -221,7 +221,7 @@ export function ReportsPage({ currentUser: _currentUser }: ReportsPageProps) {
       window.open(url, "_blank");
     } catch (err) {
       console.error("Erro ao exportar", err);
-      alert("Erro ao exportar relatório. Verifique os logs.");
+      setError("Erro ao exportar relatório. Verifique os logs.");
     } finally {
       setDropdownOpen(false);
     }

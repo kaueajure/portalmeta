@@ -23,6 +23,7 @@ import {
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { cn } from '../../lib/utils';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface PermissionCatalogItem {
   key: string;
@@ -68,6 +69,7 @@ export const PermissionUserModal = ({ userId, isOpen, onClose, currentUser }: Pe
   const [activeTab, setActiveTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [riskFilter, setRiskFilter] = useState<string>('all');
+  const [confirmResetAll, setConfirmResetAll] = useState(false);
 
   const fetchMatrix = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -199,8 +201,6 @@ export const PermissionUserModal = ({ userId, isOpen, onClose, currentUser }: Pe
   };
 
   const handleResetAll = async () => {
-    if (!window.confirm('Tem certeza de que deseja resetar todas as permissões do usuário para o padrão do perfil?')) return;
-    
     setActionError(null);
     setActionSuccess(null);
     setLoading(true);
@@ -398,7 +398,7 @@ export const PermissionUserModal = ({ userId, isOpen, onClose, currentUser }: Pe
                     <Button 
                       size="sm" 
                       variant="outline" 
-                      onClick={handleResetAll}
+                      onClick={() => setConfirmResetAll(true)}
                       className="text-xs h-9 bg-white text-rose-600 border-rose-100 hover:bg-rose-50 hover:border-rose-200 transition-all rounded-xl ml-2"
                       disabled={matrix.overrides.length === 0}
                     >
@@ -827,6 +827,15 @@ export const PermissionUserModal = ({ userId, isOpen, onClose, currentUser }: Pe
           </div>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={confirmResetAll}
+        onClose={() => setConfirmResetAll(false)}
+        onConfirm={handleResetAll}
+        title="Restaurar todas as permissões?"
+        description="Todas as personalizações deste usuário serão removidas e o perfil voltará a definir seus acessos."
+        confirmLabel="Restaurar permissões"
+        variant="warning"
+      />
     </div>
   );
 };

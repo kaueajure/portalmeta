@@ -15,6 +15,7 @@ import { ErrorState } from '../ui/ErrorState';
 import { LoadingState } from '../ui/LoadingState';
 import { MetricCard } from '../ui/MetricCard';
 import { PageShell } from '../layout/PageShell';
+import { Select } from '../ui/Select';
 
 type Totals = { completed: number; pending: number; total: number };
 type ResponsibleStat = Totals & {
@@ -148,7 +149,7 @@ export function ObligationsDashboardPage() {
 
   return (
     <PageShell
-      actions={<><label className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600"><CalendarDays size={14} /> Exercício<select value={year} onChange={(event) => setYear(Number(event.target.value))} className="bg-transparent font-semibold text-slate-950 outline-none">{Array.from({ length: 5 }, (_, index) => currentYear + 1 - index).map((option) => <option key={option}>{option}</option>)}</select></label><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw size={13} className={cn(loading && 'animate-spin')} />Atualizar</Button></>}
+      actions={<><div className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white pl-2.5 text-xs font-medium text-slate-600"><CalendarDays size={14} /><span>Exercício</span><Select value={year} onChange={(value) => setYear(Number(value))} options={Array.from({ length: 5 }, (_, index) => currentYear + 1 - index).map((option) => ({ value: String(option), label: String(option) }))} size="sm" className="w-20" buttonClassName="border-0 bg-transparent px-2 shadow-none" /></div><Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}><RefreshCw size={13} className={cn(loading && 'animate-spin')} />Atualizar</Button></>}
       contentClassName="bg-slate-50/40"
     >
       <div className="mx-auto w-full max-w-[1680px] space-y-4">
@@ -196,9 +197,7 @@ export function ObligationsDashboardPage() {
                 <div key={service.code} className="rounded-lg border border-slate-200 p-3.5">
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div><p className="text-sm font-semibold text-slate-950">{service.code}</p><p className="truncate text-[11px] font-medium text-slate-500">{service.label}</p></div>
-                    <select value={selected} onChange={(event) => setPeriods((current) => ({ ...current, [service.code]: event.target.value }))} className="max-w-[145px] rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 outline-none focus:border-blue-400">
-                      <option>Todos</option>{Object.keys(options).map((period) => <option key={period}>{period}</option>)}
-                    </select>
+                    <Select value={selected} onChange={(value) => setPeriods((current) => ({ ...current, [service.code]: value }))} options={[{ value: 'Todos', label: 'Todos' }, ...Object.keys(options).map((period) => ({ value: period, label: period }))]} size="sm" className="max-w-[145px]" buttonClassName="bg-slate-50" />
                   </div>
                   <div className="mb-2 flex items-end justify-between"><span className="text-2xl font-semibold tracking-tight text-slate-950">{rate}%</span><span className="text-[11px] text-slate-500"><b className="text-emerald-600">{stats.completed}</b> concluídas · <b className="text-amber-600">{stats.pending}</b> pendentes</span></div>
                   <div className="h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full" style={{ width: `${rate}%`, backgroundColor: service.color }} /></div>

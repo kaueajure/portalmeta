@@ -109,7 +109,7 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
             </div>
             <h1 className="mb-4 text-3xl font-bold tracking-tight text-white">Portal do Cliente</h1>
             <p className="mb-8 leading-relaxed text-slate-300">
-              Acompanhe seus chamados, envie respostas, anexe arquivos e consulte a base de conhecimento.
+              Acompanhe seus chamados, envie respostas e anexe arquivos com segurança.
             </p>
             <ul className="space-y-4">
               <li className="flex items-start gap-3">
@@ -123,10 +123,6 @@ export const PortalAccessPage: React.FC<PortalAccessPageProps> = ({ onAuthentica
               <li className="flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-300" />
                 <span className="text-sm text-slate-100">Responda sem precisar criar senha</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-300" />
-                <span className="text-sm text-slate-100">Consulte artigos da base de conhecimento</span>
               </li>
             </ul>
           </div>

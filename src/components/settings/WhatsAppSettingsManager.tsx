@@ -14,6 +14,7 @@ import { api } from "../../lib/api";
 import { hasPermission } from "../../lib/permissions";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/Button";
+import { Checkbox } from "../ui/Checkbox";
 import {
   WhatsappAutoReplyPanel,
   type WhatsAppFlowToolbar,
@@ -131,15 +132,13 @@ export function WhatsAppSettingsManager({ currentUser }: { currentUser: User }) 
         <div className="flex flex-wrap items-center gap-2">
           {activeTab === "flow" && flowToolbar && canManage ? (
             <>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-emerald-600"
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-1.5 text-xs font-medium text-slate-700">
+                <Checkbox
                   checked={flowToolbar.enabled}
                   onChange={(event) => flowToolbar.setEnabled(event.target.checked)}
+                  label={flowToolbar.enabled ? "Ligado" : "Desligado"}
                 />
-                {flowToolbar.enabled ? "Ligado" : "Desligado"}
-              </label>
+              </div>
               <Button
                 size="sm"
                 disabled={flowToolbar.saving}

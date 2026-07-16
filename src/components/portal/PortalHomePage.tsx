@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PortalTab } from './PortalLayout';
 import { Card } from '../ui/Card';
-import { Ticket, PlusCircle, Search, Clock, CheckCircle2, ArrowRight, FileText } from 'lucide-react';
+import { Ticket, PlusCircle, Clock, CheckCircle2, ArrowRight } from 'lucide-react';
 import { api } from '../../lib/api';
 
 interface PortalHomePageProps {
@@ -11,19 +11,14 @@ interface PortalHomePageProps {
 export const PortalHomePage = ({ onNavigate }: PortalHomePageProps) => {
   const [stats, setStats] = useState({ open: 0, pending: 0, closed: 0 });
   const [recentTickets, setRecentTickets] = useState<any[]>([]);
-  const [popularArticles, setPopularArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchHomeData = async () => {
       try {
-        const [ticketsData, knowledgeData] = await Promise.all([
-          api.get<any[]>('/portal/tickets?limit=5'),
-          api.get<any[]>('/portal/knowledge')
-        ]);
+        const ticketsData = await api.get<any[]>('/portal/tickets?limit=5');
         
         setRecentTickets(ticketsData);
-        setPopularArticles(knowledgeData.slice(0, 4));
         
         const open = ticketsData.filter(t => t.status === 'aberto' || t.status === 'em_andamento').length;
         const pending = ticketsData.filter(t => t.status === 'aguardando_cliente').length;
@@ -48,7 +43,7 @@ export const PortalHomePage = ({ onNavigate }: PortalHomePageProps) => {
             Como podemos te ajudar hoje?
           </h1>
           <p className="text-slate-500 text-sm mb-4">
-            Busque em nossa base de conhecimento ou abra um novo chamado.
+            Abra um novo chamado ou acompanhe suas solicitações recentes.
           </p>
           
           <div className="flex flex-col sm:flex-row gap-2.5">
@@ -58,52 +53,7 @@ export const PortalHomePage = ({ onNavigate }: PortalHomePageProps) => {
             >
               <PlusCircle size={16} /> Novo chamado
             </button>
-            <button 
-              onClick={() => onNavigate('knowledge')}
-              className="flex h-9 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
-            >
-              <Search size={16} /> Base de Conhecimento
-            </button>
           </div>
-        </div>
-      </div>
-
-      {/* Knowledge Base Teaser */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Consulta Rápida</h2>
-          <button 
-            onClick={() => onNavigate('knowledge')}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-          >
-            Ver base <ArrowRight size={14} />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {loading ? (
-            Array(4).fill(0).map((_, i) => (
-              <div key={i} className="h-24 bg-slate-100 rounded-xl animate-pulse" />
-            ))
-          ) : popularArticles.length > 0 ? (
-            popularArticles.map(article => (
-              <button
-                key={article.id}
-                onClick={() => onNavigate('knowledge')} 
-                className="group flex h-full flex-col rounded-lg border border-slate-200 bg-white p-3 text-left transition-all hover:border-slate-300 hover:shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
-              >
-                <div className="w-8 h-8 rounded-md bg-slate-50 text-slate-500 flex items-center justify-center mb-2 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                  <FileText size={16} />
-                </div>
-                <h3 className="font-semibold text-sm text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-tight mb-1">{article.titulo}</h3>
-                <p className="text-xs text-slate-500 mt-auto truncate">{article.categoria || 'Geral'}</p>
-              </button>
-            ))
-          ) : (
-            <div className="col-span-full py-8 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-xl text-slate-500 text-sm">
-              Nenhum artigo disponível no momento.
-            </div>
-          )}
         </div>
       </div>
 

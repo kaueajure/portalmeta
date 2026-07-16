@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TicketCustomField } from '../../../types';
 import { LayoutGrid, Plus, Trash2, Edit2, Check, X, Info } from 'lucide-react';
 import { Button } from '../../ui/Button';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
 
 interface TicketCustomFieldsProps {
   fields: TicketCustomField[];
@@ -13,6 +14,8 @@ export const TicketCustomFields = ({ fields, onUpdate, readOnly }: TicketCustomF
   const [isAdding, setIsAdding] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [tempField, setTempField] = useState({ label: '', value: '' });
+  const [fieldToRemove, setFieldToRemove] = useState<TicketCustomField | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleAddField = () => {
     if (!tempField.label.trim()) return;
@@ -21,7 +24,7 @@ export const TicketCustomFields = ({ fields, onUpdate, readOnly }: TicketCustomF
     if (!key) return;
 
     if (fields.some(f => f.field_key === key)) {
-      alert('Já existe um campo com esse nome.');
+      setValidationError('Já existe um campo com esse nome.');
       return;
     }
 
@@ -32,6 +35,7 @@ export const TicketCustomFields = ({ fields, onUpdate, readOnly }: TicketCustomF
     onUpdate(newFields);
     setTempField({ label: '', value: '' });
     setIsAdding(false);
+    setValidationError(null);
   };
 
   const handleUpdateValue = (key: string, value: string) => {
@@ -42,11 +46,9 @@ export const TicketCustomFields = ({ fields, onUpdate, readOnly }: TicketCustomF
     setEditingKey(null);
   };
 
-  const handleRemoveField = (key: string) => {
-    if (confirm('Tem certeza que deseja remover este campo personalizado?')) {
-      const newFields = fields.filter(f => f.field_key !== key);
-      onUpdate(newFields);
-    }
+  const handleRemoveField = () => {
+    if (!fieldToRemove) return;
+    onUpdate(fields.filter(f => f.field_key !== fieldToRemove.field_key));
   };
   return (
     <div className="space-y-4">
@@ -67,6 +69,7 @@ export const TicketCustomFields = ({ fields, onUpdate, readOnly }: TicketCustomF
           </Button>
         )}
       </div>
+      {validationError && <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{validationError}</p>}
 
       <div className="grid grid-cols-1 gap-1">
         {fields.map((field) => (
@@ -92,7 +95,7 @@ export const TicketCustomFields = ({ fields, onUpdate, readOnly }: TicketCustomF
                      <Edit2 size={12} />
                    </button>
                    <button 
-                     onClick={() => handleRemoveField(field.field_key)}
+                     onClick={() => setFieldToRemove(field)}
                      className="p-1 text-slate-400 hover:text-red-500 transition-colors"
                      title="Remover"
                      aria-label="Remover"
@@ -175,6 +178,15 @@ export const TicketCustomFields = ({ fields, onUpdate, readOnly }: TicketCustomF
           </div>
         )}
       </div>
+      <ConfirmDialog
+        isOpen={!!fieldToRemove}
+        onClose={() => setFieldToRemove(null)}
+        onConfirm={handleRemoveField}
+        title="Remover campo personalizado?"
+        description={`O campo ${fieldToRemove?.field_label || ''} e seu valor serão removidos deste chamado.`}
+        confirmLabel="Remover campo"
+        variant="danger"
+      />
     </div>
   );
 };

@@ -4,14 +4,29 @@ import { User } from '../../types';
 import { api } from '../../lib/api';
 import { AppLogo } from '../ui/Logo';
 import { cn } from '../../lib/utils';
-import { LogOut, Menu, X, Home, Ticket, FileText, PlusCircle } from 'lucide-react';
+import { LogOut, Menu, X, Home, Ticket, PlusCircle } from 'lucide-react';
 import { PortalHomePage } from './PortalHomePage';
 import { PortalTicketsPage } from './PortalTicketsPage';
 import { PortalTicketDetailsPage } from './PortalTicketDetailsPage';
 import { PortalNewTicketPage } from './PortalNewTicketPage';
-import { PortalKnowledgePage } from './PortalKnowledgePage';
+import { ProfileIntroduction } from '../onboarding/ProfileIntroduction';
 
-export type PortalTab = 'home' | 'tickets' | 'new-ticket' | 'knowledge';
+export type PortalTab = 'home' | 'tickets' | 'new-ticket';
+
+const parsePortalPath = (pathname: string): { tab: PortalTab; ticketId: number | null } => {
+  const ticket = pathname.match(/^\/portal\/chamados\/(\d+)\/?$/);
+  if (ticket) return { tab: 'tickets', ticketId: Number(ticket[1]) };
+  if (pathname.startsWith('/portal/chamados')) return { tab: 'tickets', ticketId: null };
+  if (pathname.startsWith('/portal/novo-chamado')) return { tab: 'new-ticket', ticketId: null };
+  return { tab: 'home', ticketId: null };
+};
+
+const getPortalPath = (tab: PortalTab, ticketId: number | null) => {
+  if (tab === 'tickets' && ticketId) return `/portal/chamados/${ticketId}`;
+  if (tab === 'tickets') return '/portal/chamados';
+  if (tab === 'new-ticket') return '/portal/novo-chamado';
+  return '/portal/inicio';
+};
 
 interface PortalLayoutProps {
   currentUser: User;
@@ -19,31 +34,40 @@ interface PortalLayoutProps {
 }
 
 export const PortalLayout = ({ currentUser, onLogout }: PortalLayoutProps) => {
-  const [activeTab, setActiveTab] = useState<PortalTab>('home');
-  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
-  const [selectedArticleId, setSelectedArticleId] = useState<number | null>(null);
+  const initialRoute = parsePortalPath(window.location.pathname);
+  const [activeTab, setActiveTab] = useState<PortalTab>(initialRoute.tab);
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(initialRoute.ticketId);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigateTo = (tab: PortalTab, id: number | null = null) => {
     setActiveTab(tab);
     if (tab === 'tickets') {
       setSelectedTicketId(id);
-      setSelectedArticleId(null);
-    } else if (tab === 'knowledge') {
-      setSelectedArticleId(id);
-      setSelectedTicketId(null);
     } else {
       setSelectedTicketId(null);
-      setSelectedArticleId(null);
     }
     setIsMobileMenuOpen(false);
+    const path = getPortalPath(tab, tab === 'tickets' ? id : null);
+    if (window.location.pathname !== path) window.history.pushState({}, '', path);
   };
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      const route = parsePortalPath(window.location.pathname);
+      setActiveTab(route.tab);
+      setSelectedTicketId(route.ticketId);
+    };
+    window.addEventListener('popstate', handlePopState);
+    if (window.location.pathname === '/portal') {
+      window.history.replaceState({}, '', '/portal/inicio');
+    }
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const navItems = [
     { id: 'home', icon: Home, label: 'Início' },
     { id: 'tickets', icon: Ticket, label: 'Meus Chamados' },
     { id: 'new-ticket', icon: PlusCircle, label: 'Abrir Chamado' },
-    { id: 'knowledge', icon: FileText, label: 'Base de Conhecimento' },
   ];
 
   return (
@@ -169,10 +193,7 @@ export const PortalLayout = ({ currentUser, onLogout }: PortalLayoutProps) => {
               />
             )}
             {activeTab === 'new-ticket' && (
-              <PortalNewTicketPage onNavigate={navigateTo} currentUser={currentUser} />
-            )}
-            {activeTab === 'knowledge' && (
-              <PortalKnowledgePage onNavigate={navigateTo} initialArticleId={selectedArticleId} />
+              <PortalNewTicketPage onNavigate={navigateTo} />
             )}
           </motion.div>
         </AnimatePresence>
@@ -199,6 +220,12 @@ export const PortalLayout = ({ currentUser, onLogout }: PortalLayoutProps) => {
           </a>
         </div>
       </footer>
+      <ProfileIntroduction
+        currentUser={currentUser}
+        onNavigate={(tab) => {
+          if (tab === 'home' || tab === 'tickets' || tab === 'new-ticket') navigateTo(tab);
+        }}
+      />
     </div>
   );
 };

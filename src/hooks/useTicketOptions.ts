@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { TicketOption } from '../types';
+import { ServiceFormField, TicketOption } from '../types';
 
 const isActiveOption = (option: TicketOption) =>
   option.ativo === true ||
@@ -16,14 +16,21 @@ const normalizeTicketOptions = (items: TicketOption[]) =>
     sigla: typeof item.sigla === 'string' ? item.sigla.trim().toUpperCase() : item.sigla,
     valor: item.valor,
     ativo: isActiveOption(item),
+    formulario_json: normalizeForm(item.formulario_json),
   }));
+
+const normalizeForm = (value: TicketOption['formulario_json']): ServiceFormField[] => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+};
 
 interface TicketOptionsResponse {
   categories: TicketOption[];
   services: TicketOption[];
 }
 
-export function useTicketOptions() {
+export function useTicketOptions(endpoint = '/tickets/options') {
   const [categories, setCategories] = useState<TicketOption[]>([]);
   const [services, setServices] = useState<TicketOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +44,7 @@ export function useTicketOptions() {
         setLoading(true);
         setError(null);
 
-        const response = await api.get<TicketOptionsResponse>('/tickets/options');
+        const response = await api.get<TicketOptionsResponse>(endpoint);
         if (!isMounted) return;
         setCategories(normalizeTicketOptions(response.categories));
         setServices(normalizeTicketOptions(response.services));
@@ -55,7 +62,7 @@ export function useTicketOptions() {
     fetchOptions();
 
     return () => { isMounted = false; };
-  }, []);
+  }, [endpoint]);
 
   const activeCategories = categories.filter(isActiveOption);
   const activeServices = services.filter(isActiveOption);

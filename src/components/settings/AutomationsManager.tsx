@@ -4,8 +4,10 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Badge } from '../ui/Badge';
 import { Select } from '../ui/Select';
-import { Plus, Zap, Edit2, Trash2, X, PlusCircle, AlertCircle, Info, ChevronRight } from 'lucide-react';
+import { Plus, Zap, Edit2, Trash2, PlusCircle, AlertCircle, Info, ChevronRight } from 'lucide-react';
 import { api } from '../../lib/api';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Modal } from '../ui/Modal';
 
 const parseJsonArray = (value: any) => {
   if (Array.isArray(value)) return value;
@@ -76,6 +78,7 @@ export const AutomationsManager = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   // Form State
   const [nome, setNome] = useState('');
@@ -167,10 +170,10 @@ export const AutomationsManager = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Excluir automação? Essa ação é irreversível.')) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.delete(`/automations/${id}`);
+      await api.delete(`/automations/${deleteTarget.id}`);
       loadData();
     } catch (err) {
       console.error(err);
@@ -260,7 +263,7 @@ export const AutomationsManager = () => {
                   <Button variant="outline" size="sm" className="h-7 px-2 border-slate-200" onClick={() => handleOpenModal(a)}>
                     <Edit2 size={12} className="mr-1" /> Editar
                   </Button>
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-red-600 border-slate-200 hover:bg-red-50" onClick={() => handleDelete(a.id)}>
+                  <Button variant="outline" size="sm" className="px-2 text-red-700 border-slate-200 hover:bg-red-50" onClick={() => setDeleteTarget(a)}>
                     <Trash2 size={12} />
                   </Button>
                </div>
@@ -268,32 +271,24 @@ export const AutomationsManager = () => {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Excluir automação?"
+        description={`A automação ${deleteTarget?.nome || ''} deixará de executar suas regras. Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir automação"
+        variant="danger"
+      />
 
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-200"
-            onClick={() => setIsModalOpen(false)}
-          />
-          <div className="bg-white w-full max-w-2xl rounded-xl shadow-lg relative flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                 <div className="p-1.5 bg-blue-50 text-blue-600 rounded-md">
-                    <Zap size={16} />
-                 </div>
-                 <h3 className="font-semibold text-slate-900 text-sm">
-                   {editingItem ? 'Editar Automação' : 'Configurar Nova Automação'}
-                 </h3>
-              </div>
-              <button 
-                onClick={() => setIsModalOpen(false)} 
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-400"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            
-            <div className="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingItem ? 'Editar automação' : 'Configurar nova automação'}
+        size="lg"
+        footer={<><Button variant="ghost" size="sm" onClick={() => setIsModalOpen(false)}>Cancelar</Button><Button size="sm" onClick={handleSave}>{editingItem ? 'Salvar' : 'Criar automação'}</Button></>}
+      >
+            <div className="space-y-6">
               {error && (
                 <div className="p-2 bg-red-50 border border-red-100 text-red-600 text-xs font-medium rounded-md flex items-center gap-1.5">
                   <AlertCircle size={14} /> {error}
@@ -369,25 +364,21 @@ export const AutomationsManager = () => {
                     {condicoes.map((cond, i) => (
                       <div key={i} className="group relative flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 border border-slate-200 rounded-md bg-white hover:border-slate-300">
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
-                          <select 
-                            className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium text-slate-700"
+                          <Select
                             value={cond.campo}
-                            onChange={e => updateCondicao(i, 'campo', e.target.value)}
-                          >
-                            {CONDICAO_CAMPOS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                          </select>
+                            onChange={value => updateCondicao(i, 'campo', value)}
+                            options={CONDICAO_CAMPOS}
+                            size="sm"
+                          />
 
                           {/* Operador depends on type of field */}
                           {['status', 'prioridade', 'categoria', 'servico', 'origem', 'responsavel_definido'].includes(cond.campo) ? (
-                            <select 
-                              className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium text-slate-600"
+                            <Select
                               value={cond.operador}
-                              onChange={e => updateCondicao(i, 'operador', e.target.value)}
-                            >
-                              <option value="igual">É igual a</option>
-                              <option value="diferente">É diferente de</option>
-                              {['categoria', 'servico', 'tag'].includes(cond.campo) && <option value="contem">Contém</option>}
-                            </select>
+                              onChange={value => updateCondicao(i, 'operador', value)}
+                              options={[{ value: 'igual', label: 'É igual a' }, { value: 'diferente', label: 'É diferente de' }, ...(['categoria', 'servico', 'tag'].includes(cond.campo) ? [{ value: 'contem', label: 'Contém' }] : [])]}
+                              size="sm"
+                            />
                           ) : (
                             <div className="h-8 flex items-center px-2 text-[11px] bg-slate-50 rounded-md text-slate-500 font-medium">
                                 {cond.campo === 'sla_resolucao_vencido' ? 'Sempre' : 'For maior que'}
@@ -396,30 +387,26 @@ export const AutomationsManager = () => {
 
                           {/* Value Input depends on field */}
                           {cond.campo === 'status' ? (
-                            <select 
-                              className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium"
+                            <Select
                               value={cond.valor}
-                              onChange={e => updateCondicao(i, 'valor', e.target.value)}
-                            >
-                              {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
+                              onChange={value => updateCondicao(i, 'valor', value)}
+                              options={statusOptions}
+                              size="sm"
+                            />
                           ) : cond.campo === 'prioridade' ? (
-                            <select 
-                              className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium"
+                            <Select
                               value={cond.valor}
-                              onChange={e => updateCondicao(i, 'valor', e.target.value)}
-                            >
-                              {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
+                              onChange={value => updateCondicao(i, 'valor', value)}
+                              options={PRIORITY_OPTIONS}
+                              size="sm"
+                            />
                           ) : cond.campo === 'responsavel_definido' ? (
-                            <select 
-                              className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium"
+                            <Select
                               value={cond.valor}
-                              onChange={e => updateCondicao(i, 'valor', e.target.value)}
-                            >
-                              <option value="true">Sim (Definido)</option>
-                              <option value="false">Não (Vazio)</option>
-                            </select>
+                              onChange={value => updateCondicao(i, 'valor', value)}
+                              options={[{ value: 'true', label: 'Sim (Definido)' }, { value: 'false', label: 'Não (Vazio)' }]}
+                              size="sm"
+                            />
                           ) : cond.campo === 'sla_resolucao_vencido' ? (
                              <div className="h-8 flex items-center px-2 text-[11px] text-slate-400 font-medium bg-slate-50 rounded-md">Auto-avaliado</div>
                           ) : (
@@ -464,40 +451,36 @@ export const AutomationsManager = () => {
                     {acoes.map((acao, i) => (
                       <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 border border-slate-200 rounded-md bg-white hover:border-slate-300 transition-all">
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
-                          <select 
-                            className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium text-slate-700"
+                          <Select
                             value={acao.tipo}
-                            onChange={e => updateAcao(i, 'tipo', e.target.value)}
-                          >
-                            {ACAO_TIPOS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                          </select>
+                            onChange={value => updateAcao(i, 'tipo', value)}
+                            options={ACAO_TIPOS}
+                            size="sm"
+                          />
 
                           {/* Value for action */}
                           {acao.tipo === 'alterar_status' ? (
-                             <select 
-                               className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium"
+                             <Select
                                value={acao.valor}
-                               onChange={e => updateAcao(i, 'valor', e.target.value)}
-                             >
-                                {statusOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                             </select>
+                               onChange={value => updateAcao(i, 'valor', value)}
+                               options={statusOptions}
+                               size="sm"
+                             />
                           ) : acao.tipo === 'alterar_prioridade' ? (
-                             <select 
-                               className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium"
+                             <Select
                                value={acao.valor}
-                               onChange={e => updateAcao(i, 'valor', e.target.value)}
-                             >
-                               {PRIORITY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                             </select>
+                               onChange={value => updateAcao(i, 'valor', value)}
+                               options={PRIORITY_OPTIONS}
+                               size="sm"
+                             />
                           ) : acao.tipo === 'atribuir_responsavel' ? (
-                             <select 
-                               className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none font-medium"
+                             <Select
                                value={acao.valor}
-                               onChange={e => updateAcao(i, 'valor', String(e.target.value))}
-                             >
-                               <option value="">Selecionar Atendente</option>
-                               {agents.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
-                             </select>
+                               onChange={value => updateAcao(i, 'valor', value)}
+                               placeholder="Selecionar atendente"
+                               options={agents.map(agent => ({ value: String(agent.id), label: agent.nome }))}
+                               size="sm"
+                             />
                           ) : acao.tipo === 'remover_responsavel' || acao.tipo === 'notificar_responsavel' ? (
                              <div className="h-8 flex items-center px-2 text-[11px] text-slate-500 bg-slate-50 rounded-md">Automático</div>
                           ) : (
@@ -522,24 +505,16 @@ export const AutomationsManager = () => {
               </section>
               
               <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-md">
-                 <div className={`w-9 h-5 rounded-full p-1 transition-colors cursor-pointer ${ativo ? 'bg-blue-600' : 'bg-slate-300'}`} onClick={() => setAtivo(!ativo)}>
+                 <button type="button" role="switch" aria-checked={ativo} aria-label="Ativar automação" className={`flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${ativo ? 'bg-blue-600' : 'bg-slate-300'}`} onClick={() => setAtivo(!ativo)}>
                     <div className={`w-3 h-3 bg-white rounded-full shadow-sm transition-transform ${ativo ? 'translate-x-4' : 'translate-x-0'}`} />
-                 </div>
+                 </button>
                  <label className="text-xs font-medium text-slate-700 cursor-pointer" onClick={() => setAtivo(!ativo)}>
                     Regra Ativada
                  </label>
               </div>
 
             </div>
-            <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50/50">
-              <Button variant="ghost" size="sm" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-              <Button size="sm" onClick={handleSave}>
-                 {editingItem ? 'Salvar' : 'Criar Automação'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </Card>
   );
 };
