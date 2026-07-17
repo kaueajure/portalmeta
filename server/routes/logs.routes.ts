@@ -6,6 +6,13 @@ import  { sendSuccess, sendError } from  '../utils/response.js';
 
 const router = Router();
 
+/** Único e-mail autorizado a ver auditoria de todos os usuários. */
+const AUDIT_ALL_LOGS_EMAIL = 'kaueajure@gmail.com';
+
+function canSeeAllAuditLogs(email?: string | null): boolean {
+  return String(email || '').trim().toLowerCase() === AUDIT_ALL_LOGS_EMAIL;
+}
+
 router.use(authMiddleware);
 router.use(isAdmin);
 
@@ -14,10 +21,12 @@ router.get('/', async (req: AuthRequest, res) => {
     const currentUser = req.user;
     if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
+    const seeAll = canSeeAllAuditLogs(currentUser.email);
     const filters = {
       ...req.query,
-      user_id: currentUser.id,
-      is_dev: currentUser.desenvolvedor
+      // Demais usuários: só as próprias alterações. kaueajure@gmail.com: todos.
+      user_id: seeAll ? undefined : currentUser.id,
+      is_dev: seeAll || Boolean(currentUser.desenvolvedor),
     };
     const logs = await logsService.list(filters);
     sendSuccess(res, logs);

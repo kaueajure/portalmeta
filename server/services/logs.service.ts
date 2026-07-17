@@ -22,15 +22,13 @@ class LogsService {
     `;
     const params: any[] = [];
 
-    // ACL Logic
-    if (!is_dev) {
+    // ACL: sem user_id + is_dev → vê todos; com user_id → só aquele operador
+    if (user_id) {
       queryBase += ' AND l.usuario_id = ?';
       params.push(user_id);
-    }
-
-    if (user_id && is_dev) {
-      queryBase += ' AND l.usuario_id = ?';
-      params.push(user_id);
+    } else if (!is_dev) {
+      // Sem escopo explícito e sem privilégio de ver todos → lista vazia
+      queryBase += ' AND 1=0';
     }
 
     if (action) {
