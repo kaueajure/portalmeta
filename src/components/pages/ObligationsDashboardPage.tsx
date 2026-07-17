@@ -71,7 +71,6 @@ const STORAGE_KEY = 'portalmeta.obligations.dashboard.filters.v2';
 const OPEN_TASK_KEY = 'portalmeta.obligations.openTask';
 const COMPLETED_STATUSES = new Set(['Enviado', 'Homologado']);
 const STATUS_OPTIONS = ['Falta XML', 'Não iniciado', 'Pendência Cliente', 'Trabalhando', 'Retificar', 'Enviado', 'Homologado'];
-const CATEGORY_OPTIONS = ['MSC', 'RREO', 'RGF', 'DCA', 'SIOPE', 'SIOPS'];
 const STATUS_COLORS: Record<string, string> = {
   'Falta XML': '#dc2626', 'Não iniciado': '#64748b', 'Pendência Cliente': '#d97706',
   Trabalhando: '#2563eb', Retificar: '#ea580c', Enviado: '#7c3aed', Homologado: '#059669',
@@ -215,6 +214,10 @@ export function ObligationsDashboardPage({ onNavigate }: { onNavigate: (tab: 'ob
   const updateFilter = <K extends keyof FiltersState>(key: K, value: FiltersState[K]) => setFilters((current) => ({ ...current, [key]: value }));
   const clearFilters = () => setFilters((current) => ({ ...current, search: '', status: 'all', category: 'all', deadline: 'all' }));
   const hasActiveFilters = Boolean(filters.search || filters.status !== 'all' || filters.category !== 'all' || filters.deadline !== 'all');
+  const categoryOptions = useMemo(
+    () => Object.keys(data?.obligationStats || {}).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [data?.obligationStats],
+  );
 
   const filteredTasks = useMemo(() => (data?.taskItems || []).filter((task) => {
     const haystack = `${task.municipalityName} ${task.obligationCode} ${task.competence} ${task.status} ${task.lastEditorName || ''}`.toLocaleLowerCase('pt-BR');
@@ -324,7 +327,7 @@ export function ObligationsDashboardPage({ onNavigate }: { onNavigate: (tab: 'ob
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[120px_1fr_1fr_1fr_1.35fr]">
             <label className="space-y-1 text-[10px] font-semibold text-slate-600">Período<Select value={filters.year} onChange={(value) => updateFilter('year', Number(value))} options={Array.from({ length: 5 }, (_, index) => currentYear + 1 - index).map((value) => ({ value: String(value), label: String(value) }))} size="sm" /></label>
             <label className="space-y-1 text-[10px] font-semibold text-slate-600">Status<Select value={filters.status} onChange={(value) => updateFilter('status', value)} options={[{ value: 'all', label: 'Todos' }, { value: 'completed', label: 'Concluídas' }, ...STATUS_OPTIONS.map((value) => ({ value, label: value }))]} size="sm" /></label>
-            <label className="space-y-1 text-[10px] font-semibold text-slate-600">Tipo<Select value={filters.category} onChange={(value) => updateFilter('category', value)} options={[{ value: 'all', label: 'Todos' }, ...CATEGORY_OPTIONS.map((value) => ({ value, label: value }))]} size="sm" /></label>
+            <label className="space-y-1 text-[10px] font-semibold text-slate-600">Tipo<Select value={filters.category} onChange={(value) => updateFilter('category', value)} options={[{ value: 'all', label: 'Todos' }, ...categoryOptions.map((value) => ({ value, label: value }))]} size="sm" /></label>
             <label className="space-y-1 text-[10px] font-semibold text-slate-600">Situação do prazo<Select value={filters.deadline} onChange={(value) => updateFilter('deadline', value)} options={[{ value: 'all', label: 'Todas' }, ...Object.entries(deadlineLabels).map(([value, label]) => ({ value, label }))]} size="sm" /></label>
             <label className="space-y-1 text-[10px] font-semibold text-slate-600">Busca<div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={filters.search} onChange={(event) => updateFilter('search', event.target.value)} placeholder="Município, competência ou último editor" className="h-9 w-full rounded-md border border-slate-300 bg-white pl-9 pr-8 text-xs font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20" />{filters.search ? <button type="button" onClick={() => updateFilter('search', '')} aria-label="Limpar busca" className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={13} /></button> : null}</div></label>
           </div>

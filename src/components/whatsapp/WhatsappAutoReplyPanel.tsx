@@ -19,6 +19,7 @@ export type WhatsAppBotSettings = {
   listSectionTitle: string;
   inactivityMinutes: number;
   closingMessage: string;
+  startMessage: string;
   updatedAt: string | null;
 };
 
@@ -40,6 +41,8 @@ const emptyOption = (): WhatsAppBotButton => ({ id: "", title: "", description: 
 
 const DEFAULT_CLOSING =
   "Como não recebemos uma resposta nos últimos 60 minutos, este atendimento será encerrado automaticamente. Quando precisar, envie uma nova mensagem para iniciar um novo atendimento.";
+const DEFAULT_START =
+  "Olá! Sou {atendente} e vou iniciar seu atendimento sobre {servico}. Como posso ajudar?";
 
 const fieldClass =
   "w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 disabled:bg-slate-50";
@@ -70,6 +73,7 @@ export function WhatsappAutoReplyPanel({
     listSectionTitle: "Atendimento",
     inactivityMinutes: 60,
     closingMessage: DEFAULT_CLOSING,
+    startMessage: DEFAULT_START,
     updatedAt: null,
   });
 
@@ -98,6 +102,7 @@ export function WhatsappAutoReplyPanel({
           listSectionTitle: data.listSectionTitle || "Atendimento",
           inactivityMinutes: data.inactivityMinutes || 60,
           closingMessage: data.closingMessage || DEFAULT_CLOSING,
+          startMessage: data.startMessage || DEFAULT_START,
           buttons: data.buttons?.length
             ? data.buttons.map((b) => ({
                 ...b,
@@ -218,6 +223,7 @@ export function WhatsappAutoReplyPanel({
         welcomeBody: form.welcomeBody.trim(),
         inactivityMinutes: Number(form.inactivityMinutes) || 60,
         closingMessage: form.closingMessage.trim(),
+        startMessage: form.startMessage.trim(),
         listButtonText: form.listButtonText.trim(),
         listSectionTitle: form.listSectionTitle.trim(),
         buttons: selected,
@@ -324,13 +330,22 @@ export function WhatsappAutoReplyPanel({
           </Labeled>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 lg:grid-cols-3">
           <Labeled label="Mensagem inicial">
             <textarea
               rows={2}
               value={form.welcomeBody}
               disabled={!canManage}
               onChange={(e) => setForm((p) => ({ ...p, welcomeBody: e.target.value }))}
+              className={cn(fieldClass, "resize-none leading-snug")}
+            />
+          </Labeled>
+          <Labeled label="Mensagem ao assumir · use {atendente} e {servico}">
+            <textarea
+              rows={2}
+              value={form.startMessage}
+              disabled={!canManage}
+              onChange={(e) => setForm((p) => ({ ...p, startMessage: e.target.value.slice(0, 2000) }))}
               className={cn(fieldClass, "resize-none leading-snug")}
             />
           </Labeled>

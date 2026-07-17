@@ -56,7 +56,7 @@ router.get('/team', async (req: AuthRequest, res) => {
         if (!currentUser) return sendError(res, 'Não autenticado', 401);
 
         const query = `
-          SELECT u.id, u.nome, u.email, u.cargo,
+          SELECT u.id, u.nome, u.email, u.cargo, u.perfil,
                  (SELECT COUNT(id) FROM tickets t WHERE t.responsavel_id = u.id AND t.deleted_at IS NULL AND t.status NOT IN ('resolvido', 'fechado')) as ticket_count
           FROM usuarios u
           WHERE u.ativo = 1

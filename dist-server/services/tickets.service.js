@@ -720,7 +720,7 @@ class TicketsService {
             });
         }
         catch (e) { }
-        // Notificações: Admins
+        // Notificações: destinatários ativos com permissão e escopo no chamado.
         try {
             let authorName = solicitante_nome || 'Cliente Externo';
             let authorEmail = solicitante_email || '';
@@ -1061,7 +1061,7 @@ class TicketsService {
             // For any other update, ensure status is still correct
             await slaService.updateOperationalStatus(id);
         }
-        // Notificações de Status ou Responsável
+        // Notificações de alterações relevantes.
         try {
             const labels = {
                 status: 'Status alterado', prioridade: 'Prioridade alterada',
@@ -1719,17 +1719,23 @@ class TicketsService {
             }
             case 'responsavel': {
                 const wantsRemove = value === null || value === undefined || value === '';
+                const currentResponsavelId = toPositiveInt(ticket.responsavel_id);
+                const newResponsavelId = wantsRemove ? null : toPositiveInt(value);
+                if (currentResponsavelId
+                    && Number(newResponsavelId || 0) !== Number(currentResponsavelId)
+                    && Number(currentResponsavelId) !== Number(currentUser.id)) {
+                    return 'Somente o responsavel atual pode transferir ou remover a responsabilidade deste chamado.';
+                }
                 if (wantsRemove) {
                     const hasRemovePerm = await permissionsService.hasPermission(currentUser, 'tickets.remover_responsavel');
                     return hasRemovePerm ? null : 'Sem permissao para remover responsavel (tickets.remover_responsavel).';
                 }
-                const newResponsavelId = toPositiveInt(value);
                 if (!newResponsavelId)
                     return 'Responsavel invalido.';
-                const isTakingUnassigned = !ticket.responsavel_id && Number(newResponsavelId) === Number(currentUser.id);
+                const isTakingUnassigned = !currentResponsavelId && Number(newResponsavelId) === Number(currentUser.id);
                 const requiredPerm = isTakingUnassigned
                     ? 'tickets.assumir'
-                    : ticket.responsavel_id
+                    : currentResponsavelId
                         ? 'tickets.transferir'
                         : 'tickets.atribuir';
                 const allowed = await permissionsService.hasPermission(currentUser, requiredPerm);

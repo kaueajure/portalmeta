@@ -3,6 +3,7 @@ import pool from '../db/connection.js';
 import { env } from '../config/env.js';
 import { emitWhatsAppChanged } from '../realtime.js';
 import { notificationDispatchService } from './notification-dispatch.service.js';
+import ticketsService from './tickets.service.js';
 
 const GRAPH_API_BASE = 'https://graph.facebook.com';
 
@@ -31,10 +32,11 @@ export type WhatsAppConversation = {
   /** Título do serviço escolhido. */
   service_title: string | null;
   /** Status do atendimento na sessão: idle | active */
-  attendance_status: 'idle' | 'active' | null;
+  attendance_status: 'idle' | 'pending' | 'active' | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   assigned_at: string | null;
+  registered_ticket_id: number | null;
 };
 
 export type WhatsAppAssignment = {
@@ -77,6 +79,7 @@ export type WhatsAppBotSettings = {
   /** Minutos sem resposta do cliente após a última mensagem da empresa. */
   inactivityMinutes: number;
   closingMessage: string;
+  startMessage: string;
   updatedAt: string | null;
 };
 
@@ -85,6 +88,7 @@ export type WhatsAppSessionStatus = 'idle' | 'active';
 type WhatsAppSession = {
   contact_phone: string;
   contact_name: string | null;
+  attendance_cycle_id: number | null;
   status: WhatsAppSessionStatus;
   selected_option_id: string | null;
   selected_option_title: string | null;
@@ -94,6 +98,21 @@ type WhatsAppSession = {
   assigned_user_id: number | null;
   assigned_at: string | null;
   closed_at: string | null;
+  registered_ticket_id: number | null;
+};
+
+type WhatsAppAttendanceCycle = {
+  id: number;
+  contact_phone: string;
+  contact_name: string | null;
+  service_id: string | null;
+  service_title: string | null;
+  status: 'pending' | 'active' | 'closed';
+  started_at: string;
+  closed_at: string | null;
+  assigned_user_id: number | null;
+  assigned_at: string | null;
+  registered_ticket_id: number | null;
 };
 
 const DEFAULT_CLOSING_MESSAGE =
@@ -114,6 +133,7 @@ const DEFAULT_BOT_SETTINGS: WhatsAppBotSettings = {
   listSectionTitle: 'Atendimento',
   inactivityMinutes: 60,
   closingMessage: DEFAULT_CLOSING_MESSAGE,
+  startMessage: 'Olá! Sou {atendente} e vou iniciar seu atendimento sobre {servico}. Como posso ajudar?',
   updatedAt: null,
 };
 
@@ -177,6 +197,7 @@ function mapRowToBotSettings(row: any): WhatsAppBotSettings {
         ? inactivity
         : DEFAULT_BOT_SETTINGS.inactivityMinutes,
     closingMessage: String(row?.closing_message || DEFAULT_CLOSING_MESSAGE).trim() || DEFAULT_CLOSING_MESSAGE,
+    startMessage: String(row?.start_message || DEFAULT_BOT_SETTINGS.startMessage).trim() || DEFAULT_BOT_SETTINGS.startMessage,
     updatedAt: row?.updated_at ? String(row.updated_at) : null,
   };
 }
@@ -248,7 +269,7 @@ export const whatsappService = {
         `
           SELECT auto_reply_enabled, menu_type, welcome_header, welcome_body, welcome_buttons_json,
                  list_button_text, list_section_title,
-                 inactivity_minutes, closing_message, updated_at
+                 inactivity_minutes, closing_message, start_message, updated_at
           FROM whatsapp_settings
           WHERE id = 1
           LIMIT 1
@@ -275,6 +296,7 @@ export const whatsappService = {
     listSectionTitle?: string;
     inactivityMinutes?: number;
     closingMessage?: string;
+    startMessage?: string;
   }): Promise<WhatsAppBotSettings> {
     const current = await this.getBotSettings();
     const inactivityRaw =
@@ -313,6 +335,9 @@ export const whatsappService = {
       closingMessage: String(
         input.closingMessage !== undefined ? input.closingMessage : current.closingMessage,
       ).trim(),
+      startMessage: String(
+        input.startMessage !== undefined ? input.startMessage : current.startMessage,
+      ).trim().slice(0, 2000),
       updatedAt: current.updatedAt,
     };
 
@@ -342,6 +367,9 @@ export const whatsappService = {
         status: 400,
       });
     }
+    if (!next.startMessage) {
+      throw Object.assign(new Error('Informe a mensagem de início do atendimento'), { status: 400 });
+    }
 
     await pool.query(
       `
@@ -349,8 +377,8 @@ export const whatsappService = {
           id, auto_reply_enabled, auto_reply_trigger,
           menu_type, welcome_header, welcome_body, welcome_buttons_json,
           list_button_text, list_section_title,
-          inactivity_minutes, closing_message
-        ) VALUES (1, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)
+          inactivity_minutes, closing_message, start_message
+        ) VALUES (1, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           auto_reply_enabled = VALUES(auto_reply_enabled),
           menu_type = VALUES(menu_type),
@@ -360,7 +388,8 @@ export const whatsappService = {
           list_button_text = VALUES(list_button_text),
           list_section_title = VALUES(list_section_title),
           inactivity_minutes = VALUES(inactivity_minutes),
-          closing_message = VALUES(closing_message)
+          closing_message = VALUES(closing_message),
+          start_message = VALUES(start_message)
       `,
       [
         next.autoReplyEnabled ? 1 : 0,
@@ -372,6 +401,7 @@ export const whatsappService = {
         next.listSectionTitle,
         next.inactivityMinutes,
         next.closingMessage,
+        next.startMessage,
       ],
     );
 
@@ -385,9 +415,9 @@ export const whatsappService = {
     try {
       const [rows]: any = await pool.query(
         `
-          SELECT contact_phone, contact_name, status, selected_option_id, selected_option_title,
+          SELECT contact_phone, contact_name, attendance_cycle_id, status, selected_option_id, selected_option_title,
                  last_client_message_at, last_company_message_at, attendance_started_at,
-                 assigned_user_id, assigned_at, closed_at
+                 assigned_user_id, assigned_at, closed_at, registered_ticket_id
           FROM whatsapp_sessions
           WHERE contact_phone = ?
           LIMIT 1
@@ -421,49 +451,159 @@ export const whatsappService = {
   ): Promise<void> {
     const normalized = normalizePhone(phone);
     if (!normalized) return;
+    const connection = await pool.getConnection();
     try {
-      await this.ensureSessionRow(normalized, contactName);
-      await pool.query(
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO whatsapp_sessions (contact_phone, contact_name, status)
+         VALUES (?, ?, 'idle')
+         ON DUPLICATE KEY UPDATE contact_name = COALESCE(VALUES(contact_name), contact_name)`,
+        [normalized, contactName || null],
+      );
+      const [sessionRows]: any = await connection.query(
+        `SELECT s.status, s.attendance_cycle_id, c.status AS cycle_status
+         FROM whatsapp_sessions s
+         LEFT JOIN whatsapp_attendance_cycles c ON c.id = s.attendance_cycle_id
+         WHERE s.contact_phone = ? FOR UPDATE`,
+        [normalized],
+      );
+      const current = sessionRows[0];
+      let cycleId = Number(current?.attendance_cycle_id) || null;
+
+      if ((current?.status === 'active' || current?.cycle_status === 'pending') && cycleId) {
+        await connection.query(
+          `UPDATE whatsapp_attendance_cycles
+           SET status = 'active', service_id = ?, service_title = ?, contact_name = COALESCE(?, contact_name)
+           WHERE id = ? AND status IN ('pending', 'active')`,
+          [String(optionId || '').trim().toUpperCase().slice(0, 256), optionTitle, contactName || null, cycleId],
+        );
+      } else {
+        const [cycleResult]: any = await connection.query(
+          `INSERT INTO whatsapp_attendance_cycles
+            (contact_phone, contact_name, service_id, service_title, status, started_at)
+           VALUES (?, ?, ?, ?, 'active', NOW())`,
+          [normalized, contactName || null, String(optionId || '').trim().toUpperCase().slice(0, 256), optionTitle],
+        );
+        cycleId = Number(cycleResult.insertId);
+      }
+
+      await connection.query(
         `
           UPDATE whatsapp_sessions
-          SET status = 'active',
+          SET attendance_cycle_id = ?,
+              status = 'active',
               selected_option_id = ?,
               selected_option_title = ?,
               attendance_started_at = NOW(),
               last_client_message_at = NOW(),
               last_company_message_at = NULL,
               closed_at = NULL,
+              registered_ticket_id = NULL,
               contact_name = COALESCE(?, contact_name)
           WHERE contact_phone = ?
         `,
         [
+          cycleId,
           String(optionId || '').trim().toUpperCase().slice(0, 256),
           optionTitle,
           contactName || null,
           normalized,
         ],
       );
+      await connection.commit();
       emitWhatsAppChanged();
     } catch (err: any) {
+      await connection.rollback();
       if (err?.code === 'ER_NO_SUCH_TABLE') {
         console.warn('[WhatsApp] Tabela whatsapp_sessions ausente. Rode as migrations.');
         return;
       }
       throw err;
+    } finally {
+      connection.release();
+    }
+  },
+
+  async ensurePendingAttendanceCycle(phone: string, contactName?: string | null): Promise<number | null> {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return null;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO whatsapp_sessions (contact_phone, contact_name, status)
+         VALUES (?, ?, 'idle')
+         ON DUPLICATE KEY UPDATE contact_name = COALESCE(VALUES(contact_name), contact_name)`,
+        [normalized, contactName || null],
+      );
+      const [rows]: any = await connection.query(
+        `SELECT s.status, s.attendance_cycle_id, c.status AS cycle_status
+         FROM whatsapp_sessions s
+         LEFT JOIN whatsapp_attendance_cycles c ON c.id = s.attendance_cycle_id
+         WHERE s.contact_phone = ? FOR UPDATE`,
+        [normalized],
+      );
+      const session = rows[0];
+      if (session?.status === 'active') {
+        await connection.commit();
+        return Number(session.attendance_cycle_id) || null;
+      }
+      if (session?.cycle_status === 'pending' && session.attendance_cycle_id) {
+        await connection.query(
+          `UPDATE whatsapp_attendance_cycles SET contact_name = COALESCE(?, contact_name) WHERE id = ?`,
+          [contactName || null, session.attendance_cycle_id],
+        );
+        await connection.commit();
+        return Number(session.attendance_cycle_id);
+      }
+      const [result]: any = await connection.query(
+        `INSERT INTO whatsapp_attendance_cycles
+          (contact_phone, contact_name, status, started_at)
+         VALUES (?, ?, 'pending', NOW())`,
+        [normalized, contactName || null],
+      );
+      const cycleId = Number(result.insertId);
+      await connection.query(
+        `UPDATE whatsapp_sessions
+         SET attendance_cycle_id = ?, attendance_started_at = NOW(), registered_ticket_id = NULL,
+             selected_option_id = NULL, selected_option_title = NULL, closed_at = NULL
+         WHERE contact_phone = ?`,
+        [cycleId, normalized],
+      );
+      await connection.commit();
+      emitWhatsAppChanged();
+      return cycleId;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
   },
 
   async closeAttendance(phone: string): Promise<void> {
     const normalized = normalizePhone(phone);
     if (!normalized) return;
+    const connection = await pool.getConnection();
     try {
-      await pool.query(
+      await connection.beginTransaction();
+      const [rows]: any = await connection.query(
+        `SELECT attendance_cycle_id FROM whatsapp_sessions WHERE contact_phone = ? FOR UPDATE`,
+        [normalized],
+      );
+      const cycleId = Number(rows[0]?.attendance_cycle_id) || null;
+      if (cycleId) {
+        await connection.query(
+          `UPDATE whatsapp_attendance_cycles
+           SET status = 'closed', closed_at = COALESCE(closed_at, NOW())
+           WHERE id = ? AND status = 'active'`,
+          [cycleId],
+        );
+      }
+      await connection.query(
         `
           UPDATE whatsapp_sessions
           SET status = 'idle',
-              selected_option_id = NULL,
-              selected_option_title = NULL,
-              attendance_started_at = NULL,
               assigned_user_id = NULL,
               assigned_at = NULL,
               last_company_message_at = NULL,
@@ -472,10 +612,14 @@ export const whatsappService = {
         `,
         [normalized],
       );
+      await connection.commit();
       emitWhatsAppChanged();
     } catch (err: any) {
+      await connection.rollback();
       if (err?.code === 'ER_NO_SUCH_TABLE') return;
       throw err;
+    } finally {
+      connection.release();
     }
   },
 
@@ -540,11 +684,12 @@ export const whatsappService = {
       ),
       pool.query(
         `
-          SELECT id, user_id, user_name,
-                 DATE_FORMAT(assigned_at, '%Y-%m-%dT%H:%i:%sZ') AS assigned_at
-          FROM whatsapp_assignment_history
-          WHERE contact_phone = ?
-          ORDER BY assigned_at ASC, id ASC
+          SELECT h.id, h.user_id, h.user_name,
+                 DATE_FORMAT(h.assigned_at, '%Y-%m-%dT%H:%i:%sZ') AS assigned_at
+          FROM whatsapp_assignment_history h
+          JOIN whatsapp_sessions s ON s.contact_phone = h.contact_phone
+          WHERE h.contact_phone = ? AND h.attendance_cycle_id = s.attendance_cycle_id
+          ORDER BY h.assigned_at ASC, h.id ASC
         `,
         [normalized],
       ),
@@ -597,7 +742,7 @@ export const whatsappService = {
 
       const [rows]: any = await connection.query(
         `
-          SELECT s.status, s.selected_option_id, s.assigned_user_id, s.assigned_at,
+          SELECT s.status, s.attendance_cycle_id, s.selected_option_id, s.selected_option_title, s.assigned_user_id, s.assigned_at,
                  u.nome AS assigned_user_name
           FROM whatsapp_sessions s
           LEFT JOIN usuarios u ON u.id = s.assigned_user_id
@@ -622,7 +767,8 @@ export const whatsappService = {
         );
       }
 
-      if (!session?.assigned_user_id) {
+      const assignedNow = !session?.assigned_user_id;
+      if (assignedNow) {
         await connection.query(
           `
             UPDATE whatsapp_sessions
@@ -633,15 +779,35 @@ export const whatsappService = {
         );
         await connection.query(
           `
-            INSERT INTO whatsapp_assignment_history (contact_phone, user_id, user_name, assigned_at)
-            VALUES (?, ?, ?, NOW())
+            INSERT INTO whatsapp_assignment_history
+              (contact_phone, attendance_cycle_id, user_id, user_name, assigned_at)
+            VALUES (?, ?, ?, ?, NOW())
           `,
-          [normalized, actorId, actorName],
+          [normalized, session.attendance_cycle_id, actorId, actorName],
         );
+        if (session.attendance_cycle_id) {
+          await connection.query(
+            `UPDATE whatsapp_attendance_cycles
+             SET assigned_user_id = ?, assigned_at = NOW()
+             WHERE id = ? AND status = 'active'`,
+            [actorId, session.attendance_cycle_id],
+          );
+        }
       }
 
       await connection.commit();
       emitWhatsAppChanged();
+      if (assignedNow) {
+        try {
+          const settings = await this.getBotSettings();
+          const message = settings.startMessage
+            .replaceAll('{atendente}', actorName)
+            .replaceAll('{servico}', String(session.selected_option_title || session.selected_option_id || 'seu chamado'));
+          await this.sendTextMessage(normalized, message);
+        } catch (messageError) {
+          console.error('[WhatsApp] Falha ao enviar mensagem de início:', messageError);
+        }
+      }
       return this.getAssignmentDetails(normalized);
     } catch (err) {
       try {
@@ -653,6 +819,140 @@ export const whatsappService = {
     } finally {
       connection.release();
     }
+  },
+
+  async getAttendanceCycle(cycleId: number | null | undefined): Promise<WhatsAppAttendanceCycle | null> {
+    const id = Number(cycleId);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    const [rows]: any = await pool.query(
+      `SELECT id, contact_phone, contact_name, service_id, service_title, status,
+              started_at, closed_at, assigned_user_id, assigned_at, registered_ticket_id
+       FROM whatsapp_attendance_cycles WHERE id = ? LIMIT 1`,
+      [id],
+    );
+    return rows[0] || null;
+  },
+
+  async transferAttendance(phone: string, targetUserId: number, actor: { id: number; name: string }) {
+    const normalized = normalizePhone(phone);
+    const targetId = Number(targetUserId);
+    if (!normalized || !Number.isInteger(targetId) || targetId <= 0) {
+      throw Object.assign(new Error('Selecione um atendente válido.'), { status: 400 });
+    }
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [sessions]: any = await connection.query(
+        `SELECT status, attendance_cycle_id, assigned_user_id FROM whatsapp_sessions WHERE contact_phone = ? FOR UPDATE`,
+        [normalized],
+      );
+      const session = sessions[0];
+      if (!session || session.status !== 'active' || !session.assigned_user_id) {
+        throw Object.assign(new Error('Este atendimento não possui responsável ativo para transferência.'), { status: 409 });
+      }
+      if (Number(session.assigned_user_id) !== Number(actor.id)) {
+        throw Object.assign(
+          new Error('Somente o responsável atual pode transferir este atendimento.'),
+          { status: 403 },
+        );
+      }
+      if (Number(session.assigned_user_id) === targetId) {
+        throw Object.assign(new Error('O atendente selecionado já é o responsável.'), { status: 409 });
+      }
+      const [users]: any = await connection.query(
+        `SELECT id, nome FROM usuarios WHERE id = ? AND ativo = 1 AND perfil <> 'cliente' LIMIT 1`,
+        [targetId],
+      );
+      if (!users.length) throw Object.assign(new Error('Atendente não encontrado ou inativo.'), { status: 404 });
+      await connection.query(
+        `UPDATE whatsapp_sessions SET assigned_user_id = ?, assigned_at = NOW() WHERE contact_phone = ?`,
+        [targetId, normalized],
+      );
+      await connection.query(
+        `INSERT INTO whatsapp_assignment_history
+          (contact_phone, attendance_cycle_id, user_id, user_name, assigned_at)
+         VALUES (?, ?, ?, ?, NOW())`,
+        [normalized, session.attendance_cycle_id, targetId, users[0].nome],
+      );
+      if (session.attendance_cycle_id) {
+        await connection.query(
+          `UPDATE whatsapp_attendance_cycles
+           SET assigned_user_id = ?, assigned_at = NOW()
+           WHERE id = ? AND status = 'active'`,
+          [targetId, session.attendance_cycle_id],
+        );
+      }
+      await connection.commit();
+      emitWhatsAppChanged();
+      return this.getAssignmentDetails(normalized);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  },
+
+  async finishAttendance(phone: string, actorId: number) {
+    const normalized = normalizePhone(phone);
+    const session = await this.getSession(normalized);
+    if (!session || session.status !== 'active') {
+      throw Object.assign(new Error('Este atendimento já está encerrado.'), { status: 409 });
+    }
+    if (Number(session.assigned_user_id) !== Number(actorId)) {
+      throw Object.assign(new Error('Somente o responsável atual pode encerrar o atendimento.'), { status: 403 });
+    }
+    const cycle = await this.getAttendanceCycle(session.attendance_cycle_id);
+    await this.closeAttendance(normalized);
+    return { closed: true, attendanceCycleId: cycle?.id || null, registeredTicketId: cycle?.registered_ticket_id || null };
+  },
+
+  async registerConversationAsTicket(phone: string, actor: { id: number; name: string }) {
+    const normalized = normalizePhone(phone);
+    if (!normalized) throw Object.assign(new Error('Conversa inválida.'), { status: 400 });
+    const session = await this.getSession(normalized);
+    if (!session || session.status === 'active') {
+      throw Object.assign(new Error('Encerre o atendimento antes de registrá-lo como ticket.'), { status: 409 });
+    }
+    const cycle = await this.getAttendanceCycle(session.attendance_cycle_id);
+    if (!cycle || cycle.status !== 'closed') {
+      throw Object.assign(new Error('Não foi possível identificar o ciclo encerrado deste atendimento.'), { status: 409 });
+    }
+    if (cycle.registered_ticket_id) return { id: Number(cycle.registered_ticket_id), existing: true };
+
+    const sessionMessages = await this.listAttendanceCycleMessages(normalized, 500, cycle.id);
+    const contactName = cycle.contact_name || session.contact_name || sessionMessages.find((message) => message.contact_name)?.contact_name || normalized;
+    const transcript = sessionMessages.map((message) => {
+      const when = new Date(message.created_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const author = message.direction === 'inbound' ? contactName : 'Equipe Portal Meta';
+      return `[${when}] ${author}: ${message.body || `[${message.message_type}]`}`;
+    }).join('\n');
+    const service = cycle.service_title || cycle.service_id || 'Atendimento';
+    const ticketId = await ticketsService.create({
+      usuario_id: null,
+      solicitante_nome: contactName,
+      solicitante_email: null,
+      titulo: `WhatsApp · ${contactName} · ${service}`.slice(0, 255),
+      descricao: `Conversa registrada a partir do WhatsApp (${normalized}).\n\n${transcript || 'Sem mensagens de texto registradas nesta sessão.'}`,
+      prioridade: 'media',
+      categoria: 'suporte_tecnico',
+      servico: null,
+      origem: 'whatsapp',
+      responsavel_id: actor.id,
+      created_by_id: actor.id,
+    });
+    await pool.query(
+      `UPDATE whatsapp_attendance_cycles SET registered_ticket_id = ?
+       WHERE id = ? AND registered_ticket_id IS NULL`,
+      [ticketId, cycle.id],
+    );
+    await pool.query(
+      `UPDATE whatsapp_sessions SET registered_ticket_id = ?
+       WHERE contact_phone = ? AND attendance_cycle_id = ?`,
+      [ticketId, normalized, cycle.id],
+    );
+    emitWhatsAppChanged();
+    return { id: Number(ticketId), attendanceCycleId: cycle.id, existing: false };
   },
 
   /**
@@ -699,6 +999,7 @@ export const whatsappService = {
     }
 
     // Sem atendimento ativo: qualquer mensagem dispara o menu inicial.
+    await this.ensurePendingAttendanceCycle(phone, input.contactName);
     await this.touchClientMessage(phone, input.contactName);
 
     const lastWelcome = recentWelcomeSentAt.get(phone) || 0;
@@ -792,6 +1093,7 @@ export const whatsappService = {
   },
 
   async persistMessage(input: {
+    attendanceCycleId?: number | null;
     waMessageId?: string | null;
     direction: 'inbound' | 'outbound';
     fromPhone?: string | null;
@@ -803,18 +1105,24 @@ export const whatsappService = {
     rawPayload?: unknown;
   }) {
     try {
+      let attendanceCycleId = Number(input.attendanceCycleId) || null;
+      if (!attendanceCycleId && input.direction === 'outbound' && input.messageType !== 'status') {
+        const session = await this.getSession(normalizePhone(input.toPhone || ''));
+        attendanceCycleId = Number(session?.attendance_cycle_id) || null;
+      }
       const [result]: any = await pool.query(
         `
           INSERT INTO whatsapp_messages (
-            wa_message_id, direction, from_phone, to_phone, contact_name,
+            attendance_cycle_id, wa_message_id, direction, from_phone, to_phone, contact_name,
             message_type, body, status, raw_payload
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
             status = COALESCE(VALUES(status), status),
             body = COALESCE(VALUES(body), body),
             raw_payload = VALUES(raw_payload)
         `,
         [
+          attendanceCycleId,
           input.waMessageId || null,
           input.direction,
           input.fromPhone || null,
@@ -864,7 +1172,13 @@ export const whatsappService = {
             msg?.interactive?.list_reply?.title ||
             (msg?.type ? `[${msg.type}]` : null);
 
+          const phone = normalizePhone(msg.from || '');
+          const sessionBeforeMessage = phone ? await this.getSession(phone) : null;
+          const activeCycleId = sessionBeforeMessage?.status === 'active'
+            ? Number(sessionBeforeMessage.attendance_cycle_id) || null
+            : null;
           const persisted = await this.persistMessage({
+            attendanceCycleId: activeCycleId,
             waMessageId: msg.id || null,
             direction: 'inbound',
             fromPhone: msg.from || null,
@@ -877,8 +1191,16 @@ export const whatsappService = {
           });
           processed += 1;
 
-          if (persisted.inserted && msg?.from) {
-            const phone = normalizePhone(msg.from);
+          if (persisted.inserted && phone) {
+            const attendanceCycleId = activeCycleId
+              || await this.ensurePendingAttendanceCycle(phone, contactName);
+            if (attendanceCycleId && persisted.id) {
+              await pool.query(
+                `UPDATE whatsapp_messages SET attendance_cycle_id = ? WHERE id = ?`,
+                [attendanceCycleId, persisted.id],
+              );
+              emitWhatsAppChanged();
+            }
             const session = await this.getSession(phone);
             await notificationDispatchService.whatsapp({
               eventKey: `whatsapp:message:${msg.id || persisted.id}`,
@@ -888,17 +1210,16 @@ export const whatsappService = {
               body: textBody,
               assignedUserId: session?.status === 'active' ? session.assigned_user_id : null,
             });
-          }
-
-          if (msg?.from) {
-            void this.processInboundAttendanceFlow({
-              fromPhone: msg.from,
-              contactName,
-              messageType: msg.type || 'text',
-              rawMessage: msg,
-            }).catch((err) => {
+            try {
+              await this.processInboundAttendanceFlow({
+                fromPhone: msg.from,
+                contactName,
+                messageType: msg.type || 'text',
+                rawMessage: msg,
+              });
+            } catch (err) {
               console.error('[WhatsApp] Falha no fluxo de atendimento:', err);
-            });
+            }
           }
         }
 
@@ -956,7 +1277,12 @@ export const whatsappService = {
             t.last_body,
             t.last_direction,
             DATE_FORMAT(t.last_message_at, '%Y-%m-%dT%H:%i:%sZ') AS last_message_at,
-            t.message_count,
+            CASE WHEN cycle.id IS NULL THEN t.message_count ELSE (
+              SELECT COUNT(*)
+              FROM whatsapp_messages cycle_message
+              WHERE cycle_message.attendance_cycle_id = cycle.id
+                AND cycle_message.message_type <> 'status'
+            ) END AS message_count,
             CASE
               WHEN s.status = 'active' THEN NULLIF(s.selected_option_id, '')
               ELSE NULL
@@ -965,14 +1291,15 @@ export const whatsappService = {
               WHEN s.status = 'active' THEN NULLIF(s.selected_option_title, '')
               ELSE NULL
             END AS service_title,
-            s.status AS attendance_status,
+            CASE WHEN cycle.status = 'pending' THEN 'pending' ELSE s.status END AS attendance_status,
             CASE WHEN s.status = 'active' THEN s.assigned_user_id ELSE NULL END AS assigned_user_id,
             CASE WHEN s.status = 'active' THEN u.nome ELSE NULL END AS assigned_user_name,
             CASE
               WHEN s.status = 'active'
                 THEN DATE_FORMAT(s.assigned_at, '%Y-%m-%dT%H:%i:%sZ')
               ELSE NULL
-            END AS assigned_at
+            END AS assigned_at,
+            cycle.registered_ticket_id
           FROM (
             SELECT
               contact_phone,
@@ -1017,6 +1344,8 @@ export const whatsappService = {
           ) AS t
           LEFT JOIN whatsapp_sessions s
             ON s.contact_phone = t.contact_phone
+          LEFT JOIN whatsapp_attendance_cycles cycle
+            ON cycle.id = s.attendance_cycle_id
           LEFT JOIN usuarios u
             ON u.id = s.assigned_user_id
           ORDER BY t.last_message_at DESC
@@ -1032,10 +1361,17 @@ export const whatsappService = {
         message_count: Number(row.message_count) || 0,
         service_id: row.service_id ? String(row.service_id).trim().toUpperCase() : null,
         service_title: row.service_title || null,
-        attendance_status: row.attendance_status === 'active' ? 'active' : row.attendance_status === 'idle' ? 'idle' : null,
+        attendance_status: row.attendance_status === 'active'
+          ? 'active'
+          : row.attendance_status === 'pending'
+            ? 'pending'
+            : row.attendance_status === 'idle'
+              ? 'idle'
+              : null,
         assigned_user_id: row.assigned_user_id ? Number(row.assigned_user_id) : null,
         assigned_user_name: row.assigned_user_name || null,
         assigned_at: row.assigned_at || null,
+        registered_ticket_id: row.registered_ticket_id ? Number(row.registered_ticket_id) : null,
       }));
     } catch (err: any) {
       if (err?.code === 'ER_NO_SUCH_TABLE') return [];
@@ -1076,6 +1412,32 @@ export const whatsappService = {
       if (err?.code === 'ER_NO_SUCH_TABLE') return [];
       throw err;
     }
+  },
+
+  async listAttendanceCycleMessages(
+    phone: string,
+    limit = 300,
+    attendanceCycleId?: number | null,
+  ): Promise<WhatsAppInboundMessage[]> {
+    const normalized = normalizePhone(phone);
+    if (!normalized) return [];
+    const session = await this.getSession(normalized);
+    const cycle = await this.getAttendanceCycle(attendanceCycleId || session?.attendance_cycle_id);
+    if (!cycle || cycle.contact_phone !== normalized) return [];
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 300, 1), 500);
+    const [rows]: any = await pool.query(
+      `SELECT id, wa_message_id, direction, from_phone, to_phone, contact_name,
+              message_type, body, status,
+              DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at
+       FROM whatsapp_messages
+       WHERE attendance_cycle_id = ?
+         AND message_type <> 'status'
+       ORDER BY created_at ASC, id ASC
+       LIMIT ?`,
+      [cycle.id, safeLimit],
+    );
+    return rows;
   },
 
   async sendWelcomeMenu(to: string) {

@@ -324,12 +324,13 @@ export const TicketDetailsPage = ({ ticketId, onBack, currentUser }: TicketDetai
   const canCloseTicket = hasPermission(currentUser, 'tickets.fechar');
   const canReopen = hasPermission(currentUser, 'tickets.reabrir');
   const canEditPriority = hasPermission(currentUser, 'tickets.editar_prioridade');
-  const canEditResponsavel = hasAnyPermission(currentUser, [
-    'tickets.assumir',
-    'tickets.atribuir',
-    'tickets.transferir',
-    'tickets.remover_responsavel'
-  ]);
+  const currentUserIsResponsible = Number(ticket.responsavel_id) === Number(currentUser.id);
+  const canEditResponsavel = ticket.responsavel_id
+    ? currentUserIsResponsible && hasAnyPermission(currentUser, [
+        'tickets.transferir',
+        'tickets.remover_responsavel',
+      ])
+    : hasAnyPermission(currentUser, ['tickets.assumir', 'tickets.atribuir']);
   const canSendPublicReply = hasPermission(currentUser, 'ticket_mensagens.responder');
   const canAddInternalNote = hasPermission(currentUser, 'ticket_mensagens.comentar_interno');
   const canAttachFiles = hasPermission(currentUser, 'ticket_mensagens.anexar');

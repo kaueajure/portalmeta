@@ -14,18 +14,26 @@ import {
   Hand,
   UserRoundCheck,
   Clock3,
+  ArrowRightLeft,
+  CircleStop,
+  TicketCheck,
+  ExternalLink,
 } from "lucide-react";
 import { PageShell } from "../layout/PageShell";
 import { Button } from "../ui/Button";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
-import { User } from "../../types";
+import { Notification as SystemNotification, User } from "../../types";
 import { hasPermission } from "../../lib/permissions";
 import { getSocket } from "../../lib/socket";
+import { Modal } from "../ui/Modal";
+import { Select } from "../ui/Select";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 interface WhatsappPageProps {
   currentUser: User;
   onOpenSettings?: () => void;
+  onOpenTicket?: (ticketId: number) => void;
 }
 
 interface WhatsAppStatus {
@@ -41,10 +49,11 @@ interface WhatsAppConversation {
   message_count: number;
   service_id: string | null;
   service_title: string | null;
-  attendance_status: "idle" | "active" | null;
+  attendance_status: "idle" | "pending" | "active" | null;
   assigned_user_id: number | null;
   assigned_user_name: string | null;
   assigned_at: string | null;
+  registered_ticket_id: number | null;
 }
 
 interface WhatsAppMessage {
@@ -123,14 +132,17 @@ interface WhatsAppAssignmentDetails {
   history: WhatsAppAssignmentHistoryItem[];
 }
 
+interface TeamMember { id: number; nome: string; email: string; cargo: string | null; perfil?: string | null; }
+
 function hasActiveService(conversation: WhatsAppConversation | null): boolean {
   return Boolean(
     conversation?.attendance_status === "active" && conversation.service_id?.trim(),
   );
 }
 
-export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps) => {
+export const WhatsappPage = ({ currentUser, onOpenSettings, onOpenTicket }: WhatsappPageProps) => {
   const canManage = hasPermission(currentUser, "integracoes.whatsapp.gerenciar");
+  const canCreateTicket = hasPermission(currentUser, "tickets.criar");
   const [status, setStatus] = useState<WhatsAppStatus | null>(null);
   const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -139,6 +151,13 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
   const [threadLoading, setThreadLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [registeringTicket, setRegisteringTicket] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [targetUserId, setTargetUserId] = useState('');
   const [assignmentDetails, setAssignmentDetails] = useState<WhatsAppAssignmentDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -149,6 +168,12 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
   const [activeFolder, setActiveFolder] = useState<string>("all");
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<number | null>(null);
+  const selectedPhoneRef = useRef<string | null>(selectedPhone);
+  const conversationsRef = useRef<WhatsAppConversation[]>(conversations);
+  const threadRequestRef = useRef(0);
+  const conversationRequestRef = useRef(0);
+  selectedPhoneRef.current = selectedPhone;
+  conversationsRef.current = conversations;
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.contact_phone === selectedPhone) || null,
@@ -214,6 +239,7 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
   );
 
   const loadStatusAndConversations = useCallback(async (opts?: { silent?: boolean }) => {
+    const requestId = ++conversationRequestRef.current;
     if (!opts?.silent) setLoading(true);
     setError(null);
     try {
@@ -221,8 +247,10 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
         api.get<WhatsAppStatus>("/whatsapp/status"),
         api.get<WhatsAppConversation[]>("/whatsapp/conversations?limit=100"),
       ]);
-      setStatus(statusData);
-      setConversations(conversationData);
+      if (requestId === conversationRequestRef.current) {
+        setStatus(statusData);
+        setConversations(conversationData);
+      }
     } catch (err: any) {
       setError(err?.message || "Não foi possível carregar o WhatsApp.");
     } finally {
@@ -231,16 +259,19 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
   }, []);
 
   const loadThread = useCallback(async (phone: string, opts?: { silent?: boolean }) => {
+    const requestId = ++threadRequestRef.current;
     if (!opts?.silent) setThreadLoading(true);
     try {
       const messages = await api.get<WhatsAppMessage[]>(
         `/whatsapp/conversations/${encodeURIComponent(phone)}/messages?limit=300`,
       );
-      setThread(messages);
+      if (requestId === threadRequestRef.current && selectedPhoneRef.current === phone) {
+        setThread(messages);
+      }
     } catch (err: any) {
       setError(err?.message || "Não foi possível carregar a conversa.");
     } finally {
-      if (!opts?.silent) setThreadLoading(false);
+      if (!opts?.silent && requestId === threadRequestRef.current) setThreadLoading(false);
     }
   }, []);
 
@@ -294,7 +325,7 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
         loadThread(selectedPhone, { silent: true });
         loadAssignment(selectedPhone);
       }
-    }, 12_000);
+    }, 4_000);
     return () => {
       if (pollRef.current) window.clearInterval(pollRef.current);
     };
@@ -305,14 +336,16 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
     let refreshTimer: number | null = null;
 
     const handleWhatsAppChanged = () => {
+      if (selectedPhoneRef.current) {
+        void loadThread(selectedPhoneRef.current, { silent: true });
+      }
       if (refreshTimer) window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
-        loadStatusAndConversations({ silent: true });
-        if (selectedPhone) {
-          loadThread(selectedPhone, { silent: true });
-          loadAssignment(selectedPhone);
+        void loadStatusAndConversations({ silent: true });
+        if (selectedPhoneRef.current) {
+          void loadAssignment(selectedPhoneRef.current);
         }
-      }, 150);
+      }, 50);
     };
 
     socket.on("whatsappChanged", handleWhatsAppChanged);
@@ -321,7 +354,116 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
       socket.off("whatsappChanged", handleWhatsAppChanged);
       if (refreshTimer) window.clearTimeout(refreshTimer);
     };
-  }, [loadStatusAndConversations, loadThread, loadAssignment, selectedPhone]);
+  }, [loadStatusAndConversations, loadThread, loadAssignment]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    let confirmTimer: number | null = null;
+    const handleNotification = (notification: SystemNotification) => {
+      const metadata = notification?.metadata || {};
+      const category = String(metadata.category || '');
+      if (category !== 'whatsapp_general' && category !== 'whatsapp_assigned') return;
+
+      const phone = String(metadata.phone || '').replace(/\D/g, '');
+      const messageId = Number(metadata.messageId);
+      if (!phone) return;
+      if (!Number.isInteger(messageId) || messageId <= 0) {
+        void loadStatusAndConversations({ silent: true });
+        if (selectedPhoneRef.current === phone) void loadThread(phone, { silent: true });
+        return;
+      }
+      const createdAt = String(metadata.createdAt || notification.created_at || new Date().toISOString());
+      const notificationPreview = String(notification.mensagem || '').split(' · ').slice(1).join(' · ') || null;
+      const body = metadata.body == null ? notificationPreview : String(metadata.body);
+      const contactName = metadata.contactName == null ? null : String(metadata.contactName);
+      const message: WhatsAppMessage = {
+        id: messageId,
+        wa_message_id: null,
+        direction: 'inbound',
+        from_phone: phone,
+        to_phone: null,
+        contact_name: contactName,
+        message_type: 'text',
+        body,
+        status: 'received',
+        created_at: createdAt,
+      };
+      const previousConversation = conversationsRef.current.find((conversation) => conversation.contact_phone === phone);
+      const beginsNewCycle = previousConversation?.attendance_status === 'idle';
+
+      conversationRequestRef.current += 1;
+      setConversations((current) => {
+        const existing = current.find((conversation) => conversation.contact_phone === phone);
+        if (!existing) {
+          return [{
+            contact_phone: phone,
+            contact_name: contactName,
+            last_body: body,
+            last_direction: 'inbound',
+            last_message_at: createdAt,
+            message_count: 1,
+            service_id: null,
+            service_title: null,
+            attendance_status: null,
+            assigned_user_id: null,
+            assigned_user_name: null,
+            assigned_at: null,
+            registered_ticket_id: null,
+          }, ...current];
+        }
+        const updated = {
+          ...existing,
+          contact_name: contactName || existing.contact_name,
+          last_body: body,
+          last_direction: 'inbound' as const,
+          last_message_at: createdAt,
+          message_count: beginsNewCycle ? 1 : existing.message_count + 1,
+          ...(beginsNewCycle ? {
+            service_id: null,
+            service_title: null,
+            attendance_status: 'pending' as const,
+            assigned_user_id: null,
+            assigned_user_name: null,
+            assigned_at: null,
+            registered_ticket_id: null,
+          } : {}),
+        };
+        return [updated, ...current.filter((conversation) => conversation.contact_phone !== phone)];
+      });
+
+      if (selectedPhoneRef.current === phone) {
+        threadRequestRef.current += 1;
+        if (beginsNewCycle) {
+          setThread([message]);
+          setAssignmentDetails(null);
+        } else {
+          setThread((current) => current.some((item) => item.id === messageId)
+            ? current
+            : [...current, message].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.id - b.id));
+        }
+      }
+
+      if (confirmTimer) window.clearTimeout(confirmTimer);
+      confirmTimer = window.setTimeout(() => {
+        void loadStatusAndConversations({ silent: true });
+        if (selectedPhoneRef.current === phone) {
+          void loadThread(phone, { silent: true });
+          void loadAssignment(phone);
+        }
+      }, 400);
+    };
+    const handleReconnect = () => {
+      void loadStatusAndConversations({ silent: true });
+      if (selectedPhoneRef.current) void loadThread(selectedPhoneRef.current, { silent: true });
+    };
+    socket.on('notificationCreated', handleNotification);
+    socket.on('connect', handleReconnect);
+    return () => {
+      socket.off('notificationCreated', handleNotification);
+      socket.off('connect', handleReconnect);
+      if (confirmTimer) window.clearTimeout(confirmTimer);
+    };
+  }, [loadStatusAndConversations, loadThread, loadAssignment]);
 
   const selectConversation = (phone: string) => {
     setSelectedPhone(phone);
@@ -356,6 +498,7 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
           assigned_user_id: null,
           assigned_user_name: null,
           assigned_at: null,
+          registered_ticket_id: null,
         },
         ...prev,
       ];
@@ -384,6 +527,62 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
     } finally {
       setClaiming(false);
     }
+  };
+
+  const openTransfer = async () => {
+    setTransferOpen(true); setTargetUserId(''); setError(null);
+    try {
+      const members = await api.get<TeamMember[]>('/users/team');
+      setTeam(members.filter((member) => member.perfil !== 'cliente' && member.id !== selectedAssignment?.user_id));
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível carregar os atendentes.');
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!selectedPhone || !targetUserId) return;
+    setTransferring(true); setError(null); setSuccess(null);
+    try {
+      const details = await api.post<WhatsAppAssignmentDetails>(
+        `/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/transfer`,
+        { userId: Number(targetUserId) },
+      );
+      setAssignmentDetails(details); setTransferOpen(false);
+      setSuccess(`Atendimento transferido para ${details.current?.user_name || 'o novo responsável'}.`);
+      await loadStatusAndConversations({ silent: true });
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível transferir o atendimento.');
+    } finally { setTransferring(false); }
+  };
+
+  const handleFinish = async () => {
+    if (!selectedPhone || !isCurrentUserResponsible) return;
+    setFinishing(true); setError(null); setSuccess(null);
+    try {
+      await api.post(`/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/finish`, {});
+      setFinishConfirmOpen(false);
+      setAssignmentDetails({ current: null, history: assignmentDetails?.history || [] });
+      setSuccess('Atendimento encerrado. Você pode registrar esta conversa como ticket.');
+      await loadStatusAndConversations({ silent: true });
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível encerrar o atendimento.');
+    } finally { setFinishing(false); }
+  };
+
+  const handleRegisterTicket = async () => {
+    if (!selectedPhone) return;
+    setRegisteringTicket(true); setError(null); setSuccess(null);
+    try {
+      const result = await api.post<{ id: number; existing: boolean }>(
+        `/whatsapp/conversations/${encodeURIComponent(selectedPhone)}/ticket`, {},
+      );
+      setConversations((current) => current.map((conversation) => conversation.contact_phone === selectedPhone
+        ? { ...conversation, registered_ticket_id: result.id }
+        : conversation));
+      setSuccess(result.existing ? `Esta conversa já está no ticket #${result.id}.` : `Ticket #${result.id} criado com a conversa completa.`);
+    } catch (err: any) {
+      setError(err?.message || 'Não foi possível registrar a conversa como ticket.');
+    } finally { setRegisteringTicket(false); }
   };
 
   const handleSend = async (e: React.FormEvent) => {
@@ -416,11 +615,12 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
       id: `message-${message.id}`,
       message,
     }));
-    const assignments = (assignmentDetails?.history || []).map((assignment) => ({
+    const assignments = (assignmentDetails?.history || []).map((assignment, index) => ({
       kind: "assignment" as const,
       date: assignment.assigned_at,
       id: `assignment-${assignment.id}`,
       assignment,
+      firstAssignment: index === 0,
     }));
     return [...messages, ...assignments].sort((a, b) => {
       const byDate = new Date(a.date).getTime() - new Date(b.date).getTime();
@@ -793,11 +993,16 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
                       size="sm"
                       loading={claiming}
                       onClick={handleClaimAttendance}
-                      className="shrink-0 bg-amber-700 shadow-amber-700/15 hover:bg-amber-800 focus-visible:ring-amber-600"
+                      className="shrink-0"
                     >
                       <Hand size={14} />
-                      Iniciar atendimento
+                      Assumir atendimento
                     </Button>
+                  ) : selectedAssignment && canManage && isCurrentUserResponsible ? (
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" onClick={openTransfer}><ArrowRightLeft size={14} />Transferir</Button>
+                      <Button type="button" size="sm" variant="outline" loading={finishing} onClick={() => setFinishConfirmOpen(true)} className="border-rose-200 text-rose-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800"><CircleStop size={14} />Encerrar</Button>
+                    </div>
                   ) : null}
                 </div>
                 ) : null}
@@ -818,7 +1023,7 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
                               <div className="flex max-w-[92%] items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] text-blue-800 shadow-sm">
                                 <UserRoundCheck size={13} className="shrink-0" />
                                 <span>
-                                  <strong>{item.assignment.user_name}</strong> iniciou o atendimento em{" "}
+                                  <strong>{item.assignment.user_name}</strong> {item.firstAssignment ? 'iniciou o atendimento' : 'assumiu a responsabilidade'} em{" "}
                                   {formatMessageTime(item.assignment.assigned_at)}
                                 </span>
                               </div>
@@ -924,16 +1129,29 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
                     <span className="font-medium">integracoes.whatsapp.gerenciar</span> para
                     responder.
                   </div>
-                ) : (
-                  <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs text-slate-500">
-                    {"Este atendimento est\u00e1 encerrado. Uma nova mensagem do cliente reabrir\u00e1 o fluxo de atendimento."}
+                ) : selectedConversation?.attendance_status === 'idle' ? (
+                  <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3">
+                    <div className="mx-auto flex max-w-3xl flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-2.5 text-left"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-200 text-slate-600"><CircleStop size={15} /></span><div><p className="text-xs font-semibold text-slate-900">Atendimento encerrado</p><p className="mt-0.5 text-[11px] text-slate-500">Registre a conversa nos chamados se ela precisar de acompanhamento formal.</p></div></div>
+                      {selectedConversation?.registered_ticket_id ? <Button type="button" size="sm" variant="outline" onClick={() => onOpenTicket?.(selectedConversation.registered_ticket_id!)}><ExternalLink size={14} />Abrir ticket #{selectedConversation.registered_ticket_id}</Button> : canCreateTicket ? <Button type="button" size="sm" loading={registeringTicket} onClick={handleRegisterTicket}><TicketCheck size={14} />Registrar como ticket</Button> : null}
+                    </div>
                   </div>
+                ) : (
+                  <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs text-slate-500">Aguardando o cliente selecionar um serviço para abrir o atendimento.</div>
                 )}
               </>
             )}
           </section>
         </div>
       </PageShell>
+      <Modal isOpen={transferOpen} onClose={() => setTransferOpen(false)} title="Transferir responsável" size="sm">
+        <div className="space-y-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800"><strong className="block text-blue-950">Atendimento de {headerTitle}</strong>O novo atendente passa a responder imediatamente e a transferência fica registrada na linha do tempo.</div>
+          <label className="block space-y-1.5 text-xs font-semibold text-slate-700">Novo responsável<Select value={targetUserId} onChange={setTargetUserId} options={[{ value: '', label: 'Selecione um atendente' }, ...team.map((member) => ({ value: String(member.id), label: member.cargo ? `${member.nome} · ${member.cargo}` : member.nome }))]} /></label>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button variant="outline" onClick={() => setTransferOpen(false)}>Cancelar</Button><Button disabled={!targetUserId} loading={transferring} onClick={handleTransfer}><ArrowRightLeft size={14} />Transferir atendimento</Button></div>
+        </div>
+      </Modal>
+      <ConfirmDialog isOpen={finishConfirmOpen} onClose={() => setFinishConfirmOpen(false)} onConfirm={handleFinish} title="Encerrar atendimento?" description="A conversa deixará a fila ativa. Depois do encerramento, você poderá registrá-la como um ticket real nos chamados do sistema." confirmLabel="Encerrar atendimento" variant="danger" />
     </div>
   );
 };

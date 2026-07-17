@@ -758,6 +758,12 @@ router.patch('/:id', async (req, res) => {
         if (req.body.responsavel_id !== undefined && req.body.responsavel_id !== ticket.responsavel_id) {
             const wantsRemoveResponsavel = req.body.responsavel_id === null || req.body.responsavel_id === '';
             const newRespId = toPositiveInt(req.body.responsavel_id);
+            const currentResponsavelId = toPositiveInt(ticket.responsavel_id);
+            const isChangingAssignedTicket = Boolean(currentResponsavelId)
+                && Number(newRespId || 0) !== Number(currentResponsavelId);
+            if (isChangingAssignedTicket && Number(currentResponsavelId) !== Number(currentUser.id)) {
+                return sendError(res, 'Somente o responsável atual pode transferir ou remover a responsabilidade deste chamado.', 403);
+            }
             if (wantsRemoveResponsavel) {
                 const hasRemovePerm = await permissionsService.hasPermission(currentUser, 'tickets.remover_responsavel');
                 if (!hasRemovePerm) {
@@ -768,14 +774,14 @@ router.patch('/:id', async (req, res) => {
             else if (!newRespId) {
                 return sendError(res, 'Responsavel invalido', 400);
             }
-            else if (newRespId === currentUser.id) {
+            else if (!currentResponsavelId && newRespId === currentUser.id) {
                 const hasTakePerm = await permissionsService.hasPermission(currentUser, 'tickets.assumir');
                 if (!hasTakePerm) {
                     return sendError(res, 'Você não tem permissão para assumir chamados.', 403);
                 }
             }
             else {
-                const isTransfer = ticket.responsavel_id !== null;
+                const isTransfer = Boolean(currentResponsavelId);
                 const requiredPerm = isTransfer ? 'tickets.transferir' : 'tickets.atribuir';
                 const hasAssignPerm = await permissionsService.hasPermission(currentUser, requiredPerm);
                 if (!hasAssignPerm) {

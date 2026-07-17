@@ -1987,18 +1987,26 @@ class TicketsService {
       }
       case 'responsavel': {
         const wantsRemove = value === null || value === undefined || value === '';
+        const currentResponsavelId = toPositiveInt(ticket.responsavel_id);
+        const newResponsavelId = wantsRemove ? null : toPositiveInt(value);
+
+        if (currentResponsavelId
+          && Number(newResponsavelId || 0) !== Number(currentResponsavelId)
+          && Number(currentResponsavelId) !== Number(currentUser.id)) {
+          return 'Somente o responsavel atual pode transferir ou remover a responsabilidade deste chamado.';
+        }
+
         if (wantsRemove) {
           const hasRemovePerm = await permissionsService.hasPermission(currentUser, 'tickets.remover_responsavel');
           return hasRemovePerm ? null : 'Sem permissao para remover responsavel (tickets.remover_responsavel).';
         }
 
-        const newResponsavelId = toPositiveInt(value);
         if (!newResponsavelId) return 'Responsavel invalido.';
 
-        const isTakingUnassigned = !ticket.responsavel_id && Number(newResponsavelId) === Number(currentUser.id);
+        const isTakingUnassigned = !currentResponsavelId && Number(newResponsavelId) === Number(currentUser.id);
         const requiredPerm = isTakingUnassigned
           ? 'tickets.assumir'
-          : ticket.responsavel_id
+          : currentResponsavelId
             ? 'tickets.transferir'
             : 'tickets.atribuir';
         const allowed = await permissionsService.hasPermission(currentUser, requiredPerm);

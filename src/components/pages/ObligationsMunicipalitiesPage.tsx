@@ -14,6 +14,7 @@ import { ErrorState } from '../ui/ErrorState';
 import { LoadingState } from '../ui/LoadingState';
 import { Modal } from '../ui/Modal';
 import { PageShell } from '../layout/PageShell';
+import { DEFAULT_OBLIGATION_DEFINITIONS, ObligationDefinition, obligationColor } from '../../lib/obligationDefinitions';
 
 interface Municipality {
   id: number;
@@ -31,28 +32,14 @@ interface MunicipalityPayload {
   name: string; state: string; serviceConfig: { activeServices: Record<string, boolean> };
   phone: string | null; email: string | null; observations: string | null; version: number;
 }
-interface MunicipalitiesResponse { municipalities: Municipality[]; }
+interface MunicipalitiesResponse { municipalities: Municipality[]; definitions: ObligationDefinition[]; }
 type FormMode = 'create' | 'edit' | 'clone';
 
-const SERVICES = [
-  { code: 'MSC', name: 'Matriz de Saldos Contábeis', tone: 'blue' },
-  { code: 'RREO', name: 'Relatório Resumido de Execução Orçamentária', tone: 'cyan' },
-  { code: 'RGF', name: 'Relatório de Gestão Fiscal', tone: 'violet' },
-  { code: 'DCA', name: 'Declaração de Contas Anuais', tone: 'amber' },
-  { code: 'SIOPE', name: 'Educação', tone: 'emerald' },
-  { code: 'SIOPS', name: 'Saúde', tone: 'rose' },
-] as const;
-const ALL_ACTIVE = Object.fromEntries(SERVICES.map(({ code }) => [code, true]));
-const SERVICE_TONES: Record<string, string> = {
-  blue: 'border-blue-200 bg-blue-50 text-blue-700', cyan: 'border-cyan-200 bg-cyan-50 text-cyan-700',
-  violet: 'border-violet-200 bg-violet-50 text-violet-700', amber: 'border-amber-200 bg-amber-50 text-amber-700',
-  emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700', rose: 'border-rose-200 bg-rose-50 text-rose-700',
-};
-
 function MunicipalityForm({
-  isOpen, mode, municipality, saving, error, onClose, onSave,
+  isOpen, mode, municipality, services, saving, error, onClose, onSave,
 }: {
   isOpen: boolean; mode: FormMode; municipality: Municipality | null;
+  services: ObligationDefinition[];
   saving: boolean; error: string; onClose: () => void;
   onSave: (payload: MunicipalityPayload) => Promise<void>;
 }) {
@@ -60,7 +47,7 @@ function MunicipalityForm({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [observations, setObservations] = useState('');
-  const [activeServices, setActiveServices] = useState<Record<string, boolean>>(ALL_ACTIVE);
+  const [activeServices, setActiveServices] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -68,8 +55,8 @@ function MunicipalityForm({
     setName(mode === 'clone' ? '' : municipality?.name || '');
     setPhone(municipality?.phone || '');
     setEmail(municipality?.email || ''); setObservations(municipality?.observations || '');
-    setActiveServices(Object.fromEntries(SERVICES.map(({ code }) => [code, config.activeServices?.[code] !== false])));
-  }, [isOpen, mode, municipality?.id]);
+    setActiveServices(Object.fromEntries(services.map(({ code }) => [code, config.activeServices?.[code] !== false])));
+  }, [isOpen, mode, municipality?.id, services]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -97,7 +84,7 @@ function MunicipalityForm({
         <section className="space-y-2 border-t border-slate-100 pt-4">
           <div><h4 className="text-xs font-bold text-slate-900">Serviços aplicáveis</h4><p className="mt-0.5 text-[11px] text-slate-500">Defina quais obrigações fazem parte do acompanhamento deste município.</p></div>
           <div className="grid gap-2 sm:grid-cols-2">
-            {SERVICES.map((service) => {
+            {services.map((service) => {
               const active = activeServices[service.code] !== false;
               return <div key={service.code} className={cn('rounded-lg border transition-colors', active ? 'border-slate-200 bg-white' : 'border-slate-200 bg-slate-50 opacity-70')}>
                 <div className="flex items-center gap-2 p-2.5">
@@ -147,19 +134,20 @@ export function ObligationsMunicipalitiesPage({ currentUser, openCreateOnMount =
   useEffect(() => { load(); }, []);
 
   const municipalities = data?.municipalities || [];
+  const services = data?.definitions?.length ? data.definitions : DEFAULT_OBLIGATION_DEFINITIONS;
   const filtered = useMemo(() => municipalities.filter((municipality) => {
     if (!deferredSearch) return true;
     return `${municipality.name} ${municipality.email || ''} ${municipality.phone || ''}`.toLocaleLowerCase('pt-BR').includes(deferredSearch);
   }), [municipalities, deferredSearch]);
   const stats = useMemo(() => {
     let activeServices = 0; let withoutContact = 0;
-    for (const municipality of municipalities) for (const { code } of SERVICES) {
+    for (const municipality of municipalities) for (const { code } of services) {
       if (municipality.serviceConfig?.activeServices?.[code] === false) continue;
       activeServices += 1;
     }
     for (const municipality of municipalities) if (!municipality.email && !municipality.phone) withoutContact += 1;
     return { activeServices, withoutContact };
-  }, [municipalities]);
+  }, [municipalities, services]);
   const summaryCards = [
     { label: 'Municípios', value: municipalities.length, icon: Building2, color: 'text-slate-900' },
     { label: 'Serviços ativos', value: stats.activeServices, icon: ShieldCheck, color: 'text-emerald-700' },
@@ -224,13 +212,13 @@ export function ObligationsMunicipalitiesPage({ currentUser, openCreateOnMount =
         {!filtered.length ? <EmptyState className="m-4 min-h-[300px]" title="Nenhum município encontrado" description={search ? 'Ajuste ou remova o termo pesquisado.' : 'Cadastre o primeiro município para começar.'} icon={<Building2 size={22} />} action={canCreate && !search ? { label: 'Cadastrar município', onClick: () => openForm('create') } : undefined} /> : (
           <div className="divide-y divide-slate-100">
             {filtered.map((municipality) => {
-              const activeCount = SERVICES.filter(({ code }) => municipality.serviceConfig?.activeServices?.[code] !== false).length;
+              const activeCount = services.filter(({ code }) => municipality.serviceConfig?.activeServices?.[code] !== false).length;
               return <article key={municipality.id} className="group px-3 py-3 transition-colors hover:bg-slate-50/70 sm:px-4">
                 <div className="grid gap-3 xl:grid-cols-[220px_1fr_230px_auto] xl:items-center">
-                  <div className="min-w-0"><h3 className="truncate text-[13px] font-bold text-slate-950">{municipality.name}</h3><p className="mt-0.5 text-[10px] font-medium text-slate-400">{activeCount} de {SERVICES.length} serviços ativos</p></div>
-                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">{SERVICES.map((service) => {
+                  <div className="min-w-0"><h3 className="truncate text-[13px] font-bold text-slate-950">{municipality.name}</h3><p className="mt-0.5 text-[10px] font-medium text-slate-400">{activeCount} de {services.length} serviços ativos</p></div>
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-6">{services.map((service) => {
                     const active = municipality.serviceConfig?.activeServices?.[service.code] !== false;
-                    return <div key={service.code} title={active ? 'Incluído no acompanhamento' : 'Não se aplica'} className={cn('min-w-0 rounded-md border px-2 py-1.5', active ? SERVICE_TONES[service.tone] : 'border-slate-200 bg-slate-50 text-slate-300')}><div className="flex items-center justify-between gap-1"><strong className="text-[9px]">{service.code}</strong>{active ? <Check size={9} /> : null}</div><p className="mt-0.5 truncate text-[9px] font-semibold opacity-80">{active ? 'Ativo' : 'Inativo'}</p></div>;
+                    return <div key={service.code} title={active ? 'Incluído no acompanhamento' : 'Não se aplica'} className={cn('min-w-0 rounded-md border px-2 py-1.5', active ? obligationColor(service.color).chip : 'border-slate-200 bg-slate-50 text-slate-300')}><div className="flex items-center justify-between gap-1"><strong className="text-[9px]">{service.code}</strong>{active ? <Check size={9} /> : null}</div><p className="mt-0.5 truncate text-[9px] font-semibold opacity-80">{active ? 'Ativo' : 'Inativo'}</p></div>;
                   })}</div>
                   <div className="space-y-1 text-[10px] text-slate-500"><p className="flex items-center gap-1.5 truncate"><Mail size={11} className="shrink-0 text-slate-400" />{municipality.email || 'E-mail não informado'}</p><p className="flex items-center gap-1.5 truncate"><Phone size={11} className="shrink-0 text-slate-400" />{municipality.phone || 'Telefone não informado'}</p></div>
                   <div className="flex items-center justify-end gap-1 opacity-70 transition-opacity group-hover:opacity-100">{canCreate ? <Button size="icon" variant="ghost" onClick={() => openForm('clone', municipality)} title="Clonar"><Copy size={14} /></Button> : null}{canEdit ? <Button size="icon" variant="ghost" onClick={() => openForm('edit', municipality)} title="Editar"><Edit2 size={14} /></Button> : null}{canDelete ? <Button size="icon" variant="ghost" onClick={() => setDeleteTarget(municipality)} title="Excluir" className="hover:bg-rose-50 hover:text-rose-700"><Trash2 size={14} /></Button> : null}</div>
@@ -242,7 +230,7 @@ export function ObligationsMunicipalitiesPage({ currentUser, openCreateOnMount =
         )}
       </section>
 
-      <MunicipalityForm isOpen={formOpen} mode={formMode} municipality={selected} saving={saving} error={formError} onClose={() => setFormOpen(false)} onSave={saveMunicipality} />
+      <MunicipalityForm isOpen={formOpen} mode={formMode} municipality={selected} services={services} saving={saving} error={formError} onClose={() => setFormOpen(false)} onSave={saveMunicipality} />
       <ConfirmDialog isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={deleteMunicipality} title="Desativar município?" description={`Ao desativar ${deleteTarget?.name || 'este município'}, ele deixará de aparecer no módulo. Obrigações, histórico, comentários e anexos serão preservados.`} confirmLabel="Desativar município" variant="danger" />
     </PageShell>
   );

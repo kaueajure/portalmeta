@@ -2,7 +2,7 @@ import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useSt
 import { createPortal } from 'react-dom';
 import {
   AlertCircle, Building2, Check, ChevronDown, CircleCheckBig, Clock3, Download,
-  FileDown, FileText, Filter, History, Loader2, MessageSquare, Paperclip,
+  CalendarRange, FileDown, FileText, Filter, History, Loader2, MessageSquare, Paperclip,
   Plus, RefreshCw, Search, Send, SlidersHorizontal, Upload, X,
 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -16,6 +16,10 @@ import { Modal } from '../ui/Modal';
 import { Select } from '../ui/Select';
 import { Checkbox } from '../ui/Checkbox';
 import { PageShell } from '../layout/PageShell';
+import {
+  DEFAULT_OBLIGATION_DEFINITIONS, FREQUENCY_OPTIONS, ObligationDefinition,
+  ObligationFrequency, OBLIGATION_COLOR_STYLES, obligationColor,
+} from '../../lib/obligationDefinitions';
 
 type Status = 'Falta XML' | 'Não iniciado' | 'Pendência Cliente' | 'Trabalhando' | 'Retificar' | 'Enviado' | 'Homologado';
 type AuxiliaryStatus = 'Não Solicitado' | 'Solicitado' | 'Recebido' | 'Importado' | 'Críticas' | 'Diferença Folha' | 'Sem críticas';
@@ -66,14 +70,6 @@ interface CommentPreviewState {
   left: number;
 }
 
-const OBLIGATIONS = [
-  { code: 'MSC', name: 'Matriz de Saldos Contábeis', accent: 'bg-blue-600', tone: 'text-blue-700' },
-  { code: 'RREO', name: 'Execução Orçamentária', accent: 'bg-cyan-600', tone: 'text-cyan-700' },
-  { code: 'RGF', name: 'Gestão Fiscal', accent: 'bg-violet-600', tone: 'text-violet-700' },
-  { code: 'DCA', name: 'Contas Anuais', accent: 'bg-amber-600', tone: 'text-amber-700' },
-  { code: 'SIOPE', name: 'Educação', accent: 'bg-emerald-600', tone: 'text-emerald-700' },
-  { code: 'SIOPS', name: 'Saúde', accent: 'bg-rose-600', tone: 'text-rose-700' },
-] as const;
 const STATUSES: Status[] = ['Falta XML', 'Não iniciado', 'Pendência Cliente', 'Trabalhando', 'Retificar', 'Enviado', 'Homologado'];
 const AUXILIARY_STATUSES: AuxiliaryStatus[] = ['Não Solicitado', 'Solicitado', 'Recebido', 'Importado', 'Críticas', 'Diferença Folha', 'Sem críticas'];
 const STATUS_STYLE: Record<Status, string> = {
@@ -107,18 +103,83 @@ const MONTH_INDEX: Record<string, number> = {
   Janeiro: 1, Fevereiro: 2, Março: 3, Abril: 4, Maio: 5, Junho: 6,
   Julho: 7, Agosto: 8, Setembro: 9, Outubro: 10, Novembro: 11, Dezembro: 12, Encerramento: 12,
   '1º Bimestre': 2, '2º Bimestre': 4, '3º Bimestre': 6, '4º Bimestre': 8, '5º Bimestre': 10, '6º Bimestre': 12,
+  '1º Trimestre': 3, '2º Trimestre': 6, '3º Trimestre': 9, '4º Trimestre': 12,
   '1º Quadrimestre': 4, '2º Quadrimestre': 8, '3º Quadrimestre': 12, Anual: 12,
+  '1º Semestre': 6, '2º Semestre': 12,
 };
 const OPEN_TASK_KEY = 'portalmeta.obligations.openTask';
 
 function readRequestedTask(): { taskId: number; year: number; obligationCode: string } | null {
   try {
     const parsed = JSON.parse(sessionStorage.getItem(OPEN_TASK_KEY) || 'null');
-    if (!parsed || !Number.isInteger(parsed.taskId) || !Number.isInteger(parsed.year) || !OBLIGATIONS.some((item) => item.code === parsed.obligationCode)) return null;
+    if (!parsed || !Number.isInteger(parsed.taskId) || !Number.isInteger(parsed.year) || !/^[A-Z0-9_-]{2,20}$/.test(parsed.obligationCode)) return null;
     return parsed;
   } catch {
     return null;
   }
+}
+
+function NewParameterModal({ isOpen, onClose, onCreated }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreated: (definition: ObligationDefinition) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [frequency, setFrequency] = useState<ObligationFrequency>('monthly');
+  const [color, setColor] = useState('blue');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCode(''); setName(''); setFrequency('monthly'); setColor('blue'); setError('');
+  }, [isOpen]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSaving(true); setError('');
+    try {
+      const created = await api.post<ObligationDefinition>('/obligations/definitions', { code, name, frequency, color });
+      onCreated(created);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Não foi possível adicionar o parâmetro.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedFrequency = FREQUENCY_OPTIONS.find((item) => item.value === frequency)!;
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="lg" title="Adicionar parâmetro de obrigação">
+      <form onSubmit={submit} className="space-y-5">
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-800">
+          <CalendarRange size={17} className="mt-0.5 shrink-0" />
+          <p><strong className="block text-blue-950">Nova planilha recorrente</strong>As colunas serão criadas automaticamente em cada exercício conforme a periodicidade escolhida.</p>
+        </div>
+        {error ? <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700">{error}</div> : null}
+        <div className="grid gap-4 sm:grid-cols-[140px_1fr]">
+          <label className="space-y-1.5 text-xs font-semibold text-slate-700">Sigla
+            <input required value={code} onChange={(event) => setCode(event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 20))} minLength={2} maxLength={20} placeholder="Ex.: E-SFINGE" className="h-9 w-full rounded-md border border-slate-200 px-3 text-[13px] font-normal uppercase outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-slate-700">Nome do parâmetro
+            <input required value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={255} placeholder="Nome completo da obrigação" className="h-9 w-full rounded-md border border-slate-200 px-3 text-[13px] font-normal outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          </label>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="space-y-1.5 text-xs font-semibold text-slate-700">Periodicidade
+            <Select value={frequency} onChange={(value) => setFrequency(value as ObligationFrequency)} options={FREQUENCY_OPTIONS.map((item) => ({ value: item.value, label: item.label }))} />
+            <span className="block text-[10px] font-normal text-slate-500">{selectedFrequency.hint}</span>
+          </label>
+          <fieldset className="space-y-1.5"><legend className="text-xs font-semibold text-slate-700">Cor de identificação</legend>
+            <div className="flex flex-wrap gap-2 pt-1">{Object.entries(OBLIGATION_COLOR_STYLES).map(([value, styles]) => <button key={value} type="button" onClick={() => setColor(value)} aria-label={`Selecionar cor ${value}`} aria-pressed={color === value} className={cn('flex h-8 w-8 items-center justify-center rounded-md border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500', color === value ? 'border-slate-700 bg-slate-50 ring-2 ring-slate-200' : 'border-slate-200 bg-white hover:border-slate-400')}><span className={cn('h-3 w-3 rounded-full', styles.dot)} /></button>)}</div>
+          </fieldset>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button type="button" variant="outline" onClick={onClose}>Cancelar</Button><Button type="submit" loading={saving}><Plus size={14} />Adicionar parâmetro</Button></div>
+      </form>
+    </Modal>
+  );
 }
 
 function getDueDate(task: Task) {
@@ -430,6 +491,8 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   const [obligation, setObligation] = useState(requestedTask?.obligationCode || 'MSC');
   const [year, setYear] = useState(requestedTask?.year || currentYear);
   const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null);
+  const [definitions, setDefinitions] = useState<ObligationDefinition[]>(DEFAULT_OBLIGATION_DEFINITIONS);
+  const [parameterModalOpen, setParameterModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -444,11 +507,17 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   const [modalTab, setModalTab] = useState<ModalTab>('update');
   const [commentPreview, setCommentPreview] = useState<CommentPreviewState | null>(null);
   const canManageMunicipalities = hasPermission(currentUser, 'obrigacoes.municipios.visualizar');
+  const canCreateParameter = hasPermission(currentUser, 'obrigacoes.planilha.editar');
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      setWorkspace(await api.get<WorkspaceResponse>(`/obligations/workspace?year=${year}&obligationCode=${obligation}`));
+      const [workspaceData, definitionData] = await Promise.all([
+        api.get<WorkspaceResponse>(`/obligations/workspace?year=${year}&obligationCode=${obligation}`),
+        api.get<ObligationDefinition[]>('/obligations/definitions'),
+      ]);
+      setWorkspace(workspaceData);
+      setDefinitions(definitionData);
     } catch (err: any) { setError(err.message); } finally { setLoading(false); }
   }, [year, obligation]);
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
@@ -553,8 +622,8 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   return (
     <>
       <PageShell
-      actions={<>{canManageMunicipalities ? <Button size="sm" onClick={() => onNavigate('obligations-municipalities')}><Plus size={13} />Adicionar município</Button> : null}<div className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white pl-2.5 text-xs font-semibold text-slate-500"><span>Exercício</span><Select value={year} onChange={(value) => setYear(Number(value))} options={[currentYear - 1, currentYear, currentYear + 1].map((item) => ({ value: String(item), label: String(item) }))} size="sm" className="w-20" buttonClassName="border-0 bg-transparent px-2 shadow-none" /></div><Button size="sm" variant="outline" disabled={loading} onClick={loadWorkspace}><RefreshCw size={13} className={cn(loading && 'animate-spin')} />Atualizar</Button></>}
-      tabs={<div className="flex gap-1 overflow-x-auto py-3">{OBLIGATIONS.map((item) => { const selected = item.code === obligation; return <button key={item.code} onClick={() => { setObligation(item.code); clearFilters(); }} className={cn('flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-medium transition-all', selected ? 'border border-slate-200/60 bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900')}><span className={cn('h-1.5 w-1.5 rounded-full', item.accent)} />{item.code}</button>; })}</div>}
+      actions={<>{canCreateParameter ? <Button size="sm" variant="outline" onClick={() => setParameterModalOpen(true)}><Plus size={13} />Novo parâmetro</Button> : null}{canManageMunicipalities ? <Button size="sm" onClick={() => onNavigate('obligations-municipalities')}><Building2 size={13} />Adicionar município</Button> : null}<div className="flex h-9 items-center gap-1 rounded-md border border-slate-200 bg-white pl-2.5 text-xs font-semibold text-slate-500"><span>Exercício</span><Select value={year} onChange={(value) => setYear(Number(value))} options={[currentYear - 1, currentYear, currentYear + 1].map((item) => ({ value: String(item), label: String(item) }))} size="sm" className="w-20" buttonClassName="border-0 bg-transparent px-2 shadow-none" /></div><Button size="sm" variant="outline" disabled={loading} onClick={loadWorkspace}><RefreshCw size={13} className={cn(loading && 'animate-spin')} />Atualizar</Button></>}
+      tabs={<div className="flex gap-1 overflow-x-auto py-3">{definitions.map((item) => { const selected = item.code === obligation; return <button key={item.code} title={item.name} onClick={() => { setObligation(item.code); clearFilters(); }} className={cn('flex h-8 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-medium transition-all', selected ? 'border border-slate-200/60 bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900')}><span className={cn('h-1.5 w-1.5 rounded-full', obligationColor(item.color).dot)} />{item.code}</button>; })}</div>}
       flush
       contentClassName="flex min-h-0 flex-col bg-white print:block"
     >
@@ -647,6 +716,7 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
       </section>
 
       <TaskModal task={selectedTask} municipality={workspace?.municipalities.find((item) => item.id === selectedTask?.municipalityId)} currentUser={currentUser} initialTab={modalTab} onClose={() => setSelectedTask(null)} onUpdated={updateTask} onCommentAdded={addComment} />
+      <NewParameterModal isOpen={parameterModalOpen} onClose={() => setParameterModalOpen(false)} onCreated={(created) => { setDefinitions((current) => [...current, created]); setObligation(created.code); clearFilters(); }} />
       </PageShell>
       {commentPreview ? <CommentPreviewPopover preview={commentPreview} /> : null}
     </>

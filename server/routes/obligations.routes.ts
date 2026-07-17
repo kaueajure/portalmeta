@@ -5,18 +5,16 @@ import { authMiddleware, AuthRequest } from '../middlewares/auth.js';
 import { requirePermission } from '../middlewares/permissions.middleware.js';
 import { sendError, sendSuccess } from '../utils/response.js';
 import { validateAttachmentMetadata } from '../utils/file-security.js';
+import {
+  FREQUENCY_COMPETENCES,
+  definitionsMap,
+  getObligationDefinitions,
+  ObligationFrequency,
+} from '../services/obligation-definitions.service.js';
 
 const router = Router();
 router.use(authMiddleware as any);
 
-const OBLIGATIONS: Record<string, string[]> = {
-  MSC: ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro', 'Encerramento'],
-  RREO: ['1º Bimestre', '2º Bimestre', '3º Bimestre', '4º Bimestre', '5º Bimestre', '6º Bimestre'],
-  RGF: ['1º Quadrimestre', '2º Quadrimestre', '3º Quadrimestre'],
-  DCA: ['Anual'],
-  SIOPE: ['1º Bimestre', '2º Bimestre', '3º Bimestre', '4º Bimestre', '5º Bimestre', '6º Bimestre'],
-  SIOPS: ['1º Bimestre', '2º Bimestre', '3º Bimestre', '4º Bimestre', '5º Bimestre', '6º Bimestre'],
-};
 const STATUSES = new Set(['Falta XML', 'Não iniciado', 'Pendência Cliente', 'Trabalhando', 'Retificar', 'Enviado', 'Homologado']);
 const AUXILIARY_STATUSES = new Set(['Não Solicitado', 'Solicitado', 'Recebido', 'Importado', 'Críticas', 'Diferença Folha', 'Sem críticas']);
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -36,11 +34,12 @@ function positiveInt(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function parseScope(req: AuthRequest) {
+async function parseScope(req: AuthRequest, queryable: any = pool) {
   const year = positiveInt(req.query.year);
   const obligationCode = String(req.query.obligationCode || '').toUpperCase();
-  if (!year || year < 2000 || year > 2100 || !OBLIGATIONS[obligationCode]) return null;
-  return { year, obligationCode, competences: OBLIGATIONS[obligationCode] };
+  const obligations = definitionsMap(await getObligationDefinitions(queryable));
+  if (!year || year < 2000 || year > 2100 || !obligations[obligationCode]) return null;
+  return { year, obligationCode, competences: obligations[obligationCode] };
 }
 
 function parseServiceConfig(value: unknown): Record<string, any> {
@@ -64,7 +63,9 @@ function getDueDate(competence: string, year: number): Date {
     Dezembro: 12, Encerramento: 12,
     '1º Bimestre': 2, '2º Bimestre': 4, '3º Bimestre': 6,
     '4º Bimestre': 8, '5º Bimestre': 10, '6º Bimestre': 12,
+    '1º Trimestre': 3, '2º Trimestre': 6, '3º Trimestre': 9, '4º Trimestre': 12,
     '1º Quadrimestre': 4, '2º Quadrimestre': 8, '3º Quadrimestre': 12,
+    '1º Semestre': 6, '2º Semestre': 12,
     Anual: 12,
   };
   const endMonth = months[String(competence || '').trim()] || 12;
@@ -118,7 +119,7 @@ function mapMunicipality(row: any) {
   };
 }
 
-function normalizeMunicipalityPayload(body: any) {
+function normalizeMunicipalityPayload(body: any, obligationCodes: string[]) {
   const name = String(body.name || '').trim().replace(/\s+/g, ' ').slice(0, 255);
   const state = 'SP';
   const phone = String(body.phone || '').trim().slice(0, 100) || null;
@@ -128,13 +129,59 @@ function normalizeMunicipalityPayload(body: any) {
     ? body.serviceConfig
     : {};
   const serviceConfig: Record<string, any> = { activeServices: {} };
-  for (const code of Object.keys(OBLIGATIONS)) {
+  for (const code of obligationCodes) {
     serviceConfig.activeServices[code] = source.activeServices?.[code] !== false;
   }
   if (!name) return null;
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
   return { name, state, phone, email, observations, serviceConfig };
 }
+
+router.get(
+  '/definitions',
+  requirePermission('obrigacoes.planilha.visualizar'),
+  async (_req: AuthRequest, res) => {
+    try {
+      return sendSuccess(res, await getObligationDefinitions());
+    } catch (error) {
+      console.error('[Obligations] Falha ao listar parâmetros:', error);
+      return sendError(res, 'Não foi possível carregar os parâmetros de obrigações.');
+    }
+  },
+);
+
+router.post(
+  '/definitions',
+  requirePermission('obrigacoes.planilha.editar'),
+  async (req: AuthRequest, res) => {
+    const code = String(req.body.code || '').trim().toUpperCase();
+    const name = String(req.body.name || '').trim().replace(/\s+/g, ' ').slice(0, 255);
+    const frequency = String(req.body.frequency || '') as ObligationFrequency;
+    const color = String(req.body.color || 'blue').toLowerCase();
+    const allowedColors = new Set(['blue', 'cyan', 'violet', 'amber', 'rose', 'emerald', 'orange', 'slate']);
+    if (!/^[A-Z0-9][A-Z0-9_-]{1,19}$/.test(code) || name.length < 2 || !FREQUENCY_COMPETENCES[frequency] || !allowedColors.has(color)) {
+      return sendError(res, 'Informe sigla, nome, periodicidade e cor válidos.', 400);
+    }
+    try {
+      await pool.query(
+        `INSERT INTO obligation_definitions
+          (code, name, frequency, color, competences_json, system, sort_order, created_by)
+         VALUES (?, ?, ?, ?, ?, 0, 100, ?)`,
+        [code, name, frequency, color, JSON.stringify(FREQUENCY_COMPETENCES[frequency]), req.user!.id],
+      );
+      const definition = {
+        code, name, frequency, color,
+        competences: FREQUENCY_COMPETENCES[frequency],
+        system: false,
+      };
+      return sendSuccess(res, definition, 'Parâmetro adicionado.', 201);
+    } catch (error: any) {
+      if (error?.code === 'ER_DUP_ENTRY') return sendError(res, 'Já existe um parâmetro com esta sigla.', 409);
+      console.error('[Obligations] Falha ao adicionar parâmetro:', error);
+      return sendError(res, 'Não foi possível adicionar o parâmetro.');
+    }
+  },
+);
 
 async function taskExists(connection: any, taskId: number) {
   const [rows]: any = await connection.query('SELECT id FROM obligation_tasks WHERE id = ? LIMIT 1', [taskId]);
@@ -153,6 +200,8 @@ router.get(
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      const definitions = await getObligationDefinitions(connection);
+      const obligations = definitionsMap(definitions);
       const [municipalityRows]: any = await connection.query(
         `SELECT id, name, state, service_config
          FROM obligation_municipalities WHERE active = 1 ORDER BY name`,
@@ -160,7 +209,7 @@ router.get(
 
       const values: any[][] = [];
       for (const municipality of municipalityRows) {
-        for (const [code, competences] of Object.entries(OBLIGATIONS)) {
+        for (const [code, competences] of Object.entries(obligations)) {
           if (!isServiceActive(municipality.service_config, code)) continue;
           for (const competence of competences) {
             values.push([
@@ -390,8 +439,10 @@ router.get(
          LEFT JOIN usuarios editor ON editor.id = m.updated_by
          WHERE m.active = 1 ORDER BY m.name`,
       );
+      const definitions = await getObligationDefinitions();
       return sendSuccess(res, {
         municipalities: municipalityResult.map(mapMunicipality),
+        definitions,
       });
     } catch (error) {
       console.error('[Obligations] Falha ao listar municípios:', error);
@@ -404,7 +455,8 @@ router.post(
   '/municipalities',
   requirePermission('obrigacoes.municipios.criar'),
   async (req: AuthRequest, res) => {
-    const payload = normalizeMunicipalityPayload(req.body);
+    const definitions = await getObligationDefinitions();
+    const payload = normalizeMunicipalityPayload(req.body, definitions.map((item) => item.code));
     if (!payload) return sendError(res, 'Revise o nome, estado e e-mail informados.', 400);
     const connection = await pool.getConnection();
     try {
@@ -449,7 +501,8 @@ router.put(
   async (req: AuthRequest, res) => {
     const municipalityId = positiveInt(req.params.id);
     const expectedVersion = positiveInt(req.body.version);
-    const payload = normalizeMunicipalityPayload(req.body);
+    const definitions = await getObligationDefinitions();
+    const payload = normalizeMunicipalityPayload(req.body, definitions.map((item) => item.code));
     if (!municipalityId || !expectedVersion || !payload) return sendError(res, 'Dados do município ou versão inválidos.', 400);
     const connection = await pool.getConnection();
     try {
@@ -559,7 +612,7 @@ router.get(
   '/workspace',
   requirePermission('obrigacoes.planilha.visualizar'),
   async (req: AuthRequest, res) => {
-    const scope = parseScope(req);
+    const scope = await parseScope(req);
     if (!scope) return sendError(res, 'Obrigação ou exercício inválido.', 400);
 
     const connection = await pool.getConnection();
@@ -730,7 +783,8 @@ router.put(
 
       if (current.status === 'Falta XML' && status === 'Não iniciado') {
         const related = new Set<string>();
-        for (const [code, competences] of Object.entries(OBLIGATIONS)) {
+        const obligations = definitionsMap(await getObligationDefinitions(connection));
+        for (const [code, competences] of Object.entries(obligations)) {
           if (competences.includes(current.competence)) related.add(`${code}|${current.competence}`);
         }
         const monthToBimester: Record<string, string> = {

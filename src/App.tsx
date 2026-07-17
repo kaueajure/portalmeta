@@ -870,6 +870,10 @@ export default function App() {
                     (canAccessAppScreen(currentUser, "whatsapp") ? (
                       <WhatsappPage
                         currentUser={currentUser}
+                        onOpenTicket={(ticketId) => {
+                          setSelectedTicketId(ticketId);
+                          setActiveTab("tickets");
+                        }}
                         onOpenSettings={() => {
                           setSettingsSection("whatsapp");
                           setActiveTab("settings");

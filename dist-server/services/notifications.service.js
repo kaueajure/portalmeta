@@ -30,7 +30,29 @@ class NotificationsService {
     }
     async createMany(userIds, data) {
         const uniqueIds = Array.from(new Set(userIds.map(Number).filter(Boolean)));
+        if (uniqueIds.length === 0)
+            return [];
+        if (data.event_key) {
+            const placeholders = uniqueIds.map(() => '?').join(',');
+            const [existing] = await pool.query(`SELECT usuario_id FROM notificacoes WHERE event_key = ? AND usuario_id IN (${placeholders})`, [data.event_key, ...uniqueIds]);
+            const existingIds = new Set(existing.map((row) => Number(row.usuario_id)));
+            const pendingIds = uniqueIds.filter((id) => !existingIds.has(id));
+            if (pendingIds.length === 0)
+                return [];
+            const values = pendingIds.map((usuario_id) => [
+                usuario_id, data.tipo, data.event_key, data.titulo, data.mensagem || null,
+                data.link || null, data.metadata ? JSON.stringify(data.metadata) : null,
+            ]);
+            await pool.query(`INSERT IGNORE INTO notificacoes
+         (usuario_id, tipo, event_key, titulo, mensagem, link, metadata) VALUES ?`, [values]);
+            const insertedPlaceholders = pendingIds.map(() => '?').join(',');
+            const [rows] = await pool.query(`SELECT * FROM notificacoes WHERE event_key = ? AND usuario_id IN (${insertedPlaceholders})`, [data.event_key, ...pendingIds]);
+            const notifications = rows.map((row) => this.normalize(row));
+            notifications.forEach((notification) => emitNotificationCreated(notification.usuario_id, notification));
+            return notifications;
+        }
         await Promise.all(uniqueIds.map((usuario_id) => this.create({ ...data, usuario_id })));
+        return [];
     }
     async listForUser(userId, filters) {
         let query = 'SELECT * FROM notificacoes WHERE usuario_id = ?';

@@ -133,7 +133,13 @@ export const notificationDispatchService = {
       mensagem: `${input.phone} · ${preview}`,
       link: `whatsapp:${input.phone}`,
       metadata: {
-        category, phone: input.phone, contactName: name, messageId: input.messageId,
+        category,
+        phone: input.phone,
+        contactName: name,
+        messageId: input.messageId,
+        body: input.body || null,
+        direction: 'inbound',
+        createdAt: new Date().toISOString(),
       },
     });
     return recipientIds;

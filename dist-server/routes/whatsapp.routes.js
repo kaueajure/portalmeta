@@ -96,6 +96,7 @@ router.put('/settings', requirePermission('integracoes.whatsapp.gerenciar', { al
             listSectionTitle: body.listSectionTitle,
             inactivityMinutes: body.inactivityMinutes,
             closingMessage: body.closingMessage,
+            startMessage: body.startMessage,
         });
         return sendSuccess(res, settings, 'Configurações do WhatsApp salvas');
     }
@@ -119,7 +120,7 @@ router.get('/conversations/:phone/messages', requirePermission('integracoes.what
     try {
         const phone = String(req.params.phone || '');
         const limit = Number(req.query.limit) || 200;
-        const messages = await whatsappService.listThreadMessages(phone, limit);
+        const messages = await whatsappService.listAttendanceCycleMessages(phone, limit);
         return sendSuccess(res, messages);
     }
     catch (err) {
@@ -150,6 +151,45 @@ router.post('/conversations/:phone/claim', requirePermission('integracoes.whatsa
     catch (err) {
         console.error('[WhatsApp] claim attendance error:', err);
         return sendError(res, err?.message || 'N\u00e3o foi poss\u00edvel iniciar o atendimento', err?.status || 500);
+    }
+});
+router.post('/conversations/:phone/transfer', requirePermission('integracoes.whatsapp.gerenciar', { allowDeveloper: true }), async (req, res) => {
+    try {
+        if (!req.user)
+            return sendError(res, 'Usuário não autenticado', 401);
+        const data = await whatsappService.transferAttendance(String(req.params.phone || ''), Number(req.body?.userId), { id: req.user.id, name: req.user.nome });
+        return sendSuccess(res, data, 'Responsável transferido com sucesso');
+    }
+    catch (err) {
+        console.error('[WhatsApp] transfer attendance error:', err);
+        return sendError(res, err?.message || 'Não foi possível transferir o atendimento', err?.status || 500);
+    }
+});
+router.post('/conversations/:phone/finish', requirePermission('integracoes.whatsapp.gerenciar', { allowDeveloper: true }), async (req, res) => {
+    try {
+        if (!req.user)
+            return sendError(res, 'Usuário não autenticado', 401);
+        const data = await whatsappService.finishAttendance(String(req.params.phone || ''), req.user.id);
+        return sendSuccess(res, data, 'Atendimento encerrado');
+    }
+    catch (err) {
+        console.error('[WhatsApp] finish attendance error:', err);
+        return sendError(res, err?.message || 'Não foi possível encerrar o atendimento', err?.status || 500);
+    }
+});
+router.post('/conversations/:phone/ticket', requirePermission('tickets.criar'), async (req, res) => {
+    try {
+        if (!req.user)
+            return sendError(res, 'Usuário não autenticado', 401);
+        const data = await whatsappService.registerConversationAsTicket(String(req.params.phone || ''), { id: req.user.id, name: req.user.nome });
+        const io = req.app.get('io');
+        if (io)
+            io.to('instance').emit('ticketCreated', { id: data.id });
+        return sendSuccess(res, data, data.existing ? 'Conversa já registrada como ticket' : 'Conversa registrada como ticket', data.existing ? 200 : 201);
+    }
+    catch (err) {
+        console.error('[WhatsApp] register ticket error:', err);
+        return sendError(res, err?.message || 'Não foi possível registrar a conversa como ticket', err?.status || 500);
     }
 });
 router.get('/messages', requirePermission('integracoes.whatsapp.visualizar', { allowDeveloper: true }), async (req, res) => {

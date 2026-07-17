@@ -363,6 +363,13 @@ export const TicketKanban = ({
     }
 
     if (responsavelChanged) {
+      if (currentTicket.responsavel_id
+        && Number(currentTicket.responsavel_id) !== Number(currentUser.id)) {
+        setErrorMsg('Somente o responsável atual pode transferir este chamado.');
+        setTimeout(() => setErrorMsg(null), 3000);
+        return;
+      }
+
       const requiredPermission = targetResponsavelId === null
         ? 'tickets.remover_responsavel'
         : Number(targetResponsavelId) === Number(currentUser.id)
