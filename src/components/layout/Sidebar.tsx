@@ -175,7 +175,7 @@ export const Sidebar = ({
           transition: "transform 360ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col border-r border-slate-200/80 bg-white shadow-2xl shadow-slate-950/25 will-change-transform sm:w-[300px] sm:max-w-none",
+          "fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col overflow-visible border-r border-slate-200/80 bg-white shadow-2xl shadow-slate-950/25 will-change-transform sm:w-[300px] sm:max-w-none",
           isOpen ? "pointer-events-auto" : "pointer-events-none",
         )}
       >
@@ -247,8 +247,8 @@ export const Sidebar = ({
           })}
         </div>
 
-        <div className="shrink-0 space-y-1.5 border-t border-slate-200/80 bg-white px-3 pb-3 pt-2.5">
-          <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 transition-colors hover:bg-white">
+        <div className="relative z-20 shrink-0 space-y-1.5 overflow-visible border-t border-slate-200/80 bg-white px-3 pb-3 pt-2.5">
+          <div className="relative z-10 flex items-center gap-2 overflow-visible rounded-md border border-slate-200 bg-slate-50/70 py-1.5 pl-2.5 pr-3.5 transition-colors hover:bg-white">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-sm">
               {currentUser.foto ? (
                 <img

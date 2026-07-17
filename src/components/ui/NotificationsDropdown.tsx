@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Bell, Check, Clock, Inbox, MessageCircle, Ticket as TicketIcon, UserCheck } from "lucide-react";
 import { api } from "../../lib/api";
 import { Notification, User } from "../../types";
@@ -36,6 +37,9 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -123,9 +127,12 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
         dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
+        !dropdownRef.current.contains(target) &&
+        panelRef.current &&
+        !panelRef.current.contains(target)
       ) {
         setIsOpen(false);
       }
@@ -136,6 +143,45 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
+
+  const updatePanelPosition = useCallback(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const gap = 8;
+    const viewportPadding = 8;
+    const width = window.matchMedia("(min-width: 640px)").matches ? 320 : 288;
+    const left = Math.min(
+      Math.max(compact ? rect.left : rect.right - width, viewportPadding),
+      window.innerWidth - width - viewportPadding,
+    );
+
+    setPanelStyle(
+      compact
+        ? {
+            left,
+            bottom: window.innerHeight - rect.top + gap,
+          }
+        : {
+            left,
+            top: rect.bottom + gap,
+          },
+    );
+  }, [compact]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [isOpen, updatePanelPosition]);
 
   const toggleDropdown = () => {
     const nextState = !isOpen;
@@ -178,37 +224,41 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative z-20 shrink-0 overflow-visible" ref={dropdownRef}>
       <button
+        ref={buttonRef}
         onClick={toggleDropdown}
         className={cn(
           "relative flex items-center justify-center rounded-lg transition-all focus:outline-none",
           compact
-            ? "w-8 h-8 bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+            ? "h-8 w-8 bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
             : "p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50",
         )}
         title="Notificações"
       >
         <Bell size={compact ? 16 : 20} />
-        {unreadCount > 0 && (
-          <span
-            className={cn(
-              "absolute bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white",
-              compact
-                ? "-top-1 -right-1 w-3.5 h-3.5 text-[8px]"
-                : "top-1.5 right-1.5 w-4 h-4",
-            )}
-          >
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
       </button>
-
-      {isOpen && (
-        <div
+      {unreadCount > 0 && (
+        <span
+          aria-hidden="true"
           className={cn(
-            "absolute mt-2 w-72 sm:w-80 bg-white rounded-xl shadow-lg border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-right",
-            compact ? "bottom-full left-0 mb-2 origin-bottom-left" : "right-0",
+            "pointer-events-none absolute z-30 flex items-center justify-center rounded-full border-2 border-white bg-red-500 font-bold leading-none text-white shadow-sm",
+            compact
+              ? "-right-1.5 -top-1.5 h-4 min-w-4 px-0.5 text-[9px]"
+              : "right-0 top-0 h-4 min-w-4 px-0.5 text-[10px]",
+          )}
+        >
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </span>
+      )}
+
+      {isOpen && createPortal(
+        <div
+          ref={panelRef}
+          style={panelStyle}
+          className={cn(
+            "fixed z-[10001] w-72 sm:w-80 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200 origin-top-right",
+            compact && "origin-bottom-left",
           )}
         >
           <div className="p-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -307,7 +357,8 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

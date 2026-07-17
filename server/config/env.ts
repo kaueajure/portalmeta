@@ -176,7 +176,7 @@ export const env = {
     ? process.env.AUTO_RUN_MIGRATIONS === 'true'
     : process.env.NODE_ENV !== 'production',
 
-  // Proxy configuration for express-rate-limit compatibility.
+  // Proxy configuration (X-Forwarded-For) when behind Nginx/Cloudflare/Hostinger.
   TRUST_PROXY: (() => {
     const val = process.env.TRUST_PROXY;
     if (val === undefined || val === '' || val === 'false' || val === '0') return false;

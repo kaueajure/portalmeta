@@ -5,26 +5,8 @@ import { logSystemAction } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { isValidPassword, PASSWORD_RULE_MESSAGE } from '../utils/validators.js';
 import { maskEmail } from '../utils/sanitize.js';
-import rateLimit from 'express-rate-limit';
 const router = Router();
-// 1. Stricter Rate Limiting for Auth
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // Limit each IP to 10 failed login attempts per window
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, message: 'Too many attempts. Please try again in 15 minutes.' },
-    skip: (req) => !env.IS_PROD // Only apply in production or if needed
-});
-const passwordRecoveryLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 3, // Limit each IP to 3 requests per hour
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, message: 'Rate limit exceeded for password recovery. Try again later.' },
-    skip: (req) => !env.IS_PROD
-});
-router.post('/login', authLimiter, async (req, res, next) => {
+router.post('/login', async (req, res, next) => {
     try {
         const { email, password } = req.body;
         // Basic validation
@@ -64,7 +46,7 @@ router.post('/logout', (req, res) => {
     });
     sendSuccess(res, null, 'Logout realizado com sucesso');
 });
-router.post('/forgot-password', passwordRecoveryLimiter, async (req, res, next) => {
+router.post('/forgot-password', async (req, res, next) => {
     try {
         const { email } = req.body;
         if (!email) {
@@ -81,7 +63,7 @@ router.post('/forgot-password', passwordRecoveryLimiter, async (req, res, next) 
         sendSuccess(res, { sent: true }, 'Se este e-mail estiver cadastrado, você receberá instruções para redefinir sua senha.');
     }
 });
-router.post('/reset-password', authLimiter, async (req, res, next) => {
+router.post('/reset-password', async (req, res, next) => {
     try {
         const { email, token, newPassword } = req.body;
         if (!email || !token || !newPassword) {

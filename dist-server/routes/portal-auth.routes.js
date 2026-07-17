@@ -5,24 +5,12 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 import { sendPortalAccessCodeEmail } from '../utils/mailer.js';
-import rateLimit from 'express-rate-limit';
 const router = Router();
-// Rate limit: 5 requests per 15 minutes per IP
-const authRateLimit = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    message: {
-        success: false,
-        message: 'Muitas solicitações. Tente novamente em 15 minutos.'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
 const isValidEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
 };
-router.post('/request-code', authRateLimit, async (req, res) => {
+router.post('/request-code', async (req, res) => {
     const { customer_email } = req.body;
     if (!customer_email) {
         return sendError(res, 'E-mail é obrigatório', 400);
@@ -63,7 +51,7 @@ router.post('/request-code', authRateLimit, async (req, res) => {
         return genericResponse();
     }
 });
-router.post('/verify-code', authRateLimit, async (req, res) => {
+router.post('/verify-code', async (req, res) => {
     const { customer_email, code } = req.body;
     if (!customer_email || !code) {
         return sendError(res, 'Dados incompletos', 400);

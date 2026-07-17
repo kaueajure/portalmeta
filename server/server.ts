@@ -3,7 +3,6 @@ import path from 'path';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { createServer as createViteServer } from 'vite';
 import { createServer } from 'http';
@@ -83,7 +82,7 @@ async function startServer() {
 
   const app = express();
 
-  // Configuração de Trust Proxy para lidar com X-Forwarded-For (necessário para express-rate-limit atrás de proxy)
+  // Configuração de Trust Proxy para lidar com X-Forwarded-For (necessário atrás de proxy/Nginx)
   if (env.TRUST_PROXY !== false) {
     app.set('trust proxy', env.TRUST_PROXY);
     console.log(`[BOOT] Trust Proxy configured as: ${env.TRUST_PROXY}`);
@@ -116,17 +115,6 @@ async function startServer() {
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginEmbedderPolicy: false
   }));
-
-  // 2. Global Rate Limiting
-  const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 1000,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { success: false, message: 'Too many requests, please try again later.' },
-    skip: (req) => !env.IS_PROD || req.path.startsWith('/health')
-  });
-  app.use(globalLimiter);
 
   const httpServer = createServer(app);
   

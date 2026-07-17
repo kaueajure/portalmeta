@@ -75,9 +75,6 @@ router.get('/security', (req, res) => {
   const warnings: string[] = [];
 
   if (env.NODE_ENV === 'production') {
-    if (env.TRUST_PROXY === false) {
-      warnings.push('TRUST_PROXY não está habilitado em produção. O Rate Limit pode não funcionar corretamente se houver um proxy reverso/Nginx na frente.');
-    }
     if (!env.CORS_ORIGINS || env.CORS_ORIGINS.length === 0) {
       warnings.push('CORS_ORIGINS está vazio em produção. Recomenda-se configurar as origens permitidas.');
     }
@@ -94,7 +91,7 @@ router.get('/security', (req, res) => {
       status: warnings.length > 0 ? 'WARNING' : 'ACTIVE',
       auth: true,
       helmet: true,
-      rateLimit: true,
+      rateLimit: false,
       trustProxy: env.TRUST_PROXY,
       corsOriginsCount: env.CORS_ORIGINS ? env.CORS_ORIGINS.length : 0,
       cookieSecurity: {
@@ -152,9 +149,6 @@ router.get('/overview', async (req, res) => {
   const warnings: string[] = [];
 
   if (env.NODE_ENV === 'production') {
-    if (env.TRUST_PROXY === false) {
-      warnings.push('TRUST_PROXY não está habilitado em produção. O Rate Limit pode não funcionar corretamente se houver um proxy reverso/Nginx na frente.');
-    }
     if (!env.CORS_ORIGINS || env.CORS_ORIGINS.length === 0) {
       warnings.push('CORS_ORIGINS está vazio em produção. Recomenda-se configurar as origens permitidas.');
     }
@@ -169,7 +163,7 @@ router.get('/overview', async (req, res) => {
     status: warnings.length > 0 ? 'WARNING' : 'ACTIVE',
     auth: true,
     helmet: true,
-    rateLimit: true,
+    rateLimit: false,
     trustProxy: env.TRUST_PROXY,
     corsOriginsCount: env.CORS_ORIGINS ? env.CORS_ORIGINS.length : 0,
     cookieSecurity: {
