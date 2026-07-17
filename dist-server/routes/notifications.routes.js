@@ -26,6 +26,28 @@ router.get('/unread-count', async (req, res) => {
     }
 });
 router.use(authMiddleware);
+router.get('/preferences', async (req, res) => {
+    try {
+        const currentUser = req.user;
+        if (!currentUser)
+            return sendError(res, 'Não autenticado', 401);
+        return sendSuccess(res, await notificationsService.getPreferences(currentUser.id));
+    }
+    catch (error) {
+        return sendError(res, error instanceof Error ? error.message : 'Erro ao carregar preferências');
+    }
+});
+router.patch('/preferences', async (req, res) => {
+    try {
+        const currentUser = req.user;
+        if (!currentUser)
+            return sendError(res, 'Não autenticado', 401);
+        return sendSuccess(res, await notificationsService.updatePreferences(currentUser.id, req.body || {}));
+    }
+    catch (error) {
+        return sendError(res, error instanceof Error ? error.message : 'Erro ao salvar preferências');
+    }
+});
 router.get('/', async (req, res) => {
     try {
         const currentUser = req.user;

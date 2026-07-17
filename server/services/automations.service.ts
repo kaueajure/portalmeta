@@ -225,13 +225,12 @@ export async function runAutomations(evento: string, ticket: any, contexto: any)
                executedAcoes.push(`Comentário interno adicionado`);
             }
             else if (acao.tipo === 'notificar_responsavel' && ticket.responsavel_id) {
-               const { default: notificationsService } = await import('./notifications.service.js');
-               await notificationsService.create({
-                 usuario_id: ticket.responsavel_id,
-                 tipo: 'SYSTEM_ALERT',
-                 titulo: 'Alerta de Automação',
-                 mensagem: `Automação "${regra.nome}" executada para o chamado #${ticket.id}`,
-                 link: `ticket:${ticket.id}`
+               const { notificationDispatchService } = await import('./notification-dispatch.service.js');
+               await notificationDispatchService.ticket({
+                 ticketId: ticket.id,
+                 eventKey: `ticket:${ticket.id}:automation:${regra.id}:${Date.now()}`,
+                 updateType: 'Automação executada',
+                 description: `A automação "${regra.nome}" foi executada`,
                });
                executedAcoes.push(`Notificação enviada ao responsável`);
             }

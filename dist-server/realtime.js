@@ -10,3 +10,9 @@ export function setRealtimeServer(io) {
 export function emitWhatsAppChanged() {
     socketServer?.emit('whatsappChanged');
 }
+export function emitNotificationCreated(userId, notification) {
+    socketServer?.to(`user:${userId}`).emit('notificationCreated', notification);
+}
+export function emitNotificationsRead(userId, payload) {
+    socketServer?.to(`user:${userId}`).emit('notificationsRead', payload);
+}

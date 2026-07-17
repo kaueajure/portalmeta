@@ -155,6 +155,7 @@ async function startServer() {
         io.on('connection', (socket) => {
             const room = 'instance';
             socket.join(room);
+            socket.join(`user:${socket.data.user.id}`);
             console.log(`[Socket] User ${socket.data.user?.id} connected to room: ${room}`);
             socket.on('disconnect', () => {
                 console.log(`[Socket] User disconnected`);

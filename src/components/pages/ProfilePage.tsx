@@ -11,6 +11,13 @@ import {
   Layout,
   Lock,
   Moon,
+  BellRing,
+  MessageCircle,
+  MonitorUp,
+  Play,
+  Ticket as TicketIcon,
+  UserCheck,
+  Volume2,
   Palette,
   Save,
   TrendingUp,
@@ -18,7 +25,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { User } from "../../types";
+import { NotificationPreferences, User } from "../../types";
 import { api } from "../../lib/api";
 import { cn } from "../../lib/utils";
 import { hasPermission } from "../../lib/permissions";
@@ -27,6 +34,7 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { PageShell } from "../layout/PageShell";
 import { Card } from "../ui/Card";
+import { NotificationSound, playNotificationSound, unlockNotificationSounds } from "../../lib/notificationSounds";
 
 type AppTab =
   | "dashboard"
@@ -65,6 +73,49 @@ export const ProfilePage = ({
   });
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences | null>(null);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+
+  React.useEffect(() => {
+    api.get<NotificationPreferences>('/notifications/preferences')
+      .then(setNotificationPreferences)
+      .catch(() => undefined);
+  }, []);
+
+  const saveNotificationPreferences = async (next: NotificationPreferences) => {
+    setNotificationPreferences(next);
+    setNotificationSaving(true);
+    try {
+      const saved = await api.patch<NotificationPreferences>('/notifications/preferences', next);
+      setNotificationPreferences(saved);
+      window.dispatchEvent(new CustomEvent('notificationPreferencesChanged', { detail: saved }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível salvar as preferências.');
+    } finally {
+      setNotificationSaving(false);
+    }
+  };
+
+  const testSound = async (type: NotificationSound) => {
+    await unlockNotificationSounds();
+    await playNotificationSound(type, notificationPreferences?.volume ?? 0.7);
+  };
+
+  const enableBrowserNotifications = async () => {
+    if (!notificationPreferences || !('Notification' in window)) return;
+    if (window.Notification.permission === 'denied') {
+      setError('As notificações estão bloqueadas neste navegador. Libere a permissão nas configurações do site.');
+      return;
+    }
+    const permission = window.Notification.permission === 'granted'
+      ? 'granted'
+      : await window.Notification.requestPermission();
+    await saveNotificationPreferences({
+      ...notificationPreferences,
+      browser_enabled: permission === 'granted',
+    });
+    if (permission !== 'granted') setError('Permissão não concedida. Os avisos continuarão disponíveis dentro do sistema.');
+  };
 
   React.useEffect(() => {
     document.documentElement.classList.toggle("theme-dark", darkTheme);
@@ -507,6 +558,79 @@ export const ProfilePage = ({
                     <UserIcon size={14} className="text-blue-500" />
                   </Button>
                 </div>
+              </Card>
+
+              <Card className="space-y-4 p-4 sm:col-span-2 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+                      <BellRing size={17} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900">Notificações e sons</h4>
+                      <p className="text-[11px] text-slate-500">Escolha os alertas que deseja receber neste e em outros dispositivos.</p>
+                    </div>
+                  </div>
+                  {notificationSaving && <span className="text-[11px] font-medium text-slate-400">Salvando…</span>}
+                </div>
+
+                {notificationPreferences ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {([
+                        ['ticket_enabled', 'Chamados', 'Novo chamado e atualizações relevantes', TicketIcon, 'ticket'],
+                        ['whatsapp_general_enabled', 'WhatsApp geral', 'Conversas sem atendente responsável', MessageCircle, 'whatsapp_general'],
+                        ['whatsapp_assigned_enabled', 'WhatsApp direcionado', 'Mensagens dos seus atendimentos', UserCheck, 'whatsapp_assigned'],
+                      ] as const).map(([key, label, description, Icon, sound]) => (
+                        <div key={key} className="rounded-lg border border-slate-200 bg-white p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex min-w-0 gap-2">
+                              <Icon size={16} className="mt-0.5 shrink-0 text-slate-500" />
+                              <div><p className="text-xs font-semibold text-slate-800">{label}</p><p className="mt-0.5 text-[11px] leading-4 text-slate-500">{description}</p></div>
+                            </div>
+                            <button type="button" aria-pressed={notificationPreferences[key]}
+                              onClick={() => void saveNotificationPreferences({ ...notificationPreferences, [key]: !notificationPreferences[key] })}
+                              className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', notificationPreferences[key] ? 'bg-blue-600' : 'bg-slate-200')}>
+                              <span className={cn('absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform', notificationPreferences[key] ? 'left-[18px]' : 'left-0.5')} />
+                            </button>
+                          </div>
+                          <button type="button" onClick={() => void testSound(sound)} className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800">
+                            <Play size={11} /> Testar som
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[auto_1fr] sm:items-center">
+                      <button type="button" aria-pressed={notificationPreferences.sounds_enabled}
+                        onClick={() => void saveNotificationPreferences({ ...notificationPreferences, sounds_enabled: !notificationPreferences.sounds_enabled })}
+                        className={cn('flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-semibold', notificationPreferences.sounds_enabled ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500')}>
+                        <Volume2 size={15} /> Sons {notificationPreferences.sounds_enabled ? 'ativados' : 'desativados'}
+                      </button>
+                      <label className="flex items-center gap-3 text-xs font-medium text-slate-600">
+                        Volume
+                        <input type="range" min="0" max="1" step="0.05" value={notificationPreferences.volume}
+                          onChange={(event) => setNotificationPreferences({ ...notificationPreferences, volume: Number(event.target.value) })}
+                          onBlur={() => void saveNotificationPreferences(notificationPreferences)}
+                          className="h-1.5 flex-1 accent-blue-600" />
+                        <span className="w-9 text-right tabular-nums">{Math.round(notificationPreferences.volume * 100)}%</span>
+                      </label>
+                    </div>
+
+                    <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex gap-2.5">
+                        <MonitorUp size={17} className="mt-0.5 shrink-0 text-slate-500" />
+                        <div><p className="text-xs font-semibold text-slate-800">Notificações do navegador</p><p className="mt-0.5 text-[11px] leading-4 text-slate-500">A permissão só é solicitada ao clicar em ativar. Se bloqueada, altere-a nas configurações do site.</p></div>
+                      </div>
+                      <Button size="sm" variant={notificationPreferences.browser_enabled ? 'outline' : 'primary'}
+                        onClick={() => notificationPreferences.browser_enabled
+                          ? void saveNotificationPreferences({ ...notificationPreferences, browser_enabled: false })
+                          : void enableBrowserNotifications()}>
+                        {notificationPreferences.browser_enabled ? 'Desativar' : 'Ativar no navegador'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : <p className="text-xs text-slate-500">Carregando preferências…</p>}
               </Card>
 
               <Card className="space-y-4 p-4 sm:p-5">

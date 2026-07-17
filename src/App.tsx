@@ -12,6 +12,7 @@ import { api } from "./lib/api";
 import { cn } from "./lib/utils";
 import { Loader2 } from "lucide-react";
 import { ProfileIntroduction } from "./components/onboarding/ProfileIntroduction";
+import { NotificationRuntime } from "./components/ui/NotificationRuntime";
 
 const DashboardPage = lazy(() =>
   import("./components/pages/DashboardPage").then((module) => ({
@@ -501,6 +502,14 @@ export default function App() {
     } else if (link === "tickets") {
       setActiveTab("tickets");
       setSelectedTicketId(null);
+    } else if (link.startsWith("whatsapp:")) {
+      const phone = link.slice("whatsapp:".length).replace(/\D/g, "");
+      if (phone) {
+        window.sessionStorage.setItem("portalmeta.whatsapp.openPhone", phone);
+        window.dispatchEvent(new CustomEvent("portalmeta:open-whatsapp", { detail: { phone } }));
+      }
+      setActiveTab("whatsapp");
+      setSelectedTicketId(null);
     }
   };
 
@@ -784,6 +793,7 @@ export default function App() {
 
     return (
       <div className="relative flex h-screen w-screen overflow-hidden bg-[#F4F7FA]">
+        <NotificationRuntime onNavigate={handleNotificationNavigate} />
         <Sidebar
           currentUser={currentUser}
           activeTab={activeTab}

@@ -1,6 +1,6 @@
 import pool from '../db/connection.js';
 import { permissionsService } from './permissions.service.js';
-import notificationsService from './notifications.service.js';
+import { notificationDispatchService } from './notification-dispatch.service.js';
 import { emailOutboxService } from './email-outbox.service.js';
 import { recordTicketEvent } from './ticket-events.service.js';
 import ticketMessagesService from './ticket-messages.service.js';
@@ -722,10 +722,6 @@ class TicketsService {
         catch (e) { }
         // Notificações: Admins
         try {
-            const [admins] = await pool.query('SELECT id FROM usuarios WHERE administrador = 1 AND ativo = 1');
-            const adminIds = admins
-                .filter((a) => a.id !== usuario_id)
-                .map((a) => a.id);
             let authorName = solicitante_nome || 'Cliente Externo';
             let authorEmail = solicitante_email || '';
             if (usuario_id) {
@@ -735,15 +731,14 @@ class TicketsService {
                     authorEmail = author[0].email;
                 }
             }
-            if (adminIds.length > 0) {
-                await notificationsService.createMany(adminIds, {
-                    tipo: 'TICKET_CREATED',
-                    titulo: 'Novo atendimento criado',
-                    mensagem: `${authorName} abriu o chamado #${ticketId}: ${titulo}`,
-                    link: `ticket:${ticketId}`,
-                    metadata: { ticketId }
-                });
-            }
+            await notificationDispatchService.ticket({
+                ticketId,
+                eventKey: `ticket:${ticketId}:created`,
+                updateType: 'Novo chamado',
+                actorId: usuario_id || null,
+                actorName: authorName,
+                description: `${authorName} abriu o chamado`,
+            });
             if (authorEmail) {
                 const outboundMessageId = `<ticket-${ticketId}-created@portalmeta.com.br>`;
                 await emailOutboxService.enqueueTicketEmail({
@@ -976,27 +971,13 @@ class TicketsService {
         // ... (rest of the code seems fine)
         try {
             const newStatusText = newStatusConfig.nome || labelFromStatus(status);
-            // Notificar cliente
-            if (oldTicket.usuario_id && oldTicket.usuario_id !== changedByUserId) {
-                await notificationsService.create({
-                    usuario_id: oldTicket.usuario_id,
-                    tipo: 'TICKET_STATUS_CHANGED',
-                    titulo: 'Status atualizado',
-                    mensagem: `O status do seu chamado #${id} mudou para: ${newStatusText}`,
-                    link: `ticket:${id}`
-                });
-            }
-            // Notificar responsável (se existir e for diferente do cliente e de quem mudou)
-            const currentRespId = oldTicket.responsavel_id;
-            if (currentRespId && currentRespId !== oldTicket.usuario_id && currentRespId !== changedByUserId) {
-                await notificationsService.create({
-                    usuario_id: Number(currentRespId),
-                    tipo: 'TICKET_STATUS_CHANGED',
-                    titulo: 'Status atualizado',
-                    mensagem: `O chamado #${id} sob sua responsabilidade mudou para: ${newStatusText}`,
-                    link: `ticket:${id}`
-                });
-            }
+            await notificationDispatchService.ticket({
+                ticketId: id,
+                eventKey: `ticket:${id}:status:${status}:${Date.now()}`,
+                updateType: 'Status alterado',
+                actorId: changedByUserId,
+                description: `Novo status: ${newStatusText}`,
+            });
         }
         catch (e) {
             console.error('Erro ao notificar atualização de status do ticket:', e);
@@ -1082,38 +1063,27 @@ class TicketsService {
         }
         // Notificações de Status ou Responsável
         try {
-            if (data.responsavel_id && data.responsavel_id !== oldTicket.responsavel_id) {
-                await notificationsService.create({
-                    usuario_id: Number(data.responsavel_id),
-                    tipo: 'TICKET_ASSIGNED',
-                    titulo: 'Chamado atribuído a você',
-                    mensagem: `Você é o novo responsável pelo chamado #${id}: ${oldTicket.titulo}`,
-                    link: `ticket:${id}`
+            const labels = {
+                status: 'Status alterado', prioridade: 'Prioridade alterada',
+                responsavel_id: 'Responsável alterado', prazo_sla: 'Prazo alterado',
+                titulo: 'Título alterado', descricao: 'Descrição atualizada',
+            };
+            for (const key of Object.keys(labels)) {
+                if (!(key in data) || String(data[key] ?? '') === String(oldTicket[key] ?? ''))
+                    continue;
+                const value = key === 'status'
+                    ? (newStatusConfig?.nome || labelFromStatus(data.status))
+                    : key === 'responsavel_id'
+                        ? (data.responsavel_id ? 'Novo atendente responsável definido' : 'Chamado sem responsável')
+                        : notificationDispatchService.safePreview(data[key]);
+                await notificationDispatchService.ticket({
+                    ticketId: id,
+                    eventKey: `ticket:${id}:update:${key}:${Date.now()}`,
+                    updateType: labels[key],
+                    actorId: currentUser?.id || null,
+                    actorName: currentUser?.nome || null,
+                    description: value,
                 });
-            }
-            if (data.status && data.status !== oldTicket.status) {
-                const newStatusText = newStatusConfig?.nome || labelFromStatus(data.status);
-                // Notificar cliente
-                if (oldTicket.usuario_id) {
-                    await notificationsService.create({
-                        usuario_id: oldTicket.usuario_id,
-                        tipo: 'TICKET_STATUS_CHANGED',
-                        titulo: 'Status atualizado',
-                        mensagem: `O status do seu chamado #${id} mudou para: ${newStatusText}`,
-                        link: `ticket:${id}`
-                    });
-                }
-                // Notificar responsável (se existir e for diferente do cliente)
-                const currentRespId = data.responsavel_id || oldTicket.responsavel_id;
-                if (currentRespId && currentRespId !== oldTicket.usuario_id) {
-                    await notificationsService.create({
-                        usuario_id: Number(currentRespId),
-                        tipo: 'TICKET_STATUS_CHANGED',
-                        titulo: 'Status atualizado',
-                        mensagem: `O chamado #${id} sob sua responsabilidade mudou para: ${newStatusText}`,
-                        link: `ticket:${id}`
-                    });
-                }
             }
         }
         catch (e) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Bell, Check, Clock, Inbox, ChevronRight } from "lucide-react";
+import { Bell, Check, Clock, Inbox, MessageCircle, Ticket as TicketIcon, UserCheck } from "lucide-react";
 import { api } from "../../lib/api";
 import { Notification, User } from "../../types";
 import { formatDistanceToNow } from "date-fns";
@@ -7,6 +7,7 @@ import { ptBR } from "date-fns/locale";
 import { Badge } from "./Badge";
 import { Button } from "./Button";
 import { cn } from "../../lib/utils";
+import { getSocket } from "../../lib/socket";
 
 type UnreadCountResponse =
   | { count: number }
@@ -59,7 +60,7 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
     setLoading(true);
     try {
       const res = await api.get<NotificationsListResponse>(
-        "/notifications?limit=10&unread_only=true",
+        "/notifications?limit=20",
       );
       let items: Notification[] = [];
       let unread_count = 0;
@@ -87,10 +88,38 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
     if (!currentUser) return;
 
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // Polling 30s
+    const interval = setInterval(fetchUnreadCount, 60000); // recuperação caso a conexão realtime falhe
 
     return () => clearInterval(interval);
   }, [currentUser, fetchUnreadCount]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const onCreated = (event: Event) => {
+      const notification = (event as CustomEvent<Notification>).detail;
+      if (!notification) return;
+      setNotifications((current) => [notification, ...current.filter((item) => item.id !== notification.id)].slice(0, 20));
+      setUnreadCount((count) => count + 1);
+    };
+    const onRead = (payload: { id?: number; all?: boolean }) => {
+      if (payload.all) {
+        setNotifications((items) => items.map((item) => ({ ...item, lida: true })));
+        setUnreadCount(0);
+      } else if (payload.id) {
+        setNotifications((items) => items.map((item) => item.id === payload.id ? { ...item, lida: true } : item));
+        void fetchUnreadCount();
+      }
+    };
+    const onReconnect = () => { void fetchUnreadCount(); if (isOpen) void fetchNotifications(); };
+    window.addEventListener('portalmeta:notification', onCreated);
+    socket.on('notificationsRead', onRead);
+    socket.on('connect', onReconnect);
+    return () => {
+      window.removeEventListener('portalmeta:notification', onCreated);
+      socket.off('notificationsRead', onRead);
+      socket.off('connect', onReconnect);
+    };
+  }, [fetchNotifications, fetchUnreadCount, isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -222,6 +251,15 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
                       <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-blue-500 rounded-r-full"></div>
                     )}
 
+                    <div className={cn(
+                      "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
+                      notification.tipo.toLowerCase().includes('whatsapp_assigned') ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+                      notification.tipo.toLowerCase().includes('whatsapp') ? 'border-teal-200 bg-teal-50 text-teal-700' :
+                      'border-blue-200 bg-blue-50 text-blue-700',
+                    )}>
+                      {notification.tipo.toLowerCase().includes('whatsapp_assigned') ? <UserCheck size={15} /> :
+                       notification.tipo.toLowerCase().includes('whatsapp') ? <MessageCircle size={15} /> : <TicketIcon size={15} />}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between mb-0.5">
                         <p

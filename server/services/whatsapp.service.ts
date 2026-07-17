@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import pool from '../db/connection.js';
 import { env } from '../config/env.js';
 import { emitWhatsAppChanged } from '../realtime.js';
+import { notificationDispatchService } from './notification-dispatch.service.js';
 
 const GRAPH_API_BASE = 'https://graph.facebook.com';
 
@@ -802,7 +803,7 @@ export const whatsappService = {
     rawPayload?: unknown;
   }) {
     try {
-      await pool.query(
+      const [result]: any = await pool.query(
         `
           INSERT INTO whatsapp_messages (
             wa_message_id, direction, from_phone, to_phone, contact_name,
@@ -826,11 +827,15 @@ export const whatsappService = {
         ],
       );
       emitWhatsAppChanged();
+      return {
+        id: Number(result.insertId || 0),
+        inserted: Number(result.affectedRows) === 1 && Number(result.insertId) > 0,
+      };
     } catch (err: any) {
       // Tabela pode ainda não existir se a migration não rodou.
       if (err?.code === 'ER_NO_SUCH_TABLE') {
         console.warn('[WhatsApp] Tabela whatsapp_messages ausente. Rode as migrations.');
-        return;
+        return { id: 0, inserted: false };
       }
       throw err;
     }
@@ -859,7 +864,7 @@ export const whatsappService = {
             msg?.interactive?.list_reply?.title ||
             (msg?.type ? `[${msg.type}]` : null);
 
-          await this.persistMessage({
+          const persisted = await this.persistMessage({
             waMessageId: msg.id || null,
             direction: 'inbound',
             fromPhone: msg.from || null,
@@ -871,6 +876,19 @@ export const whatsappService = {
             rawPayload: msg,
           });
           processed += 1;
+
+          if (persisted.inserted && msg?.from) {
+            const phone = normalizePhone(msg.from);
+            const session = await this.getSession(phone);
+            await notificationDispatchService.whatsapp({
+              eventKey: `whatsapp:message:${msg.id || persisted.id}`,
+              messageId: persisted.id,
+              phone,
+              contactName,
+              body: textBody,
+              assignedUserId: session?.status === 'active' ? session.assigned_user_id : null,
+            });
+          }
 
           if (msg?.from) {
             void this.processInboundAttendanceFlow({

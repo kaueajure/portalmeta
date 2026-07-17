@@ -1,5 +1,5 @@
 import pool from '../db/connection.js';
-import notificationsService from './notifications.service.js';
+import { notificationDispatchService } from './notification-dispatch.service.js';
 import storageService from './storage.service.js';
 class AttachmentsService {
     async listByTicket(ticketId, includeInternal) {
@@ -50,33 +50,15 @@ class AttachmentsService {
                     const [author] = await pool.query('SELECT nome FROM usuarios WHERE id = ?', [usuario_id]);
                     authorName = author[0]?.nome || 'Alguém';
                 }
-                const recipients = new Set();
-                // 1. Notificar solicitante se não for ele e não for interno
-                if (!interno && ticket.usuario_id && ticket.usuario_id !== usuario_id) {
-                    recipients.add(ticket.usuario_id);
-                }
-                // 2. Notificar responsável se não for ele
-                if (ticket.responsavel_id && ticket.responsavel_id !== usuario_id) {
-                    recipients.add(ticket.responsavel_id);
-                }
-                // 3. Se for interno, notificar administradores (que não sejam o autor)
-                if (interno) {
-                    const [admins] = await pool.query('SELECT id FROM usuarios WHERE administrador = 1 AND ativo = 1');
-                    admins.forEach((a) => {
-                        if (a.id !== usuario_id)
-                            recipients.add(a.id);
-                    });
-                }
-                const recipientIds = Array.from(recipients);
-                if (recipientIds.length > 0) {
-                    await notificationsService.createMany(recipientIds, {
-                        tipo: 'TICKET_ATTACHMENT',
-                        titulo: interno ? 'Anexo interno enviado' : 'Novo anexo no chamado',
-                        mensagem: `${authorName} enviou o arquivo: ${nome_original}`,
-                        link: `ticket:${ticket_id}`,
-                        metadata: { ticketId: ticket_id, attachmentId }
-                    });
-                }
+                await notificationDispatchService.ticket({
+                    ticketId: ticket_id,
+                    eventKey: `ticket:${ticket_id}:attachment:${attachmentId}`,
+                    updateType: interno ? 'Novo anexo interno' : 'Novo anexo',
+                    actorId: usuario_id,
+                    actorName: authorName,
+                    description: `${authorName} enviou o arquivo ${notificationDispatchService.safePreview(nome_original, 80)}`,
+                    requiredPermission: interno ? 'ticket_mensagens.ver_internos' : undefined,
+                });
             }
         }
         catch (e) {

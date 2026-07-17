@@ -257,7 +257,21 @@ export const WhatsappPage = ({ currentUser, onOpenSettings }: WhatsappPageProps)
 
   useEffect(() => {
     loadStatusAndConversations();
+    const requestedPhone = window.sessionStorage.getItem("portalmeta.whatsapp.openPhone");
+    if (requestedPhone) {
+      window.sessionStorage.removeItem("portalmeta.whatsapp.openPhone");
+      setSelectedPhone(requestedPhone);
+    }
   }, [loadStatusAndConversations]);
+
+  useEffect(() => {
+    const openConversation = (event: Event) => {
+      const phone = String((event as CustomEvent<{ phone?: string }>).detail?.phone || '').replace(/\D/g, '');
+      if (phone) setSelectedPhone(phone);
+    };
+    window.addEventListener('portalmeta:open-whatsapp', openConversation);
+    return () => window.removeEventListener('portalmeta:open-whatsapp', openConversation);
+  }, []);
 
   useEffect(() => {
     if (!selectedPhone) {

@@ -1,6 +1,6 @@
 import pool from '../db/connection.js';
 import { recordTicketEvent } from './ticket-events.service.js';
-import notificationsService from './notifications.service.js';
+import { notificationDispatchService } from './notification-dispatch.service.js';
 import { emailOutboxService } from './email-outbox.service.js';
 import { io } from '../server.js';
 import slaService from './sla.service.js';
@@ -193,13 +193,8 @@ class TicketMessagesService {
             // C) Notifications
             const [author] = await pool.query('SELECT nome FROM usuarios WHERE id = ?', [usuario_id]);
             const authorName = author[0]?.nome || (isExternalEmail ? (ticket.cliente_nome || 'Cliente Externo') : 'Sistema');
-            const recipients = new Set();
             // 1. Notify Client (if agent responds publicly)
             if (!finalInterno && isAgentResponse) {
-                // If there's a registered user, add to in-app notifications
-                if (ticket.usuario_id) {
-                    recipients.add(ticket.usuario_id);
-                }
                 // Send email to the external contact or registered user email
                 if (!suppressEmailNotification && ticket.cliente_email && ticket.cliente_email !== 'removido@sistema.com') {
                     // Get the original messageId from the ticket or the latest message for threading
@@ -235,28 +230,15 @@ class TicketMessagesService {
                     }
                 }
             }
-            // 2. Notify Responsible (if client responds or if it's an internal note they didn't write)
-            if (ticket.responsavel_id && Number(ticket.responsavel_id) !== Number(usuario_id)) {
-                recipients.add(ticket.responsavel_id);
-            }
-            // 3. Notify Admins if it's an internal note or a new client message
-            if (finalInterno || isClient) {
-                const [admins] = await pool.query('SELECT id FROM usuarios WHERE administrador = 1 AND ativo = 1');
-                admins.forEach((a) => {
-                    if (Number(a.id) !== Number(usuario_id))
-                        recipients.add(Number(a.id));
-                });
-            }
-            const recipientIds = Array.from(recipients);
-            if (recipientIds.length > 0) {
-                await notificationsService.createMany(recipientIds, {
-                    tipo: 'TICKET_MESSAGE',
-                    titulo: finalInterno ? 'Nota interna no chamado' : 'Nova resposta no chamado',
-                    mensagem: `${authorName}: ${mensagem.substring(0, 100)}${mensagem.length > 100 ? '...' : ''}`,
-                    link: `ticket:${ticket_id}`,
-                    metadata: { ticketId: ticket_id, messageId }
-                });
-            }
+            await notificationDispatchService.ticket({
+                ticketId: ticket_id,
+                eventKey: `ticket:${ticket_id}:message:${messageId}`,
+                updateType: finalInterno ? 'Nova nota interna' : 'Nova resposta',
+                actorId: usuario_id,
+                actorName: authorName,
+                description: `${authorName}: ${notificationDispatchService.safePreview(mensagem)}`,
+                requiredPermission: finalInterno ? 'ticket_mensagens.ver_internos' : undefined,
+            });
         }
         catch (error) {
             console.error('[TicketMessagesService] Error in business logic:', error);

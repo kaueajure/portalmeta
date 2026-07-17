@@ -301,6 +301,7 @@ export interface Notification {
   id: number;
   usuario_id: number;
   tipo: string;
+  event_key?: string | null;
   titulo: string;
   mensagem?: string | null;
   link?: string | null;
@@ -308,6 +309,15 @@ export interface Notification {
   metadata?: Record<string, unknown> | null;
   created_at: string;
   read_at?: string | null;
+}
+
+export interface NotificationPreferences {
+  sounds_enabled: boolean;
+  volume: number;
+  ticket_enabled: boolean;
+  whatsapp_general_enabled: boolean;
+  whatsapp_assigned_enabled: boolean;
+  browser_enabled: boolean;
 }
 
 export interface PricingPlan {
