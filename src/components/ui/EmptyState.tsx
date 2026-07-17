@@ -61,7 +61,7 @@ export const EmptyState = ({
           variant="primary"
           size={compact ? "xs" : "sm"}
           onClick={action.onClick}
-          className={cn("mt-4 text-slate-600", compact ? "" : "font-medium")}
+          className={cn("mt-4", compact ? "" : "font-medium")}
         >
           {action.label}
         </Button>

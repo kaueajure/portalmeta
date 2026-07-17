@@ -85,10 +85,9 @@ function municipalityDisplayName(value: string): string {
     : repairText(value);
 }
 
-function responsibleConfig(municipality: Municipality): string {
+function serviceConfig(municipality: Municipality): string {
   return JSON.stringify({
-    ...Object.fromEntries(OBLIGATIONS.map((code) => [code, ''])),
-    _activeServices: municipality.activeServices,
+    activeServices: municipality.activeServices,
   });
 }
 
@@ -252,12 +251,12 @@ async function applyImport({
     const municipalityInsertValues = municipalities
       .filter((municipality) => !existingKeys.has(`${normalizedName(municipality.name)}|${municipality.state}`))
       .map((municipality) => [
-        municipalityDisplayName(municipality.name), 'SP', responsibleConfig(municipality), null, null, null, 1,
+        municipalityDisplayName(municipality.name), 'SP', serviceConfig(municipality), null, null, null, 1,
       ]);
     if (municipalityInsertValues.length > 0) {
       const [result]: any = await connection.query(
         `INSERT INTO obligation_municipalities
-          (name, state, responsible_config, phone, email, observations, active)
+          (name, state, service_config, phone, email, observations, active)
          VALUES ?`,
         [municipalityInsertValues],
       );
@@ -275,7 +274,7 @@ async function applyImport({
       const municipalityId = municipalityIdByKey.get(`${normalizedName(task.municipalityName)}|SP`);
       const [result]: any = await connection.query(
         `UPDATE obligation_tasks
-         SET status = ?, siops_membros = ?, siope_folha = ?, updated_at = ?
+         SET status = ?, siops_membros = ?, siope_folha = ?, updated_at = ?, version = version + 1
          WHERE municipality_id = ? AND obligation_code = ? AND competence = ? AND year = ?`,
         [task.status, task.siopsMembros, task.siopeFolha, task.updatedAt, municipalityId,
           task.obligationCode, task.competence, task.year],
@@ -490,7 +489,7 @@ async function main() {
       if (apply) throw new Error(`Schema de destino incompleto: ${missingTables.join(', ')}`);
     } else {
       const [targetMunicipalityRows] = await pool.query(
-        'SELECT id, name, state, responsible_config AS responsibleConfig FROM obligation_municipalities',
+        'SELECT id, name, state, service_config AS serviceConfig FROM obligation_municipalities',
       );
       const [targetTaskRows] = await pool.query(`
         SELECT t.id, m.name AS municipalityName, t.obligation_code AS obligationCode,

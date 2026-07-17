@@ -174,14 +174,14 @@ export const PERMISSIONS_CATALOG: PermissionCatalogItem[] = [
 
   // OBRIGAÇÕES
   { key: 'obrigacoes.planilha.visualizar', modulo: 'Obrigações', grupo: 'Acesso', nome: 'Ver Planilha Principal', descricao: 'Acessar a matriz de obrigações municipais.', nivel_risk: 'baixo', order: 2500 },
-  { key: 'obrigacoes.planilha.editar', modulo: 'Obrigações', grupo: 'Operação', nome: 'Editar obrigações', descricao: 'Alterar status e controles auxiliares das competências.', nivel_risk: 'medio', order: 2510 },
+  { key: 'obrigacoes.planilha.editar', modulo: 'Obrigações', grupo: 'Operação', nome: 'Editar obrigações', descricao: 'Alterar qualquer obrigação e seus controles auxiliares, com auditoria e controle de concorrência.', nivel_risk: 'medio', order: 2510 },
   { key: 'obrigacoes.planilha.comentar', modulo: 'Obrigações', grupo: 'Colaboração', nome: 'Comentar em obrigações', descricao: 'Registrar comentários nas competências municipais.', nivel_risk: 'baixo', order: 2520 },
   { key: 'obrigacoes.planilha.anexar', modulo: 'Obrigações', grupo: 'Arquivos', nome: 'Anexar arquivos', descricao: 'Enviar e baixar arquivos vinculados às competências.', nivel_risk: 'medio', order: 2530 },
   { key: 'obrigacoes.planilha.editar_historico', modulo: 'Obrigações', grupo: 'Auditoria', nome: 'Corrigir histórico', descricao: 'Corrigir registros históricos e refletir o valor na obrigação.', nivel_risk: 'alto', order: 2540 },
-  { key: 'obrigacoes.municipios.visualizar', modulo: 'Obrigações', grupo: 'Acesso', nome: 'Ver municípios', descricao: 'Acessar os cadastros municipais e seus responsáveis.', nivel_risk: 'baixo', order: 2550 },
+  { key: 'obrigacoes.municipios.visualizar', modulo: 'Obrigações', grupo: 'Acesso', nome: 'Ver municípios', descricao: 'Acessar os cadastros municipais e serviços aplicáveis.', nivel_risk: 'baixo', order: 2550 },
   { key: 'obrigacoes.municipios.criar', modulo: 'Obrigações', grupo: 'Cadastro', nome: 'Cadastrar municípios', descricao: 'Criar e clonar cadastros municipais.', nivel_risk: 'medio', order: 2560 },
-  { key: 'obrigacoes.municipios.editar', modulo: 'Obrigações', grupo: 'Cadastro', nome: 'Editar municípios', descricao: 'Alterar contatos, serviços e responsáveis municipais.', nivel_risk: 'medio', order: 2570 },
-  { key: 'obrigacoes.municipios.excluir', modulo: 'Obrigações', grupo: 'Cadastro', nome: 'Excluir municípios', descricao: 'Excluir municípios e todos os registros de obrigações vinculados.', nivel_risk: 'critico', order: 2580 },
+  { key: 'obrigacoes.municipios.editar', modulo: 'Obrigações', grupo: 'Cadastro', nome: 'Editar municípios', descricao: 'Alterar contatos e serviços aplicáveis aos municípios.', nivel_risk: 'medio', order: 2570 },
+  { key: 'obrigacoes.municipios.excluir', modulo: 'Obrigações', grupo: 'Cadastro', nome: 'Desativar municípios', descricao: 'Desativar municípios preservando obrigações e histórico vinculados.', nivel_risk: 'critico', order: 2580 },
   { key: 'obrigacoes.dashboard.visualizar', modulo: 'Obrigações', grupo: 'Acesso', nome: 'Ver Dashboard', descricao: 'Acompanhar indicadores, vencimentos e desempenho das obrigações.', nivel_risk: 'baixo', order: 2590 },
 
   // INTEGRAÇÕES / CANAIS

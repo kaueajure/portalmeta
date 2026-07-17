@@ -43,43 +43,21 @@ function parseScope(req: AuthRequest) {
   return { year, obligationCode, competences: OBLIGATIONS[obligationCode] };
 }
 
-function parseResponsibleConfig(value: unknown): Record<string, any> {
+function parseServiceConfig(value: unknown): Record<string, any> {
   if (!value) return {};
   if (typeof value === 'object') return value as Record<string, any>;
   try { return JSON.parse(String(value)); } catch { return {}; }
 }
 
-function sanitizeResponsibleConfig(value: unknown, validUserNames: string[]): Record<string, any> {
-  const config = parseResponsibleConfig(value);
-  const canonicalNames = new Map(validUserNames.map((name) => [name.trim().toLocaleLowerCase('pt-BR'), name.trim()]));
-  const sanitized: Record<string, any> = { _activeServices: { ...config._activeServices } };
-  for (const code of Object.keys(OBLIGATIONS)) {
-    sanitized[code] = Array.from(new Set(String(config[code] || '').split(',')
-      .map((name) => canonicalNames.get(name.trim().toLocaleLowerCase('pt-BR')))
-      .filter((name): name is string => Boolean(name)))).join(', ');
-    sanitized._activeServices[code] = config._activeServices?.[code] !== false;
-  }
-  return sanitized;
-}
-
 function isServiceActive(config: unknown, obligationCode: string): boolean {
-  return parseResponsibleConfig(config)._activeServices?.[obligationCode] !== false;
-}
-
-function splitResponsibles(config: unknown, obligationCode: string): string[] {
-  const value = parseResponsibleConfig(config)[obligationCode];
-  return Array.from(new Set(String(value || '')
-    .split(',')
-    .map((name) => name.trim())
-    .filter((name) => name.length > 0 && name !== '-')));
+  return parseServiceConfig(config).activeServices?.[obligationCode] !== false;
 }
 
 function isCompleted(status: string): boolean {
   return status === 'Enviado' || status === 'Homologado';
 }
 
-function isOverdue(status: string, obligationCode: string, competence: string, year: number): boolean {
-  if (isCompleted(status)) return false;
+function getDueDate(competence: string, year: number): Date {
   const months: Record<string, number> = {
     Janeiro: 1, Fevereiro: 2, 'Março': 3, Abril: 4, Maio: 5, Junho: 6,
     Julho: 7, Agosto: 8, Setembro: 9, Outubro: 10, Novembro: 11,
@@ -91,9 +69,22 @@ function isOverdue(status: string, obligationCode: string, competence: string, y
   };
   const endMonth = months[String(competence || '').trim()] || 12;
   const dueYear = endMonth === 12 ? year + 1 : year;
-  const dueMonthIndex = endMonth === 12 ? 1 : endMonth + 1;
-  const dueDate = new Date(dueYear, dueMonthIndex, 0, 23, 59, 59, 999);
-  return Date.now() > dueDate.getTime();
+  const dueMonth = endMonth === 12 ? 1 : endMonth + 1;
+  const lastDay = new Date(Date.UTC(dueYear, dueMonth, 0)).getUTCDate();
+  // Os prazos do produto são civis e seguem o horário de Brasília (UTC-03).
+  return new Date(`${dueYear}-${String(dueMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999-03:00`);
+}
+
+function isOverdue(status: string, _obligationCode: string, competence: string, year: number): boolean {
+  return !isCompleted(status) && Date.now() > getDueDate(competence, year).getTime();
+}
+
+function dateKeyInSaoPaulo(value: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
 function mapTask(row: any) {
@@ -107,20 +98,23 @@ function mapTask(row: any) {
     siopsMembros: row.siops_membros,
     siopeFolha: row.siope_folha,
     updatedAt: row.updated_at,
+    version: Number(row.version || 1),
+    lastEditorName: row.last_editor_name || null,
   };
 }
 
-function mapMunicipality(row: any, validUserNames?: string[]) {
+function mapMunicipality(row: any) {
   return {
     id: Number(row.id),
     name: row.name,
     state: row.state,
-    responsibleConfig: Array.isArray(validUserNames)
-      ? sanitizeResponsibleConfig(row.responsible_config, validUserNames)
-      : parseResponsibleConfig(row.responsible_config),
+    serviceConfig: parseServiceConfig(row.service_config),
     phone: row.phone,
     email: row.email,
     observations: row.observations,
+    version: Number(row.version || 1),
+    updatedAt: row.updated_at,
+    lastEditorName: row.last_editor_name || null,
   };
 }
 
@@ -130,17 +124,16 @@ function normalizeMunicipalityPayload(body: any) {
   const phone = String(body.phone || '').trim().slice(0, 100) || null;
   const email = String(body.email || '').trim().toLowerCase().slice(0, 255) || null;
   const observations = String(body.observations || '').trim().slice(0, 10000) || null;
-  const source = body.responsibleConfig && typeof body.responsibleConfig === 'object'
-    ? body.responsibleConfig
+  const source = body.serviceConfig && typeof body.serviceConfig === 'object'
+    ? body.serviceConfig
     : {};
-  const responsibleConfig: Record<string, any> = { _activeServices: {} };
+  const serviceConfig: Record<string, any> = { activeServices: {} };
   for (const code of Object.keys(OBLIGATIONS)) {
-    responsibleConfig[code] = String(source[code] || '').trim().slice(0, 1000);
-    responsibleConfig._activeServices[code] = source._activeServices?.[code] !== false;
+    serviceConfig.activeServices[code] = source.activeServices?.[code] !== false;
   }
   if (!name) return null;
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-  return { name, state, phone, email, observations, responsibleConfig };
+  return { name, state, phone, email, observations, serviceConfig };
 }
 
 async function taskExists(connection: any, taskId: number) {
@@ -161,30 +154,21 @@ router.get(
     try {
       await connection.beginTransaction();
       const [municipalityRows]: any = await connection.query(
-        `SELECT id, name, state, responsible_config
+        `SELECT id, name, state, service_config
          FROM obligation_municipalities WHERE active = 1 ORDER BY name`,
       );
-      const [userRows]: any = await connection.query(
-        `SELECT nome FROM usuarios
-         WHERE ativo = 1 AND COALESCE(perfil, '') <> 'cliente'`,
-      );
-      const validUserNames = userRows.map((row: any) => String(row.nome));
-      for (const municipality of municipalityRows) {
-        municipality.responsible_config = sanitizeResponsibleConfig(
-          municipality.responsible_config,
-          validUserNames,
-        );
-      }
 
       const values: any[][] = [];
       for (const municipality of municipalityRows) {
         for (const [code, competences] of Object.entries(OBLIGATIONS)) {
-          if (!isServiceActive(municipality.responsible_config, code)) continue;
+          if (!isServiceActive(municipality.service_config, code)) continue;
           for (const competence of competences) {
             values.push([
               municipality.id, code, competence, year, 'Falta XML',
               code === 'SIOPS' ? 'Não Solicitado' : null,
               code === 'SIOPE' ? 'Não Solicitado' : null,
+              req.user!.id,
+              req.user!.id,
             ]);
           }
         }
@@ -192,24 +176,41 @@ router.get(
       if (values.length > 0) {
         await connection.query(
           `INSERT IGNORE INTO obligation_tasks
-            (municipality_id, obligation_code, competence, year, status, siops_membros, siope_folha)
+            (municipality_id, obligation_code, competence, year, status, siops_membros, siope_folha, created_by, updated_by)
            VALUES ?`,
           [values],
         );
       }
 
       const [taskRows]: any = await connection.query(
-        `SELECT id, municipality_id, obligation_code, competence, year, status
+        `SELECT id, municipality_id, obligation_code, competence, year, status, updated_at
          FROM obligation_tasks WHERE year = ?`,
         [year],
       );
+      const [previousTaskRows]: any = await connection.query(
+        `SELECT id, municipality_id, obligation_code, competence, year, status, updated_at
+         FROM obligation_tasks WHERE year = ?`,
+        [year - 1],
+      );
       const [completionRows]: any = await connection.query(
+        `SELECT h.task_id, h.actor_name, h.created_at AS completed_at
+         FROM obligation_task_history h
+         INNER JOIN (
+           SELECT task_id, MIN(id) AS first_completed_id
+           FROM obligation_task_history
+           WHERE field_changed = 'status' AND new_value IN ('Enviado', 'Homologado')
+           GROUP BY task_id
+         ) first_completed ON first_completed.first_completed_id = h.id
+         INNER JOIN obligation_tasks t ON t.id = h.task_id
+         WHERE t.year IN (?, ?)`,
+        [year, year - 1],
+      );
+      const [lastEditRows]: any = await connection.query(
         `SELECT h.task_id, h.actor_name
          FROM obligation_task_history h
          INNER JOIN (
            SELECT task_id, MAX(id) AS latest_id
            FROM obligation_task_history
-           WHERE field_changed = 'status' AND new_value IN ('Enviado', 'Homologado')
            GROUP BY task_id
          ) latest ON latest.latest_id = h.id
          INNER JOIN obligation_tasks t ON t.id = h.task_id
@@ -221,14 +222,24 @@ router.get(
       const municipalityById = new Map<number, any>(
         municipalityRows.map((row: any) => [Number(row.id), row]),
       );
-      const completedByTask = new Map<number, string>(
+      const completionByTask = new Map<number, { actor: string; completedAt: Date }>(
         completionRows
           .filter((row: any) => String(row.actor_name || '').trim())
-          .map((row: any) => [Number(row.task_id), String(row.actor_name).trim()]),
+          .map((row: any) => [Number(row.task_id), {
+            actor: String(row.actor_name).trim(),
+            completedAt: new Date(row.completed_at),
+          }]),
+      );
+      const lastEditorByTask = new Map<number, string>(
+        lastEditRows.map((row: any) => [Number(row.task_id), String(row.actor_name)]),
       );
       const activeTasks = taskRows.filter((task: any) => {
         const municipality = municipalityById.get(Number(task.municipality_id));
-        return municipality && isServiceActive(municipality.responsible_config, task.obligation_code);
+        return municipality && isServiceActive(municipality.service_config, task.obligation_code);
+      });
+      const previousActiveTasks = previousTaskRows.filter((task: any) => {
+        const municipality = municipalityById.get(Number(task.municipality_id));
+        return municipality && isServiceActive(municipality.service_config, task.obligation_code);
       });
 
       const statusCounts: Record<string, number> = Object.fromEntries(
@@ -238,13 +249,15 @@ router.get(
       const obligationCompetenceStats: Record<string, Record<string, { completed: number; pending: number }>> = {};
       const municipalityStats: Record<string, { completed: number; pending: number; total: number }> = {};
       const competenceStats: Record<string, { completed: number; pending: number; total: number }> = {};
-      const responsibleMap = new Map<string, { completed: number; pending: number; municipalities: Set<string> }>();
       const overdue = {
         total: 0,
         byObligation: {} as Record<string, number>,
         byMunicipality: {} as Record<string, number>,
-        byResponsible: {} as Record<string, number>,
       };
+      const taskItems: any[] = [];
+      const now = new Date();
+      const todayKey = dateKeyInSaoPaulo(now);
+      const trendMap = new Map<string, { period: string; completed: number; missed: number }>();
 
       for (const task of activeTasks) {
         const municipality = municipalityById.get(Number(task.municipality_id));
@@ -266,39 +279,65 @@ router.get(
         }
         obligationCompetenceStats[code][competence][completed ? 'completed' : 'pending'] += 1;
 
-        const completionActor = completed ? completedByTask.get(Number(task.id)) : null;
-        const responsibles = completionActor
-          ? [completionActor]
-          : splitResponsibles(municipality?.responsible_config, code);
-        if (responsibles.length === 0) responsibles.push('Não Atribuído');
-        for (const name of responsibles) {
-          const stats = responsibleMap.get(name) || { completed: 0, pending: 0, municipalities: new Set<string>() };
-          stats[completed ? 'completed' : 'pending'] += 1;
-          stats.municipalities.add(municipalityName);
-          responsibleMap.set(name, stats);
-        }
+        const completion = completed ? completionByTask.get(Number(task.id)) : null;
 
         if (isOverdue(task.status, code, competence, Number(task.year))) {
           overdue.total += 1;
           overdue.byObligation[code] = (overdue.byObligation[code] || 0) + 1;
           overdue.byMunicipality[municipalityName] = (overdue.byMunicipality[municipalityName] || 0) + 1;
-          for (const name of responsibles) {
-            overdue.byResponsible[name] = (overdue.byResponsible[name] || 0) + 1;
-          }
         }
+
+        const dueDate = getDueDate(competence, Number(task.year));
+        const dueKey = dateKeyInSaoPaulo(dueDate);
+        const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / 86_400_000);
+        const completedOnTime = completed && completion
+          ? completion.completedAt.getTime() <= dueDate.getTime()
+          : null;
+        const overdueNow = !completed && dueDate.getTime() < now.getTime();
+        const deadlineSituation = completed
+          ? 'completed'
+          : overdueNow
+            ? 'overdue'
+            : dueKey === todayKey
+              ? 'today'
+              : daysUntilDue <= 7
+                ? 'soon'
+                : 'scheduled';
+        const stale = !completed && now.getTime() - new Date(task.updated_at).getTime() >= 14 * 86_400_000;
+        const blocked = task.status === 'Pendência Cliente' || task.status === 'Retificar';
+        taskItems.push({
+          id: Number(task.id),
+          municipalityId: Number(task.municipality_id),
+          municipalityName,
+          obligationCode: code,
+          competence,
+          year: Number(task.year),
+          status: task.status,
+          dueDate: dueDate.toISOString(),
+          updatedAt: new Date(task.updated_at).toISOString(),
+          lastEditorName: lastEditorByTask.get(Number(task.id)) || null,
+          completedAt: completion?.completedAt.toISOString() || null,
+          completedOnTime,
+          deadlineSituation,
+          stale,
+          blocked,
+        });
+
+        const period = dueKey.slice(0, 7);
+        const trend = trendMap.get(period) || { period, completed: 0, missed: 0 };
+        if (completed) trend.completed += 1;
+        if ((completed && completedOnTime === false) || overdueNow) trend.missed += 1;
+        trendMap.set(period, trend);
       }
 
       const completed = (statusCounts.Enviado || 0) + (statusCounts.Homologado || 0);
       const totalTasks = activeTasks.length;
-      const responsibleStats = Array.from(responsibleMap, ([name, stats]) => {
-        const total = stats.completed + stats.pending;
-        return {
-          name, completed: stats.completed, pending: stats.pending, total,
-          completionRate: total > 0 ? Math.round((stats.completed / total) * 100) : 0,
-          municipalities: Array.from(stats.municipalities).sort(),
-          municipalityCount: stats.municipalities.size,
-        };
-      }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+      const onTimeKnown = taskItems.filter((task) => task.completedOnTime !== null);
+      const onTimeCount = onTimeKnown.filter((task) => task.completedOnTime).length;
+      const previousCompleted = previousActiveTasks.filter((task: any) => isCompleted(task.status)).length;
+      const previousOverdue = previousActiveTasks.filter((task: any) => (
+        isOverdue(task.status, task.obligation_code, task.competence, Number(task.year))
+      )).length;
 
       return sendSuccess(res, {
         year,
@@ -312,8 +351,21 @@ router.get(
         obligationCompetenceStats,
         municipalityStats,
         competenceStats,
-        responsibleStats,
         overdue,
+        taskItems,
+        deadlineTrend: Array.from(trendMap.values()).sort((a, b) => a.period.localeCompare(b.period)),
+        onTime: {
+          count: onTimeCount,
+          sampleSize: onTimeKnown.length,
+          rate: onTimeKnown.length > 0 ? Math.round((onTimeCount / onTimeKnown.length) * 100) : null,
+        },
+        previousPeriod: previousActiveTasks.length > 0 ? {
+          year: year - 1,
+          totalTasks: previousActiveTasks.length,
+          completed: previousCompleted,
+          overdue: previousOverdue,
+          completionRate: Math.round((previousCompleted / previousActiveTasks.length) * 100),
+        } : null,
         updatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -331,25 +383,15 @@ router.get(
   requirePermission('obrigacoes.municipios.visualizar'),
   async (_req: AuthRequest, res) => {
     try {
-      const [municipalityResult, userResult] = await Promise.all([
-        pool.query(
-          `SELECT id, name, state, responsible_config, phone, email, observations
-           FROM obligation_municipalities WHERE active = 1 ORDER BY name`,
-        ),
-        pool.query(
-          `SELECT id, nome, email, cargo
-           FROM usuarios
-           WHERE ativo = 1 AND COALESCE(perfil, '') <> 'cliente'
-           ORDER BY nome`,
-        ),
-      ]);
-      const userRows = userResult[0] as any[];
-      const validUserNames = userRows.map((row) => String(row.nome));
+      const [municipalityResult]: any = await pool.query(
+        `SELECT m.id, m.name, m.state, m.service_config, m.phone, m.email, m.observations,
+                m.version, m.updated_at, editor.nome AS last_editor_name
+         FROM obligation_municipalities m
+         LEFT JOIN usuarios editor ON editor.id = m.updated_by
+         WHERE m.active = 1 ORDER BY m.name`,
+      );
       return sendSuccess(res, {
-        municipalities: (municipalityResult[0] as any[]).map((row) => mapMunicipality(row, validUserNames)),
-        users: userRows.map((row) => ({
-          id: Number(row.id), name: row.nome, email: row.email, role: row.cargo,
-        })),
+        municipalities: municipalityResult.map(mapMunicipality),
       });
     } catch (error) {
       console.error('[Obligations] Falha ao listar municípios:', error);
@@ -364,23 +406,39 @@ router.post(
   async (req: AuthRequest, res) => {
     const payload = normalizeMunicipalityPayload(req.body);
     if (!payload) return sendError(res, 'Revise o nome, estado e e-mail informados.', 400);
+    const connection = await pool.getConnection();
     try {
-      const [result]: any = await pool.query(
+      await connection.beginTransaction();
+      const [result]: any = await connection.query(
         `INSERT INTO obligation_municipalities
-          (name, state, responsible_config, phone, email, observations)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [payload.name, payload.state, JSON.stringify(payload.responsibleConfig), payload.phone, payload.email, payload.observations],
+          (name, state, service_config, phone, email, observations, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [payload.name, payload.state, JSON.stringify(payload.serviceConfig), payload.phone, payload.email,
+          payload.observations, req.user!.id, req.user!.id],
       );
-      const [rows]: any = await pool.query(
-        `SELECT id, name, state, responsible_config, phone, email, observations
-         FROM obligation_municipalities WHERE id = ?`,
+      await connection.query(
+        `INSERT INTO obligation_municipality_history
+          (municipality_id, user_id, actor_name, action, changes_json)
+         VALUES (?, ?, ?, 'created', ?)`,
+        [result.insertId, req.user!.id, req.user!.nome, JSON.stringify({ before: null, after: payload })],
+      );
+      const [rows]: any = await connection.query(
+        `SELECT m.id, m.name, m.state, m.service_config, m.phone, m.email, m.observations,
+                m.version, m.updated_at, editor.nome AS last_editor_name
+         FROM obligation_municipalities m
+         LEFT JOIN usuarios editor ON editor.id = m.updated_by
+         WHERE m.id = ?`,
         [result.insertId],
       );
+      await connection.commit();
       return sendSuccess(res, mapMunicipality(rows[0]), 'Município cadastrado.', 201);
     } catch (error: any) {
+      await connection.rollback();
       if (error?.code === 'ER_DUP_ENTRY') return sendError(res, 'Este município já está cadastrado neste estado.', 409);
       console.error('[Obligations] Falha ao cadastrar município:', error);
       return sendError(res, 'Não foi possível cadastrar o município.');
+    } finally {
+      connection.release();
     }
   },
 );
@@ -390,26 +448,59 @@ router.put(
   requirePermission('obrigacoes.municipios.editar'),
   async (req: AuthRequest, res) => {
     const municipalityId = positiveInt(req.params.id);
+    const expectedVersion = positiveInt(req.body.version);
     const payload = normalizeMunicipalityPayload(req.body);
-    if (!municipalityId || !payload) return sendError(res, 'Dados do município inválidos.', 400);
+    if (!municipalityId || !expectedVersion || !payload) return sendError(res, 'Dados do município ou versão inválidos.', 400);
+    const connection = await pool.getConnection();
     try {
-      const [result]: any = await pool.query(
-        `UPDATE obligation_municipalities
-         SET name = ?, state = ?, responsible_config = ?, phone = ?, email = ?, observations = ?
-         WHERE id = ? AND active = 1`,
-        [payload.name, payload.state, JSON.stringify(payload.responsibleConfig), payload.phone, payload.email, payload.observations, municipalityId],
-      );
-      if (result.affectedRows === 0) return sendError(res, 'Município não encontrado.', 404);
-      const [rows]: any = await pool.query(
-        `SELECT id, name, state, responsible_config, phone, email, observations
-         FROM obligation_municipalities WHERE id = ?`,
+      await connection.beginTransaction();
+      const [currentRows]: any = await connection.query(
+        `SELECT id, name, state, service_config, phone, email, observations, version, updated_at
+         FROM obligation_municipalities WHERE id = ? AND active = 1 FOR UPDATE`,
         [municipalityId],
       );
+      if (!currentRows.length) {
+        await connection.rollback();
+        return sendError(res, 'Município não encontrado.', 404);
+      }
+      if (Number(currentRows[0].version) !== expectedVersion) {
+        await connection.rollback();
+        return sendError(res, 'Este município foi alterado por outra pessoa. Recarregue os dados antes de salvar novamente.', 409);
+      }
+      await connection.query(
+        `UPDATE obligation_municipalities
+         SET name = ?, state = ?, service_config = ?, phone = ?, email = ?, observations = ?,
+             updated_by = ?, version = version + 1
+         WHERE id = ? AND active = 1 AND version = ?`,
+        [payload.name, payload.state, JSON.stringify(payload.serviceConfig), payload.phone, payload.email,
+          payload.observations, req.user!.id, municipalityId, expectedVersion],
+      );
+      await connection.query(
+        `INSERT INTO obligation_municipality_history
+          (municipality_id, user_id, actor_name, action, changes_json)
+         VALUES (?, ?, ?, 'updated', ?)`,
+        [municipalityId, req.user!.id, req.user!.nome, JSON.stringify({
+          before: mapMunicipality(currentRows[0]),
+          after: payload,
+        })],
+      );
+      const [rows]: any = await connection.query(
+        `SELECT m.id, m.name, m.state, m.service_config, m.phone, m.email, m.observations,
+                m.version, m.updated_at, editor.nome AS last_editor_name
+         FROM obligation_municipalities m
+         LEFT JOIN usuarios editor ON editor.id = m.updated_by
+         WHERE m.id = ?`,
+        [municipalityId],
+      );
+      await connection.commit();
       return sendSuccess(res, mapMunicipality(rows[0]), 'Município atualizado.');
     } catch (error: any) {
+      await connection.rollback();
       if (error?.code === 'ER_DUP_ENTRY') return sendError(res, 'Este município já está cadastrado neste estado.', 409);
       console.error('[Obligations] Falha ao atualizar município:', error);
       return sendError(res, 'Não foi possível atualizar o município.');
+    } finally {
+      connection.release();
     }
   },
 );
@@ -419,16 +510,47 @@ router.delete(
   requirePermission('obrigacoes.municipios.excluir'),
   async (req: AuthRequest, res) => {
     const municipalityId = positiveInt(req.params.id);
-    if (!municipalityId) return sendError(res, 'Município inválido.', 400);
+    const expectedVersion = positiveInt(req.query.version);
+    if (!municipalityId || !expectedVersion) return sendError(res, 'Município ou versão inválidos.', 400);
+    const connection = await pool.getConnection();
     try {
-      const [result]: any = await pool.query(
-        'DELETE FROM obligation_municipalities WHERE id = ?', [municipalityId],
+      await connection.beginTransaction();
+      const [currentRows]: any = await connection.query(
+        `SELECT id, name, state, service_config, phone, email, observations, version, updated_at
+         FROM obligation_municipalities WHERE id = ? AND active = 1 FOR UPDATE`,
+        [municipalityId],
       );
-      if (result.affectedRows === 0) return sendError(res, 'Município não encontrado.', 404);
-      return sendSuccess(res, { id: municipalityId }, 'Município excluído.');
+      if (!currentRows.length) {
+        await connection.rollback();
+        return sendError(res, 'Município não encontrado.', 404);
+      }
+      if (Number(currentRows[0].version) !== expectedVersion) {
+        await connection.rollback();
+        return sendError(res, 'Este município foi alterado por outra pessoa. Recarregue os dados antes de desativá-lo.', 409);
+      }
+      await connection.query(
+        `UPDATE obligation_municipalities
+         SET active = 0, updated_by = ?, version = version + 1
+         WHERE id = ? AND active = 1 AND version = ?`,
+        [req.user!.id, municipalityId, expectedVersion],
+      );
+      await connection.query(
+        `INSERT INTO obligation_municipality_history
+          (municipality_id, user_id, actor_name, action, changes_json)
+         VALUES (?, ?, ?, 'deactivated', ?)`,
+        [municipalityId, req.user!.id, req.user!.nome, JSON.stringify({
+          before: mapMunicipality(currentRows[0]),
+          after: { active: false },
+        })],
+      );
+      await connection.commit();
+      return sendSuccess(res, { id: municipalityId }, 'Município desativado.');
     } catch (error) {
+      await connection.rollback();
       console.error('[Obligations] Falha ao excluir município:', error);
       return sendError(res, 'Não foi possível excluir o município.');
+    } finally {
+      connection.release();
     }
   },
 );
@@ -444,22 +566,11 @@ router.get(
     try {
       await connection.beginTransaction();
       const [municipalityRows]: any = await connection.query(
-        `SELECT id, name, state, responsible_config, phone, email, observations
+        `SELECT id, name, state, service_config, phone, email, observations, version, updated_at
          FROM obligation_municipalities WHERE active = 1 ORDER BY name`,
       );
-      const [userRows]: any = await connection.query(
-        `SELECT nome FROM usuarios
-         WHERE ativo = 1 AND COALESCE(perfil, '') <> 'cliente'`,
-      );
-      const validUserNames = userRows.map((row: any) => String(row.nome));
-      for (const municipality of municipalityRows) {
-        municipality.responsible_config = sanitizeResponsibleConfig(
-          municipality.responsible_config,
-          validUserNames,
-        );
-      }
       const activeMunicipalities = municipalityRows.filter((row: any) =>
-        isServiceActive(row.responsible_config, scope.obligationCode),
+        isServiceActive(row.service_config, scope.obligationCode),
       );
 
       const values = activeMunicipalities.flatMap((municipality: any) =>
@@ -471,21 +582,26 @@ router.get(
           'Falta XML',
           scope.obligationCode === 'SIOPS' ? 'Não Solicitado' : null,
           scope.obligationCode === 'SIOPE' ? 'Não Solicitado' : null,
+          req.user!.id,
+          req.user!.id,
         ]),
       );
       if (values.length > 0) {
         await connection.query(
           `INSERT IGNORE INTO obligation_tasks
-            (municipality_id, obligation_code, competence, year, status, siops_membros, siope_folha)
+            (municipality_id, obligation_code, competence, year, status, siops_membros, siope_folha, created_by, updated_by)
            VALUES ?`,
           [values],
         );
       }
 
       const [taskRows]: any = await connection.query(
-        `SELECT id, municipality_id, obligation_code, competence, year, status,
-                siops_membros, siope_folha, updated_at
-         FROM obligation_tasks WHERE year = ? AND obligation_code = ?`,
+        `SELECT t.id, t.municipality_id, t.obligation_code, t.competence, t.year, t.status,
+                t.siops_membros, t.siope_folha, t.updated_at, t.version,
+                editor.nome AS last_editor_name
+         FROM obligation_tasks t
+         LEFT JOIN usuarios editor ON editor.id = t.updated_by
+         WHERE t.year = ? AND t.obligation_code = ?`,
         [scope.year, scope.obligationCode],
       );
       const activeIds = new Set(activeMunicipalities.map((row: any) => Number(row.id)));
@@ -576,11 +692,12 @@ router.put(
   requirePermission('obrigacoes.planilha.editar'),
   async (req: AuthRequest, res) => {
     const taskId = positiveInt(req.params.id);
+    const expectedVersion = positiveInt(req.body.version);
     const status = req.body.status === undefined ? undefined : String(req.body.status);
     const siopsMembros = req.body.siopsMembros === undefined ? undefined : String(req.body.siopsMembros);
     const siopeFolha = req.body.siopeFolha === undefined ? undefined : String(req.body.siopeFolha);
     const observation = String(req.body.observation || '').trim().slice(0, 5000) || null;
-    if (!taskId || (status !== undefined && !STATUSES.has(status)) ||
+    if (!taskId || !expectedVersion || (status !== undefined && !STATUSES.has(status)) ||
         (siopsMembros !== undefined && !AUXILIARY_STATUSES.has(siopsMembros)) ||
         (siopeFolha !== undefined && !AUXILIARY_STATUSES.has(siopeFolha))) {
       return sendError(res, 'Dados da atualização inválidos.', 400);
@@ -590,7 +707,7 @@ router.put(
     try {
       await connection.beginTransaction();
       const [rows]: any = await connection.query(
-        `SELECT t.*, m.responsible_config FROM obligation_tasks t
+        `SELECT t.*, m.service_config FROM obligation_tasks t
          JOIN obligation_municipalities m ON m.id = t.municipality_id
          WHERE t.id = ? FOR UPDATE`,
         [taskId],
@@ -600,6 +717,10 @@ router.put(
         return sendError(res, 'Competência não encontrada.', 404);
       }
       const current = rows[0];
+      if (Number(current.version || 1) !== expectedVersion) {
+        await connection.rollback();
+        return sendError(res, 'Esta obrigação foi alterada por outra pessoa. Recarregue os dados antes de salvar novamente.', 409);
+      }
       const actor = req.user!;
       const historyValues: any[][] = [];
 
@@ -627,13 +748,14 @@ router.put(
 
         for (const item of related) {
           const [code, competence] = item.split('|');
-          if (!isServiceActive(current.responsible_config, code)) continue;
+          if (!isServiceActive(current.service_config, code)) continue;
           await connection.query(
             `INSERT IGNORE INTO obligation_tasks
-              (municipality_id, obligation_code, competence, year, status, siops_membros, siope_folha)
-             VALUES (?, ?, ?, ?, 'Falta XML', ?, ?)`,
+              (municipality_id, obligation_code, competence, year, status, siops_membros, siope_folha, created_by, updated_by)
+             VALUES (?, ?, ?, ?, 'Falta XML', ?, ?, ?, ?)`,
             [current.municipality_id, code, competence, current.year,
-             code === 'SIOPS' ? 'Não Solicitado' : null, code === 'SIOPE' ? 'Não Solicitado' : null],
+             code === 'SIOPS' ? 'Não Solicitado' : null, code === 'SIOPE' ? 'Não Solicitado' : null,
+             actor.id, actor.id],
           );
           const [relatedRows]: any = await connection.query(
             `SELECT id, status FROM obligation_tasks
@@ -642,21 +764,33 @@ router.put(
           );
           const relatedTask = relatedRows[0];
           if (relatedTask?.status === 'Falta XML') {
-            await connection.query("UPDATE obligation_tasks SET status = 'Não iniciado' WHERE id = ?", [relatedTask.id]);
+            await connection.query(
+              "UPDATE obligation_tasks SET status = 'Não iniciado', updated_by = ?, version = version + 1 WHERE id = ?",
+              [actor.id, relatedTask.id],
+            );
             recordChange(Number(relatedTask.id), 'status', 'Falta XML', 'Não iniciado');
           }
         }
       } else if (status !== undefined && status !== current.status) {
-        await connection.query('UPDATE obligation_tasks SET status = ? WHERE id = ?', [status, taskId]);
+        await connection.query(
+          'UPDATE obligation_tasks SET status = ?, updated_by = ?, version = version + 1 WHERE id = ?',
+          [status, actor.id, taskId],
+        );
         recordChange(taskId, 'status', current.status, status);
       }
 
       if (siopsMembros !== undefined && siopsMembros !== current.siops_membros) {
-        await connection.query('UPDATE obligation_tasks SET siops_membros = ? WHERE id = ?', [siopsMembros, taskId]);
+        await connection.query(
+          'UPDATE obligation_tasks SET siops_membros = ?, updated_by = ?, version = version + 1 WHERE id = ?',
+          [siopsMembros, actor.id, taskId],
+        );
         recordChange(taskId, 'siopsMembros', current.siops_membros, siopsMembros);
       }
       if (siopeFolha !== undefined && siopeFolha !== current.siope_folha) {
-        await connection.query('UPDATE obligation_tasks SET siope_folha = ? WHERE id = ?', [siopeFolha, taskId]);
+        await connection.query(
+          'UPDATE obligation_tasks SET siope_folha = ?, updated_by = ?, version = version + 1 WHERE id = ?',
+          [siopeFolha, actor.id, taskId],
+        );
         recordChange(taskId, 'siopeFolha', current.siope_folha, siopeFolha);
       }
       if (historyValues.length > 0) {
@@ -666,7 +800,13 @@ router.put(
           [historyValues],
         );
       }
-      const [updatedRows]: any = await connection.query('SELECT * FROM obligation_tasks WHERE id = ?', [taskId]);
+      const [updatedRows]: any = await connection.query(
+        `SELECT t.*, editor.nome AS last_editor_name
+         FROM obligation_tasks t
+         LEFT JOIN usuarios editor ON editor.id = t.updated_by
+         WHERE t.id = ?`,
+        [taskId],
+      );
       await connection.commit();
       return sendSuccess(res, mapTask(updatedRows[0]), 'Competência atualizada.');
     } catch (error) {
@@ -684,10 +824,11 @@ router.put(
   requirePermission('obrigacoes.planilha.editar_historico'),
   async (req: AuthRequest, res) => {
     const historyId = positiveInt(req.params.id);
+    const expectedTaskVersion = positiveInt(req.body.taskVersion);
     const oldValue = req.body.oldValue == null ? null : String(req.body.oldValue).slice(0, 500);
     const newValue = req.body.newValue == null ? null : String(req.body.newValue).slice(0, 500);
     const observation = req.body.observation == null ? null : String(req.body.observation).trim().slice(0, 5000);
-    if (!historyId) return sendError(res, 'Histórico inválido.', 400);
+    if (!historyId || !expectedTaskVersion) return sendError(res, 'Histórico ou versão inválidos.', 400);
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -699,19 +840,42 @@ router.put(
         return sendError(res, 'Registro histórico não encontrado.', 404);
       }
       const history = rows[0];
+      const [taskRows]: any = await connection.query(
+        'SELECT * FROM obligation_tasks WHERE id = ? FOR UPDATE', [history.task_id],
+      );
+      if (taskRows.length === 0) {
+        await connection.rollback();
+        return sendError(res, 'Competência não encontrada.', 404);
+      }
+      if (Number(taskRows[0].version || 1) !== expectedTaskVersion) {
+        await connection.rollback();
+        return sendError(res, 'Esta obrigação foi alterada por outra pessoa. Recarregue os dados antes de corrigir o histórico.', 409);
+      }
       const allowedField: Record<string, string> = {
         status: 'status', siopsMembros: 'siops_membros', siopeFolha: 'siope_folha',
       };
       const taskColumn = allowedField[history.field_changed];
       if (!taskColumn) throw new Error('Campo histórico inválido.');
-      if (newValue) await connection.query(`UPDATE obligation_tasks SET ${taskColumn} = ? WHERE id = ?`, [newValue, history.task_id]);
+      if (newValue) {
+        await connection.query(
+          `UPDATE obligation_tasks SET ${taskColumn} = ?, updated_by = ?, version = version + 1 WHERE id = ?`,
+          [newValue, req.user!.id, history.task_id],
+        );
+      }
       await connection.query(
         `UPDATE obligation_task_history
          SET old_value = ?, new_value = ?, actor_name = ?, user_id = ?, observation = ? WHERE id = ?`,
         [oldValue, newValue, req.user!.nome, req.user!.id, observation, historyId],
       );
+      const [updatedTaskRows]: any = await connection.query(
+        `SELECT t.*, editor.nome AS last_editor_name
+         FROM obligation_tasks t
+         LEFT JOIN usuarios editor ON editor.id = t.updated_by
+         WHERE t.id = ?`,
+        [history.task_id],
+      );
       await connection.commit();
-      return sendSuccess(res, { id: historyId }, 'Histórico corrigido.');
+      return sendSuccess(res, { id: historyId, task: mapTask(updatedTaskRows[0]) }, 'Histórico corrigido.');
     } catch (error) {
       await connection.rollback();
       console.error('[Obligations] Falha ao corrigir histórico:', error);

@@ -25,7 +25,7 @@ interface Municipality {
   id: number;
   name: string;
   state: string;
-  responsibleConfig: Record<string, any>;
+  serviceConfig: { activeServices?: Record<string, boolean> };
 }
 interface Task {
   id: number;
@@ -37,6 +37,8 @@ interface Task {
   siopsMembros?: AuxiliaryStatus | null;
   siopeFolha?: AuxiliaryStatus | null;
   updatedAt: string;
+  version: number;
+  lastEditorName: string | null;
 }
 interface Comment { id: number; taskId: number; authorName: string; text: string; createdAt: string; }
 interface HistoryRecord {
@@ -107,6 +109,17 @@ const MONTH_INDEX: Record<string, number> = {
   '1º Bimestre': 2, '2º Bimestre': 4, '3º Bimestre': 6, '4º Bimestre': 8, '5º Bimestre': 10, '6º Bimestre': 12,
   '1º Quadrimestre': 4, '2º Quadrimestre': 8, '3º Quadrimestre': 12, Anual: 12,
 };
+const OPEN_TASK_KEY = 'portalmeta.obligations.openTask';
+
+function readRequestedTask(): { taskId: number; year: number; obligationCode: string } | null {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(OPEN_TASK_KEY) || 'null');
+    if (!parsed || !Number.isInteger(parsed.taskId) || !Number.isInteger(parsed.year) || !OBLIGATIONS.some((item) => item.code === parsed.obligationCode)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 function getDueDate(task: Task) {
   const endMonth = MONTH_INDEX[task.competence] || 12;
@@ -233,6 +246,7 @@ function TaskModal({ task, municipality, currentUser, initialTab, onClose, onUpd
         siopsMembros: task.obligationCode === 'SIOPS' ? siopsMembros : undefined,
         siopeFolha: task.obligationCode === 'SIOPE' ? siopeFolha : undefined,
         observation,
+        version: task.version,
       });
       onUpdated(updated); onClose();
     } catch (err: any) { setError(err.message); } finally { setSaving(false); }
@@ -279,9 +293,10 @@ function TaskModal({ task, municipality, currentUser, initialTab, onClose, onUpd
     if (!editingHistory) return;
     setSaving(true); setError('');
     try {
-      await api.put(`/obligations/history/${editingHistory.id}`, {
+      const result = await api.put<{ id: number; task: Task }>(`/obligations/history/${editingHistory.id}`, {
         oldValue: historyOldValue || null, newValue: historyNewValue || null,
         observation: historyObservation || null,
+        taskVersion: task.version,
       });
       setDetails((current) => current ? {
         ...current,
@@ -291,7 +306,7 @@ function TaskModal({ task, municipality, currentUser, initialTab, onClose, onUpd
         } : record),
       } : current);
       setEditingHistory(null);
-      onUpdated({ ...task, [editingHistory.fieldChanged]: historyNewValue || null } as Task);
+      onUpdated(result.task);
     } catch (err: any) { setError(err.message); } finally { setSaving(false); }
   };
 
@@ -307,6 +322,7 @@ function TaskModal({ task, municipality, currentUser, initialTab, onClose, onUpd
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span className="font-bold text-slate-900">{task.obligationCode}</span><span>•</span><span>{task.year}</span>
           <span>•</span><span>Vence em {getDueDate(task).toLocaleDateString('pt-BR')}</span>
+          {task.lastEditorName ? <><span>•</span><span>Última alteração por {task.lastEditorName}</span></> : null}
         </div>
         <span className={cn('rounded-md border px-2 py-1 text-[11px] font-bold', STATUS_STYLE[task.status])}>{task.status}</span>
       </div>
@@ -410,8 +426,9 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   onNavigate: (tab: 'obligations-municipalities') => void;
 }) {
   const currentYear = new Date().getFullYear();
-  const [obligation, setObligation] = useState('MSC');
-  const [year, setYear] = useState(currentYear);
+  const requestedTask = useMemo(readRequestedTask, []);
+  const [obligation, setObligation] = useState(requestedTask?.obligationCode || 'MSC');
+  const [year, setYear] = useState(requestedTask?.year || currentYear);
   const [workspace, setWorkspace] = useState<WorkspaceResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -436,6 +453,15 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   }, [year, obligation]);
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
   useEffect(() => {
+    if (!workspace || !requestedTask) return;
+    const task = workspace.tasks.find((item) => item.id === requestedTask.taskId);
+    if (task) {
+      setSelectedTask(task);
+      setModalTab('update');
+    }
+    sessionStorage.removeItem(OPEN_TASK_KEY);
+  }, [workspace, requestedTask]);
+  useEffect(() => {
     const close = (event: MouseEvent) => {
       if (filterRef.current && !filterRef.current.contains(event.target as Node)) setFilterOpen(false);
     };
@@ -447,9 +473,8 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
   const visibleMunicipalities = useMemo(() => (workspace?.municipalities || []).filter((municipality) => {
     if (municipalityFilters.size && !municipalityFilters.has(municipality.id)) return false;
     if (!deferredSearch) return true;
-    const responsible = String(municipality.responsibleConfig?.[obligation] || '');
-    return `${municipality.name} ${responsible}`.toLocaleLowerCase('pt-BR').includes(deferredSearch);
-  }), [workspace?.municipalities, municipalityFilters, deferredSearch, obligation]);
+    return municipality.name.toLocaleLowerCase('pt-BR').includes(deferredSearch);
+  }), [workspace?.municipalities, municipalityFilters, deferredSearch]);
   const visibleCompetences = useMemo(() => (workspace?.competences || []).filter((item) => !competenceFilters.size || competenceFilters.has(item)), [workspace?.competences, competenceFilters]);
   const filteredTasks = useMemo(() => visibleMunicipalities.flatMap((municipality) => visibleCompetences.map((competence) => taskMap.get(`${municipality.id}|${competence}`)).filter((task): task is Task => {
     if (!task) return false;
@@ -538,7 +563,7 @@ export function ObligationsSpreadsheetPage({ currentUser, onNavigate }: {
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              <div className="relative min-w-[240px] flex-1 sm:max-w-sm"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar município ou responsável" className="h-8 w-full rounded-md border border-slate-200 bg-slate-50/70 pl-9 pr-8 text-xs font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" />{search ? <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X size={13} /></button> : null}</div>
+              <div className="relative min-w-[240px] flex-1 sm:max-w-sm"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar município" className="h-8 w-full rounded-md border border-slate-200 bg-slate-50/70 pl-9 pr-8 text-xs font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" />{search ? <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X size={13} /></button> : null}</div>
               <div className="relative" ref={filterRef}>
                 <Button size="sm" variant={activeFilterCount ? 'secondary' : 'outline'} onClick={() => setFilterOpen((value) => !value)}><SlidersHorizontal size={13} />Filtros{activeFilterCount ? <span className="rounded bg-blue-600 px-1.5 py-0.5 text-[9px] text-white">{activeFilterCount}</span> : null}<ChevronDown size={12} /></Button>
                 {filterOpen ? <div className="absolute left-0 top-full z-40 mt-2 w-[min(92vw,640px)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.18)]">

@@ -26,7 +26,9 @@ export const FilterChip = ({
       <span className="text-slate-400 font-medium">{label}:</span>
       <span className="text-slate-700">{value}</span>
       <button
+        type="button"
         onClick={onRemove}
+        aria-label={`Remover filtro ${label}: ${value}`}
         className="p-0.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-red-500 transition-colors"
       >
         <X size={12} />

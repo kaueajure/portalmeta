@@ -56,10 +56,9 @@ function municipalityDisplayName(value) {
         ? 'SÃO JOÃO DAS DUAS PONTES'
         : repairText(value);
 }
-function responsibleConfig(municipality) {
+function serviceConfig(municipality) {
     return JSON.stringify({
-        ...Object.fromEntries(OBLIGATIONS.map((code) => [code, ''])),
-        _activeServices: municipality.activeServices,
+        activeServices: municipality.activeServices,
     });
 }
 function dateValue(value) {
@@ -218,11 +217,11 @@ async function applyImport({ connection, municipalities, eligibleTasks, sourceHi
         const municipalityInsertValues = municipalities
             .filter((municipality) => !existingKeys.has(`${normalizedName(municipality.name)}|${municipality.state}`))
             .map((municipality) => [
-            municipalityDisplayName(municipality.name), 'SP', responsibleConfig(municipality), null, null, null, 1,
+            municipalityDisplayName(municipality.name), 'SP', serviceConfig(municipality), null, null, null, 1,
         ]);
         if (municipalityInsertValues.length > 0) {
             const [result] = await connection.query(`INSERT INTO obligation_municipalities
-          (name, state, responsible_config, phone, email, observations, active)
+          (name, state, service_config, phone, email, observations, active)
          VALUES ?`, [municipalityInsertValues]);
             applied.municipalitiesInserted = Number(result.affectedRows);
         }
@@ -233,7 +232,7 @@ async function applyImport({ connection, municipalities, eligibleTasks, sourceHi
         for (const task of eligibleTasks.filter((item) => targetDispositionBySourceId.get(item.id) === 'safeUpdate')) {
             const municipalityId = municipalityIdByKey.get(`${normalizedName(task.municipalityName)}|SP`);
             const [result] = await connection.query(`UPDATE obligation_tasks
-         SET status = ?, siops_membros = ?, siope_folha = ?, updated_at = ?
+         SET status = ?, siops_membros = ?, siope_folha = ?, updated_at = ?, version = version + 1
          WHERE municipality_id = ? AND obligation_code = ? AND competence = ? AND year = ?`, [task.status, task.siopsMembros, task.siopeFolha, task.updatedAt, municipalityId,
                 task.obligationCode, task.competence, task.year]);
             applied.tasksUpdated += Number(result.affectedRows);
@@ -437,7 +436,7 @@ async function main() {
                 throw new Error(`Schema de destino incompleto: ${missingTables.join(', ')}`);
         }
         else {
-            const [targetMunicipalityRows] = await pool.query('SELECT id, name, state, responsible_config AS responsibleConfig FROM obligation_municipalities');
+            const [targetMunicipalityRows] = await pool.query('SELECT id, name, state, service_config AS serviceConfig FROM obligation_municipalities');
             const [targetTaskRows] = await pool.query(`
         SELECT t.id, m.name AS municipalityName, t.obligation_code AS obligationCode,
           t.competence, t.year, t.status, t.siops_membros AS siopsMembros,

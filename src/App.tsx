@@ -894,7 +894,9 @@ export default function App() {
 
                   {activeTab === "obligations-dashboard" &&
                     (canAccessAppScreen(currentUser, "obligations-dashboard") ? (
-                      <ObligationsDashboardPage />
+                      <ObligationsDashboardPage
+                        onNavigate={(tab) => setActiveTab(tab)}
+                      />
                     ) : (
                       <AccessDenied />
                     ))}
