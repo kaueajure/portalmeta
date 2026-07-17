@@ -3,7 +3,11 @@ import notificationsService from './notifications.service.js';
 import { permissionsService } from './permissions.service.js';
 import { canAccessTicketByScope, getTicketScope } from '../utils/ticket-permissions.js';
 
-export type NotificationCategory = 'ticket' | 'whatsapp_general' | 'whatsapp_assigned';
+export type NotificationCategory =
+  | 'ticket'
+  | 'ticket_transfer'
+  | 'whatsapp_general'
+  | 'whatsapp_assigned';
 
 interface CandidateUser {
   id: number;
@@ -27,6 +31,7 @@ function safePreview(value: unknown, max = 140): string {
 
 function preferenceColumn(category: NotificationCategory): string {
   if (category === 'ticket') return 'ticket_enabled';
+  if (category === 'ticket_transfer') return 'ticket_transfer_enabled';
   if (category === 'whatsapp_general') return 'whatsapp_general_enabled';
   return 'whatsapp_assigned_enabled';
 }
@@ -59,6 +64,7 @@ export const notificationDispatchService = {
     actorName?: string | null;
     description?: string | null;
     requiredPermission?: string;
+    excludeUserIds?: number[];
   }) {
     const [rows]: any = await pool.query(
       `SELECT t.id, t.titulo, t.usuario_id, t.responsavel_id, t.status, t.prioridade,
@@ -71,10 +77,12 @@ export const notificationDispatchService = {
     const ticket = rows[0];
     if (!ticket) return [];
 
+    const excluded = new Set((input.excludeUserIds || []).map(Number).filter(Boolean));
     const candidates = await activeCandidates('ticket');
     const recipientIds: number[] = [];
     for (const user of candidates) {
       if (input.actorId && Number(user.id) === Number(input.actorId)) continue;
+      if (excluded.has(Number(user.id))) continue;
       if (!(await canUseNotifications(user))) continue;
       if (!(await permissionsService.hasPermission(user, 'tickets.visualizar'))) continue;
       if (input.requiredPermission && !(await permissionsService.hasPermission(user, input.requiredPermission))) continue;
@@ -101,6 +109,65 @@ export const notificationDispatchService = {
       },
     });
     return recipientIds;
+  },
+
+  /** Notifica o novo responsável quando outro atendente transfere o chamado. */
+  async ticketTransfer(input: {
+    ticketId: number;
+    eventKey: string;
+    toUserId: number;
+    fromUserId?: number | null;
+    actorId?: number | null;
+    actorName?: string | null;
+  }) {
+    const toUserId = Number(input.toUserId);
+    if (!toUserId) return [];
+
+    const [rows]: any = await pool.query(
+      `SELECT t.id, t.titulo, t.usuario_id, t.responsavel_id, t.status, t.prioridade,
+              t.prazo_sla, COALESCE(NULLIF(t.solicitante_nome, ''), c.nome, 'Cliente') AS cliente_nome
+       FROM tickets t
+       LEFT JOIN usuarios c ON c.id = t.usuario_id
+       WHERE t.id = ? AND t.deleted_at IS NULL`,
+      [input.ticketId],
+    );
+    const ticket = rows[0];
+    if (!ticket) return [];
+
+    const candidates = await activeCandidates('ticket_transfer', toUserId);
+    const recipient = candidates[0];
+    if (!recipient) return [];
+    if (!(await canUseNotifications(recipient))) return [];
+    if (!(await permissionsService.hasPermission(recipient, 'tickets.visualizar'))) return [];
+
+    let actor = input.actorName || '';
+    if (!actor && input.actorId) {
+      const [actorRows]: any = await pool.query('SELECT nome FROM usuarios WHERE id = ? AND ativo = 1', [input.actorId]);
+      actor = actorRows[0]?.nome || '';
+    }
+    actor ||= 'Atendente';
+
+    let fromName = 'outro atendente';
+    if (input.fromUserId) {
+      const [fromRows]: any = await pool.query('SELECT nome FROM usuarios WHERE id = ?', [input.fromUserId]);
+      if (fromRows[0]?.nome) fromName = fromRows[0].nome;
+    }
+
+    await notificationsService.createMany([toUserId], {
+      tipo: 'TICKET_TRANSFER',
+      event_key: input.eventKey,
+      titulo: `Chamado transferido · #${ticket.id}`,
+      mensagem: `${actor} transferiu o chamado "${safePreview(ticket.titulo, 80)}" de ${fromName} para você.`,
+      link: `ticket:${ticket.id}`,
+      metadata: {
+        category: 'ticket_transfer',
+        ticketId: ticket.id,
+        fromUserId: input.fromUserId || null,
+        toUserId,
+        actorName: actor,
+      },
+    });
+    return [toUserId];
   },
 
   async whatsapp(input: {

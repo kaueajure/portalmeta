@@ -17,6 +17,7 @@ import {
   Play,
   Ticket as TicketIcon,
   UserCheck,
+  ArrowRightLeft,
   Volume2,
   Palette,
   Save,
@@ -576,9 +577,10 @@ export const ProfilePage = ({
 
                 {notificationPreferences ? (
                   <div className="space-y-4">
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       {([
                         ['ticket_enabled', 'Chamados', 'Novo chamado e atualizações relevantes', TicketIcon, 'ticket'],
+                        ['ticket_transfer_enabled', 'Transferência', 'Quando outro atendente transferir um chamado para você', ArrowRightLeft, 'ticket_transfer'],
                         ['whatsapp_general_enabled', 'WhatsApp geral', 'Conversas sem atendente responsável', MessageCircle, 'whatsapp_general'],
                         ['whatsapp_assigned_enabled', 'WhatsApp direcionado', 'Mensagens dos seus atendimentos', UserCheck, 'whatsapp_assigned'],
                       ] as const).map(([key, label, description, Icon, sound]) => (

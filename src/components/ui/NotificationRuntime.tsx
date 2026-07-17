@@ -16,6 +16,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   sounds_enabled: true,
   volume: 0.7,
   ticket_enabled: true,
+  ticket_transfer_enabled: true,
   whatsapp_general_enabled: true,
   whatsapp_assigned_enabled: true,
   browser_enabled: false,
@@ -25,6 +26,7 @@ function getCategory(notification: AppNotification): NotificationSound | null {
   const category = String(notification.metadata?.category || "");
   if (
     category === "ticket" ||
+    category === "ticket_transfer" ||
     category === "whatsapp_general" ||
     category === "whatsapp_assigned"
   ) {
@@ -32,6 +34,7 @@ function getCategory(notification: AppNotification): NotificationSound | null {
   }
 
   const tipo = notification.tipo.toLowerCase();
+  if (tipo.includes("ticket_transfer") || tipo.includes("transfer")) return "ticket_transfer";
   if (tipo.includes("whatsapp_assigned")) return "whatsapp_assigned";
   if (tipo.includes("whatsapp")) return "whatsapp_general";
   if (tipo.includes("ticket")) return "ticket";
@@ -43,6 +46,7 @@ function isCategoryEnabled(
   category: NotificationSound,
 ): boolean {
   if (category === "ticket") return prefs.ticket_enabled;
+  if (category === "ticket_transfer") return prefs.ticket_transfer_enabled;
   if (category === "whatsapp_general") return prefs.whatsapp_general_enabled;
   return prefs.whatsapp_assigned_enabled;
 }

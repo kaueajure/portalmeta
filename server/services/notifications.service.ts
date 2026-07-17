@@ -145,8 +145,8 @@ class NotificationsService {
       [userId],
     );
     const [rows]: any = await pool.query(
-      `SELECT sounds_enabled, volume, ticket_enabled, whatsapp_general_enabled,
-              whatsapp_assigned_enabled, browser_enabled
+      `SELECT sounds_enabled, volume, ticket_enabled, ticket_transfer_enabled,
+              whatsapp_general_enabled, whatsapp_assigned_enabled, browser_enabled
        FROM notification_preferences WHERE usuario_id = ?`,
       [userId],
     );
@@ -155,6 +155,7 @@ class NotificationsService {
       sounds_enabled: Boolean(row.sounds_enabled ?? 1),
       volume: Math.max(0, Math.min(1, Number(row.volume ?? 0.7))),
       ticket_enabled: Boolean(row.ticket_enabled ?? 1),
+      ticket_transfer_enabled: Boolean(row.ticket_transfer_enabled ?? 1),
       whatsapp_general_enabled: Boolean(row.whatsapp_general_enabled ?? 1),
       whatsapp_assigned_enabled: Boolean(row.whatsapp_assigned_enabled ?? 1),
       browser_enabled: Boolean(row.browser_enabled ?? 0),
@@ -170,15 +171,17 @@ class NotificationsService {
       : Math.max(0, Math.min(1, Number(input.volume)));
     await pool.query(
       `INSERT INTO notification_preferences
-       (usuario_id, sounds_enabled, volume, ticket_enabled, whatsapp_general_enabled,
-        whatsapp_assigned_enabled, browser_enabled)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+       (usuario_id, sounds_enabled, volume, ticket_enabled, ticket_transfer_enabled,
+        whatsapp_general_enabled, whatsapp_assigned_enabled, browser_enabled)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE sounds_enabled = VALUES(sounds_enabled), volume = VALUES(volume),
          ticket_enabled = VALUES(ticket_enabled),
+         ticket_transfer_enabled = VALUES(ticket_transfer_enabled),
          whatsapp_general_enabled = VALUES(whatsapp_general_enabled),
          whatsapp_assigned_enabled = VALUES(whatsapp_assigned_enabled),
          browser_enabled = VALUES(browser_enabled)`,
       [userId, bool('sounds_enabled') ? 1 : 0, volume, bool('ticket_enabled') ? 1 : 0,
+       bool('ticket_transfer_enabled') ? 1 : 0,
        bool('whatsapp_general_enabled') ? 1 : 0, bool('whatsapp_assigned_enabled') ? 1 : 0,
        bool('browser_enabled') ? 1 : 0],
     );

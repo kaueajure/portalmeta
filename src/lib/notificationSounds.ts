@@ -1,4 +1,4 @@
-export type NotificationSound = 'ticket' | 'whatsapp_general' | 'whatsapp_assigned';
+export type NotificationSound = 'ticket' | 'ticket_transfer' | 'whatsapp_general' | 'whatsapp_assigned';
 
 let audioContext: AudioContext | null = null;
 
@@ -30,7 +30,7 @@ function tone(ctx: AudioContext, frequency: number, start: number, duration: num
   oscillator.stop(start + duration + 0.02);
 }
 
-/** Três assinaturas sonoras curtas, geradas localmente e sem carregamento de rede. */
+/** Quatro assinaturas sonoras curtas, geradas localmente e sem carregamento de rede. */
 export async function playNotificationSound(type: NotificationSound, volume = 0.7): Promise<boolean> {
   const ctx = context();
   if (!ctx || ctx.state !== 'running') return false;
@@ -39,6 +39,11 @@ export async function playNotificationSound(type: NotificationSound, volume = 0.
   if (type === 'ticket') {
     tone(ctx, 523.25, now, 0.18, gain);
     tone(ctx, 659.25, now + 0.13, 0.24, gain);
+  } else if (type === 'ticket_transfer') {
+    // Handoff: três notas descendentes curtas (diferente de chamado e WhatsApp).
+    tone(ctx, 698.46, now, 0.11, gain);
+    tone(ctx, 587.33, now + 0.12, 0.12, gain);
+    tone(ctx, 493.88, now + 0.25, 0.2, gain * 1.1);
   } else if (type === 'whatsapp_general') {
     tone(ctx, 783.99, now, 0.12, gain);
     tone(ctx, 783.99, now + 0.17, 0.12, gain);

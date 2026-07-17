@@ -15,6 +15,8 @@ function safePreview(value, max = 140) {
 function preferenceColumn(category) {
     if (category === 'ticket')
         return 'ticket_enabled';
+    if (category === 'ticket_transfer')
+        return 'ticket_transfer_enabled';
     if (category === 'whatsapp_general')
         return 'whatsapp_general_enabled';
     return 'whatsapp_assigned_enabled';
@@ -42,10 +44,13 @@ export const notificationDispatchService = {
         const ticket = rows[0];
         if (!ticket)
             return [];
+        const excluded = new Set((input.excludeUserIds || []).map(Number).filter(Boolean));
         const candidates = await activeCandidates('ticket');
         const recipientIds = [];
         for (const user of candidates) {
             if (input.actorId && Number(user.id) === Number(input.actorId))
+                continue;
+            if (excluded.has(Number(user.id)))
                 continue;
             if (!(await canUseNotifications(user)))
                 continue;
@@ -76,6 +81,55 @@ export const notificationDispatchService = {
             },
         });
         return recipientIds;
+    },
+    /** Notifica o novo responsável quando outro atendente transfere o chamado. */
+    async ticketTransfer(input) {
+        const toUserId = Number(input.toUserId);
+        if (!toUserId)
+            return [];
+        const [rows] = await pool.query(`SELECT t.id, t.titulo, t.usuario_id, t.responsavel_id, t.status, t.prioridade,
+              t.prazo_sla, COALESCE(NULLIF(t.solicitante_nome, ''), c.nome, 'Cliente') AS cliente_nome
+       FROM tickets t
+       LEFT JOIN usuarios c ON c.id = t.usuario_id
+       WHERE t.id = ? AND t.deleted_at IS NULL`, [input.ticketId]);
+        const ticket = rows[0];
+        if (!ticket)
+            return [];
+        const candidates = await activeCandidates('ticket_transfer', toUserId);
+        const recipient = candidates[0];
+        if (!recipient)
+            return [];
+        if (!(await canUseNotifications(recipient)))
+            return [];
+        if (!(await permissionsService.hasPermission(recipient, 'tickets.visualizar')))
+            return [];
+        let actor = input.actorName || '';
+        if (!actor && input.actorId) {
+            const [actorRows] = await pool.query('SELECT nome FROM usuarios WHERE id = ? AND ativo = 1', [input.actorId]);
+            actor = actorRows[0]?.nome || '';
+        }
+        actor ||= 'Atendente';
+        let fromName = 'outro atendente';
+        if (input.fromUserId) {
+            const [fromRows] = await pool.query('SELECT nome FROM usuarios WHERE id = ?', [input.fromUserId]);
+            if (fromRows[0]?.nome)
+                fromName = fromRows[0].nome;
+        }
+        await notificationsService.createMany([toUserId], {
+            tipo: 'TICKET_TRANSFER',
+            event_key: input.eventKey,
+            titulo: `Chamado transferido · #${ticket.id}`,
+            mensagem: `${actor} transferiu o chamado "${safePreview(ticket.titulo, 80)}" de ${fromName} para você.`,
+            link: `ticket:${ticket.id}`,
+            metadata: {
+                category: 'ticket_transfer',
+                ticketId: ticket.id,
+                fromUserId: input.fromUserId || null,
+                toUserId,
+                actorName: actor,
+            },
+        });
+        return [toUserId];
     },
     async whatsapp(input) {
         const assigned = input.assignedUserId ? Number(input.assignedUserId) : null;

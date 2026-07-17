@@ -1238,6 +1238,27 @@ class TicketsService {
       };
       for (const key of Object.keys(labels)) {
         if (!(key in data) || String(data[key] ?? '') === String(oldTicket[key] ?? '')) continue;
+
+        const isTransfer =
+          key === 'responsavel_id'
+          && oldTicket.responsavel_id
+          && data.responsavel_id
+          && Number(oldTicket.responsavel_id) !== Number(data.responsavel_id);
+
+        if (isTransfer) {
+          const toUserId = Number(data.responsavel_id);
+          if (toUserId && (!currentUser?.id || toUserId !== Number(currentUser.id))) {
+            await notificationDispatchService.ticketTransfer({
+              ticketId: id,
+              eventKey: `ticket:${id}:transfer:${toUserId}:${Date.now()}`,
+              toUserId,
+              fromUserId: Number(oldTicket.responsavel_id),
+              actorId: currentUser?.id || null,
+              actorName: currentUser?.nome || null,
+            });
+          }
+        }
+
         const value = key === 'status'
           ? (newStatusConfig?.nome || labelFromStatus(data.status))
           : key === 'responsavel_id'
@@ -1250,6 +1271,7 @@ class TicketsService {
           actorId: currentUser?.id || null,
           actorName: currentUser?.nome || null,
           description: value,
+          excludeUserIds: isTransfer ? [Number(data.responsavel_id)] : undefined,
         });
       }
     } catch (e) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Check, Clock, Inbox, MessageCircle, Ticket as TicketIcon, UserCheck } from "lucide-react";
+import { Bell, Check, Clock, Inbox, MessageCircle, Ticket as TicketIcon, UserCheck, ArrowRightLeft } from "lucide-react";
 import { api } from "../../lib/api";
 import { Notification, User } from "../../types";
 import { formatDistanceToNow } from "date-fns";
@@ -303,11 +303,13 @@ export const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({
 
                     <div className={cn(
                       "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border",
+                      notification.tipo.toLowerCase().includes('ticket_transfer') ? 'border-violet-200 bg-violet-50 text-violet-700' :
                       notification.tipo.toLowerCase().includes('whatsapp_assigned') ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
                       notification.tipo.toLowerCase().includes('whatsapp') ? 'border-teal-200 bg-teal-50 text-teal-700' :
                       'border-blue-200 bg-blue-50 text-blue-700',
                     )}>
-                      {notification.tipo.toLowerCase().includes('whatsapp_assigned') ? <UserCheck size={15} /> :
+                      {notification.tipo.toLowerCase().includes('ticket_transfer') ? <ArrowRightLeft size={15} /> :
+                       notification.tipo.toLowerCase().includes('whatsapp_assigned') ? <UserCheck size={15} /> :
                        notification.tipo.toLowerCase().includes('whatsapp') ? <MessageCircle size={15} /> : <TicketIcon size={15} />}
                     </div>
                     <div className="flex-1 min-w-0">

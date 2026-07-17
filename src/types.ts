@@ -315,6 +315,7 @@ export interface NotificationPreferences {
   sounds_enabled: boolean;
   volume: number;
   ticket_enabled: boolean;
+  ticket_transfer_enabled: boolean;
   whatsapp_general_enabled: boolean;
   whatsapp_assigned_enabled: boolean;
   browser_enabled: boolean;
