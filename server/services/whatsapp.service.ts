@@ -674,7 +674,7 @@ export const whatsappService = {
       pool.query(
         `
           SELECT s.status, s.assigned_user_id AS user_id, u.nome AS user_name,
-                 DATE_FORMAT(s.assigned_at, '%Y-%m-%dT%H:%i:%sZ') AS assigned_at
+                 DATE_FORMAT(s.assigned_at, '%Y-%m-%dT%H:%i:%s-03:00') AS assigned_at
           FROM whatsapp_sessions s
           LEFT JOIN usuarios u ON u.id = s.assigned_user_id
           WHERE s.contact_phone = ?
@@ -685,7 +685,7 @@ export const whatsappService = {
       pool.query(
         `
           SELECT h.id, h.user_id, h.user_name,
-                 DATE_FORMAT(h.assigned_at, '%Y-%m-%dT%H:%i:%sZ') AS assigned_at
+                 DATE_FORMAT(h.assigned_at, '%Y-%m-%dT%H:%i:%s-03:00') AS assigned_at
           FROM whatsapp_assignment_history h
           JOIN whatsapp_sessions s ON s.contact_phone = h.contact_phone
           WHERE h.contact_phone = ? AND h.attendance_cycle_id = s.attendance_cycle_id
@@ -1250,7 +1250,7 @@ export const whatsappService = {
         `
           SELECT id, wa_message_id, direction, from_phone, to_phone, contact_name,
                  message_type, body, status,
-                 DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at
+                 DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s-03:00') AS created_at
           FROM whatsapp_messages
           WHERE message_type <> 'status'
           ORDER BY created_at DESC, id DESC
@@ -1276,7 +1276,7 @@ export const whatsappService = {
             COALESCE(NULLIF(s.contact_name, ''), t.contact_name) AS contact_name,
             t.last_body,
             t.last_direction,
-            DATE_FORMAT(t.last_message_at, '%Y-%m-%dT%H:%i:%sZ') AS last_message_at,
+            DATE_FORMAT(t.last_message_at, '%Y-%m-%dT%H:%i:%s-03:00') AS last_message_at,
             CASE WHEN cycle.id IS NULL THEN t.message_count ELSE (
               SELECT COUNT(*)
               FROM whatsapp_messages cycle_message
@@ -1296,7 +1296,7 @@ export const whatsappService = {
             CASE WHEN s.status = 'active' THEN u.nome ELSE NULL END AS assigned_user_name,
             CASE
               WHEN s.status = 'active'
-                THEN DATE_FORMAT(s.assigned_at, '%Y-%m-%dT%H:%i:%sZ')
+                THEN DATE_FORMAT(s.assigned_at, '%Y-%m-%dT%H:%i:%s-03:00')
               ELSE NULL
             END AS assigned_at,
             cycle.registered_ticket_id
@@ -1389,7 +1389,7 @@ export const whatsappService = {
         `
           SELECT id, wa_message_id, direction, from_phone, to_phone, contact_name,
                  message_type, body, status,
-                 DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at
+                 DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s-03:00') AS created_at
           FROM whatsapp_messages
           WHERE message_type <> 'status'
             AND (
@@ -1429,7 +1429,7 @@ export const whatsappService = {
     const [rows]: any = await pool.query(
       `SELECT id, wa_message_id, direction, from_phone, to_phone, contact_name,
               message_type, body, status,
-              DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%sZ') AS created_at
+              DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s-03:00') AS created_at
        FROM whatsapp_messages
        WHERE attendance_cycle_id = ?
          AND message_type <> 'status'
