@@ -8,6 +8,10 @@ import  { env } from  '../config/env.js';
 dns.setDefaultResultOrder('ipv4first');
 net.setDefaultAutoSelectFamily(false);
 
+// America/Sao_Paulo (sem horário de verão desde 2019). Alinha NOW()/CURRENT_TIMESTAMP
+// e o parse do mysql2 com o TZ do Node (APP_TIMEZONE), evitando +3h em UTC.
+const MYSQL_TIMEZONE_OFFSET = '-03:00';
+
 const pool = mysql.createPool({
   host: env.DB.HOST,
   user: env.DB.USER,
@@ -19,7 +23,12 @@ const pool = mysql.createPool({
   queueLimit: env.DB.QUEUE_LIMIT,
   connectTimeout: env.DB.CONNECT_TIMEOUT_MS,
   enableKeepAlive: true,
-  keepAliveInitialDelay: 0
+  keepAliveInitialDelay: 0,
+  timezone: MYSQL_TIMEZONE_OFFSET,
+});
+
+pool.on('connection', (connection) => {
+  connection.query(`SET time_zone = '${MYSQL_TIMEZONE_OFFSET}'`);
 });
 
 export default pool;
