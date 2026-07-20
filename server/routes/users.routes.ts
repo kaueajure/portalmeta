@@ -197,11 +197,15 @@ router.patch('/:id', requirePermission('usuarios.editar'), async (req: AuthReque
           }
         }
 
-        // Validate email if present
-        if (req.body.email && req.body.email !== targetUser.email) {
-            if (!isValidEmail(req.body.email)) {
+        if (req.body.email !== undefined) {
+            const email = String(req.body.email || '').trim();
+            if (!email) {
+                return sendError(res, 'Email é obrigatório', 400);
+            }
+            if (!isValidEmail(email)) {
                 return sendError(res, 'Email inválido', 400);
             }
+            req.body.email = email;
         }
 
         await usersService.update(id, req.body);

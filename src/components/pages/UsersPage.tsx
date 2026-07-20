@@ -149,9 +149,10 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
 
     try {
       const rolePayload = resolveRolePayload();
+      const email = String(formData.get("email") || "").trim();
       const payload: UserPayload = {
-        nome: String(formData.get("nome") || ""),
-        email: String(formData.get("email") || ""),
+        nome: String(formData.get("nome") || "").trim(),
+        email,
         cargo: String(formData.get("cargo") || ""),
         telefone: String(formData.get("telefone") || ""),
         ...rolePayload,
@@ -160,6 +161,12 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
       const password = formData.get("password") as string;
       if (password) {
         payload.password = password;
+      }
+
+      if (!payload.email) {
+        setSaveError("E-mail é obrigatório.");
+        setLoadingSave(false);
+        return;
       }
 
       if (
@@ -587,9 +594,8 @@ export const UsersPage = ({ currentUser }: UsersPageProps) => {
               <Input
                 name="email"
                 type="email"
-                defaultValue={selectedUser?.email}
+                defaultValue={selectedUser?.email || ""}
                 required
-                disabled={!!selectedUser}
                 placeholder="joao@exemplo.com"
                 className="h-8 text-xs"
               />
